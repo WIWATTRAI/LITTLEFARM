@@ -23,9 +23,15 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
-html, body { height: 100%; }
+html { height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
 body {
+  height: 100%;
   margin: 0;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-body);
@@ -41,7 +47,11 @@ body {
   gap: 8px;
   max-width: 720px;
   margin: 0 auto;
+  grid-template-areas: "head" "stage" "ctrl";
 }
+header { grid-area: head; }
+.stage { grid-area: stage; }
+.controls { grid-area: ctrl; }
 header { text-align: center; display: grid; gap: 4px; }
 h1 {
   margin: 0;
@@ -71,28 +81,50 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   pointer-events: none;
 }
 .controls {
-  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  width: 100%; max-width: 520px; margin: 0 auto;
 }
+.controls .seg { grid-column: span 2; }
+.controls .speed { grid-column: 1 / -1; justify-content: center; }
 button, .seg {
   font: 600 0.9rem var(--font-body);
   color: var(--fg);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 8px 14px;
+  min-height: 44px;
+  padding: 6px 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 button:hover { border-color: var(--muted); }
 button:focus-visible { outline: 2px solid var(--rim); outline-offset: 2px; }
 button[aria-pressed="true"] { border-color: var(--rim); color: var(--rim); }
-.seg { display: inline-flex; padding: 3px; gap: 2px; }
-.seg button { border: 0; padding: 5px 12px; background: transparent; }
+.seg { display: flex; padding: 3px; gap: 2px; }
+.seg button { flex: 1; border: 0; min-height: 36px; padding: 4px 6px; background: transparent; }
 .seg button[aria-pressed="true"] { background: var(--line); }
 label.speed {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 0.85rem; color: var(--muted);
 }
-input[type="range"] { accent-color: var(--rim); width: 90px; }
+input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; height: 28px; }
+/* Phone held sideways: stage on the left, title and controls in a side column. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app {
+    display: grid; max-width: none;
+    grid-template-columns: 1fr minmax(260px, 320px);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "stage head" "stage ctrl";
+    padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1 { font-size: 1.1rem; }
+  .stats { font-size: 1rem; }
+  .controls { align-content: start; overflow-y: auto; }
+  .hint { display: none; }
+}
+@media (max-width: 360px) {
+  button, .seg { font-size: 0.8rem; }
+}
 @media (prefers-reduced-motion: reduce) { .hint { display: none; } }
 </style>
 </head>
@@ -113,14 +145,14 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
 
   <div class="controls">
     <div class="seg" role="group" aria-label="จุดปล่อยลูกบอล">
-      <button id="modeFocus" aria-pressed="true">ปล่อยจากโฟกัส</button>
-      <button id="modeRandom" aria-pressed="false">ปล่อยจากจุดสุ่ม</button>
+      <button id="modeFocus" aria-pressed="true">จากโฟกัส</button>
+      <button id="modeRandom" aria-pressed="false">จุดสุ่ม</button>
     </div>
-    <button id="add1">+1 ลูก</button>
-    <button id="add10">+10 ลูก</button>
-    <button id="auto" aria-pressed="true">เพิ่มอัตโนมัติ</button>
+    <button id="add1" aria-label="เพิ่ม 1 ลูก">+1</button>
+    <button id="add10" aria-label="เพิ่ม 10 ลูก">+10</button>
+    <button id="auto" aria-pressed="true">อัตโนมัติ</button>
     <button id="trails" aria-pressed="true">เส้นทาง</button>
-    <button id="sound" aria-pressed="false">เปิดเสียง</button>
+    <button id="sound" aria-pressed="false">เสียง</button>
     <button id="reset">เริ่มใหม่</button>
     <label class="speed" for="speed">ความเร็ว <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1"></label>
   </div>
@@ -170,9 +202,10 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
   }
 
   // ---------- balls ----------
-  function randomColor() {
-    return `hsl(${Math.floor(Math.random() * 360)}, 85%, 66%)`;
-  }
+  // A fixed set of hues lets trails be stroked per color and balls drawn from cached sprites.
+  const HUES = 24;
+  const COLORS = Array.from({ length: HUES }, (_, i) => `hsl(${i * 360 / HUES}, 85%, 66%)`);
+  function randomColor() { return Math.floor(Math.random() * HUES); }
   function randomInside() {
     for (;;) {
       const x = (Math.random() * 2 - 1) * A * 0.95, y = (Math.random() * 2 - 1) * B * 0.95;
@@ -245,10 +278,12 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = Math.round(r.width * dpr);
     cv.height = Math.round(r.height * dpr);
-    const pad = 14 * dpr;
-    scale = Math.min((cv.width - pad * 2) / (2 * A), (cv.height - pad * 2 - 18 * dpr) / (2 * B));
+    const pad = 10 * dpr;
+    const hintH = $('hint').hidden || getComputedStyle($('hint')).display === 'none' ? 0 : 18 * dpr;
+    scale = Math.min((cv.width - pad * 2) / (2 * A), (cv.height - pad * 2 - hintH) / (2 * B));
     cx = cv.width / 2;
-    cy = (cv.height - 18 * dpr) / 2;
+    cy = (cv.height - hintH) / 2;
+    buildLayers();
   }
   const X = x => cx + x * scale;
   const Y = y => cy + y * scale;
@@ -272,47 +307,63 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
     if (showTrails) {
       ctx.lineWidth = 1 * dpr;
       ctx.globalAlpha = balls.length > 120 ? 0.45 : 0.75;
-      for (const b of balls) {
-        ctx.strokeStyle = b.color;
+      // Shorter trails when crowded keeps phones smooth.
+      const trailLen = balls.length > 150 ? 3 : TRAIL_POINTS;
+      for (let h = 0; h < HUES; h++) {
+        ctx.strokeStyle = COLORS[h];
         ctx.beginPath();
-        ctx.moveTo(X(b.pts[0].x), Y(b.pts[0].y));
-        for (let i = 1; i < b.pts.length; i++) ctx.lineTo(X(b.pts[i].x), Y(b.pts[i].y));
-        ctx.lineTo(X(b.x), Y(b.y));
+        for (const b of balls) {
+          if (b.color !== h) continue;
+          const i0 = Math.max(0, b.pts.length - trailLen);
+          ctx.moveTo(X(b.pts[i0].x), Y(b.pts[i0].y));
+          for (let i = i0 + 1; i < b.pts.length; i++) ctx.lineTo(X(b.pts[i].x), Y(b.pts[i].y));
+          ctx.lineTo(X(b.x), Y(b.y));
+        }
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
 
-    // Ellipse wall
-    ctx.lineWidth = 3.5 * dpr;
-    ctx.strokeStyle = '#5fe3e8';
-    ctx.shadowColor = '#5fe3e8';
-    ctx.shadowBlur = 10 * dpr;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, A * scale, B * scale, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.drawImage(wallLayer, 0, 0);
 
     drawFocus(F_TARGET, flashTop, '#f5a54a');
     drawFocus(F_START, flashBottom, '#f5c25b');
 
     // Balls
+    const half = sprites.size / 2;
+    for (const b of balls) ctx.drawImage(sprites.imgs[b.color], X(b.x) - half, Y(b.y) - half);
+  }
+
+  // Static layers rebuilt on resize: the glowing wall and one ball sprite per hue.
+  const wallLayer = document.createElement('canvas');
+  const sprites = { size: 0, imgs: [] };
+  function buildLayers() {
+    wallLayer.width = cv.width; wallLayer.height = cv.height;
+    const w = wallLayer.getContext('2d');
+    w.lineWidth = 3.5 * dpr;
+    w.strokeStyle = '#5fe3e8';
+    w.shadowColor = '#5fe3e8';
+    w.shadowBlur = 10 * dpr;
+    w.beginPath();
+    w.ellipse(cx, cy, A * scale, B * scale, 0, 0, Math.PI * 2);
+    w.stroke();
+
     const br = Math.max(3.2 * dpr, scale * 0.022);
-    for (const b of balls) {
-      ctx.fillStyle = b.color;
-      ctx.shadowColor = b.color;
-      ctx.shadowBlur = 8 * dpr;
-      ctx.beginPath();
-      ctx.arc(X(b.x), Y(b.y), br, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.shadowBlur = 0;
-    for (const b of balls) {
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.beginPath();
-      ctx.arc(X(b.x) - br * 0.3, Y(b.y) - br * 0.3, br * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    const size = Math.ceil(br * 4.4);
+    sprites.size = size;
+    sprites.imgs = COLORS.map(color => {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const g = c.getContext('2d'), m = size / 2;
+      g.fillStyle = color;
+      g.shadowColor = color;
+      g.shadowBlur = br * 1.6;
+      g.beginPath(); g.arc(m, m, br, 0, Math.PI * 2); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(255,255,255,0.75)';
+      g.beginPath(); g.arc(m - br * 0.3, m - br * 0.3, br * 0.35, 0, Math.PI * 2); g.fill();
+      return c;
+    });
   }
 
   // ---------- loop ----------
@@ -354,11 +405,12 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
     }
     if (audio && audio.state === 'suspended') audio.resume();
     setPressed($('sound'), soundOn);
-    $('sound').textContent = soundOn ? 'ปิดเสียง' : 'เปิดเสียง';
   };
 
   // Tap inside the ellipse: aim a ball from the lower focus toward the tap.
   cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    requestWakeLock();
     const r = cv.getBoundingClientRect();
     const wx = ((e.clientX - r.left) * dpr - cx) / scale;
     const wy = ((e.clientY - r.top) * dpr - cy) / scale;
@@ -367,10 +419,24 @@ input[type="range"] { accent-color: var(--rim); width: 90px; }
     let a;
     if (mode === 'focus') a = Math.atan2(wy - F_START.y, wx - F_START.x);
     addBall(a, { ...from });
-    $('hint').hidden = true;
+    if (!$('hint').hidden) { $('hint').hidden = true; resize(); }
+  });
+
+  // Keep the phone screen on while watching; optional, ignored if refused.
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if (wakeLock || !('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) { /* not allowed here */ }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { last = performance.now(); if (soundOn) requestWakeLock(); }
   });
 
   window.addEventListener('resize', resize);
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
   resize();
   reset();
   requestAnimationFrame(frame);
