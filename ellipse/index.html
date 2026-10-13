@@ -6,24 +6,24 @@
 <title>Neon Ellipse Bounce</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=IBM+Plex+Sans+Thai:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap">
 <style>
-/* Layout: one full-height arcade screen — question on top, the ellipse stage in the middle, a control strip at the bottom. Single dark look by choice. */
+/* Layout: one full-height arcade screen — question on top, the 3D ellipsoid stage in the middle, a control grid at the bottom. Single dark look by choice. */
 :root {
   --bg: #0b0c10;
   --panel: #15171d;
   --line: #262a33;
   --fg: #e9ecf2;
   --muted: #8a92a3;
-  --rim: #5fe3e8;      /* ellipse wall */
-  --count: #2fd8b0;    /* "balls:" label */
+  --rim: #5fe3e8;      /* ellipsoid shell */
+  --count: #2fd8b0;    /* stat labels */
   --gold: #f5c25b;     /* foci and numbers */
   --font-display: "Fredoka", "Baloo 2", system-ui, sans-serif;
   --font-body: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
   color-scheme: dark;
 }
-html { height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+html { height: 100%; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); }
 body {
   height: 100%;
   margin: 0;
@@ -42,42 +42,41 @@ body {
   display: flex;
   flex-direction: column;
   padding-inline: 16px;
-  padding-block: 12px;
+  padding-block: 10px;
   box-sizing: border-box;
   gap: 8px;
   max-width: 720px;
   margin: 0 auto;
   grid-template-areas: "head" "stage" "ctrl";
 }
-header { grid-area: head; }
-.stage { grid-area: stage; }
+header { grid-area: head; text-align: center; display: grid; gap: 2px; }
+.stage { grid-area: stage; position: relative; flex: 1; min-height: 0; }
 .controls { grid-area: ctrl; }
-header { text-align: center; display: grid; gap: 4px; }
 h1 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(1.25rem, 5vw, 1.9rem);
+  font-size: clamp(1.15rem, 4.6vw, 1.8rem);
   letter-spacing: 0.01em;
   text-wrap: balance;
 }
 .stats {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(1.1rem, 4.4vw, 1.5rem);
+  font-size: clamp(1rem, 4vw, 1.4rem);
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: 16px;
   flex-wrap: wrap;
   font-variant-numeric: tabular-nums;
 }
 .stats .k { color: var(--count); }
 .stats .v { color: var(--gold); }
-.stage { position: relative; flex: 1; min-height: 0; }
-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: manipulation; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+canvas:active { cursor: grabbing; }
 .hint {
   position: absolute; left: 0; right: 0; bottom: 0;
-  text-align: center; font-size: 0.8rem; color: var(--muted);
+  text-align: center; font-size: 0.78rem; color: var(--muted);
   pointer-events: none;
 }
 .controls {
@@ -85,15 +84,15 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   width: 100%; max-width: 520px; margin: 0 auto;
 }
 .controls .seg { grid-column: span 2; }
-.controls .speed { grid-column: span 3; justify-content: center; }
+.controls .slider { grid-column: span 2; }
 button, .seg {
-  font: 600 0.9rem var(--font-body);
+  font: 600 0.88rem var(--font-body);
   color: var(--fg);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
   min-height: 44px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -103,29 +102,29 @@ button[aria-pressed="true"] { border-color: var(--rim); color: var(--rim); }
 .seg { display: flex; padding: 3px; gap: 2px; }
 .seg button { flex: 1; border: 0; min-height: 36px; padding: 4px 6px; background: transparent; }
 .seg button[aria-pressed="true"] { background: var(--line); }
-label.speed {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 0.85rem; color: var(--muted);
+label.slider {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.8rem; color: var(--muted); white-space: nowrap;
 }
-input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; height: 28px; }
+input[type="range"] { accent-color: var(--rim); flex: 1; min-width: 0; height: 28px; }
 /* Phone held sideways: stage on the left, title and controls in a side column. */
 @media (orientation: landscape) and (max-height: 520px) {
   .app {
     display: grid; max-width: none;
-    grid-template-columns: 1fr minmax(260px, 320px);
+    grid-template-columns: 1fr minmax(280px, 340px);
     grid-template-rows: auto 1fr;
     grid-template-areas: "stage head" "stage ctrl";
     padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
   }
-  h1 { font-size: 1.1rem; }
-  .stats { font-size: 1rem; }
+  h1 { font-size: 1.05rem; }
+  .stats { font-size: 0.95rem; }
   .controls { align-content: start; overflow-y: auto; }
   .hint { display: none; }
 }
 @media (max-width: 360px) {
-  button, .seg { font-size: 0.8rem; }
+  button, .seg { font-size: 0.76rem; }
+  label.slider { font-size: 0.72rem; }
 }
-@media (prefers-reduced-motion: reduce) { .hint { display: none; } }
 </style>
 </head>
 <body>
@@ -135,13 +134,13 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     <div class="stats">
       <span><span class="k">balls:</span> <span class="v" id="nBalls">0</span></span>
       <span><span class="k">hits:</span> <span class="v" id="nHits">0</span></span>
-      <span><span class="k">bumps:</span> <span class="v" id="nBumps">0</span></span>
+      <span><span class="k">popped:</span> <span class="v" id="nPopped">0</span></span>
     </div>
   </header>
 
   <div class="stage" id="stage">
-    <canvas id="cv" aria-label="วงรีที่มีลูกบอลเด้งไปมา"></canvas>
-    <div class="hint" id="hint">แตะในวงรีเพื่อยิงลูกบอลจากจุดโฟกัสล่างไปทางนั้น</div>
+    <canvas id="cv" aria-label="ทรงรีสามมิติที่มีลูกบอลเด้งอยู่ข้างใน ลากเพื่อหมุนมุมมอง"></canvas>
+    <div class="hint" id="hint">ลากเพื่อหมุน · บีบหรือเลื่อนล้อเมาส์เพื่อซูม · แตะเพื่อยิงลูก</div>
   </div>
 
   <div class="controls">
@@ -155,289 +154,333 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     <button id="trails" aria-pressed="true">เส้นทาง</button>
     <button id="sound" aria-pressed="false">เสียง</button>
     <button id="reset">เริ่มใหม่</button>
+    <button id="spin" aria-pressed="true">หมุนเอง</button>
+    <button id="view">มุมมอง</button>
     <button id="collide" aria-pressed="true">ชนกันได้</button>
-    <label class="speed" for="speed">ความเร็ว <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1"></label>
+    <button id="grow" aria-pressed="true">โตตามอายุ</button>
+    <label class="slider" for="speed">ความเร็ว <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1"></label>
+    <label class="slider" for="growRate">โตเร็ว <input id="growRate" type="range" min="0.001" max="0.02" step="0.001" value="0.012"></label>
   </div>
 </div>
 
 <script>
 (() => {
-  // World units: ellipse x²/A² + y²/B² = 1, tall like the reference video. y points down.
+  // World: prolate spheroid x²/A² + y²/B² + z²/A² = 1, long axis vertical (y up).
+  // Any ray from one focus reflects off the shell straight through the other focus.
   const A = 1, B = 1.55;
   const C = Math.sqrt(B * B - A * A);
-  const F_START = { x: 0, y: C };   // lower focus: launch point
-  const F_TARGET = { x: 0, y: -C }; // upper focus: where every reflected ray meets
-  const MAX_BALLS = 400;
-  const TRAIL_POINTS = 7;
-  const FOCUS_R = 0.045;
+  const F_START = { x: 0, y: -C, z: 0 };  // lower focus: launch point
+  const F_TARGET = { x: 0, y: C, z: 0 };  // upper focus
+  const MAX_BALLS = 300;
+  const TRAIL_POINTS = 6;
+  const FOCUS_R = 0.05;
+  const R0 = 0.022, RMAX = 0.24;   // newborn and largest ball radius
+  const GHOST_TIME = 0.4;          // a new ball ignores collisions until clear of others, at most this long
+  const CAM_D = 6;                 // camera distance for the perspective
 
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
   const stage = document.getElementById('stage');
   const $ = id => document.getElementById(id);
 
-  let balls = [];
-  let hits = 0;
-  let mode = 'focus';
-  let auto = true;
-  let showTrails = true;
-  let speedMul = 1;
-  let spawnClock = 0;
+  let balls = [], pops = [];
+  let hits = 0, popped = 0;
+  let mode = 'focus', auto = true, showTrails = true, collide = true, grow = true;
+  let speedMul = 1, growRate = 0.012, spawnClock = 0;
   let flashTop = 0, flashBottom = 0;
-  let scale = 1, cx = 0, cy = 0, dpr = 1;
-  let collide = true, bumps = 0, ballR = 0.022; // ball radius in world units, set from the sprite size
+  let W = 1, H = 1, dpr = 1, baseScale = 1;
+
+  // camera
+  const DEFAULT_VIEWS = [
+    { yaw: 0.6, pitch: 0.35 },   // tilted
+    { yaw: 0, pitch: 0 },        // side, like the original video
+    { yaw: 0, pitch: 1.5 },      // looking down the long axis
+  ];
+  let viewIdx = 0;
+  let yaw = DEFAULT_VIEWS[0].yaw, pitch = DEFAULT_VIEWS[0].pitch, zoom = 1;
+  let spin = true, spinPausedUntil = 0;
+  let cY = 1, sY = 0, cP = 1, sP = 0;
 
   // ---------- sound ----------
-  let audio = null, soundOn = false, lastBeep = 0, noteIdx = 0;
+  let audio = null, soundOn = false, lastBeep = 0, lastPop = 0, noteIdx = 0;
   const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+  function tone(freq, dur, type, vol) {
+    const now = audio.currentTime;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.connect(g).connect(audio.destination);
+    o.start(now); o.stop(now + dur + 0.05);
+  }
   function beep() {
-    if (!soundOn || !audio) return;
-    const now = audio.currentTime;
-    if (now - lastBeep < 0.045) return;
-    lastBeep = now;
-    const o = audio.createOscillator(), g = audio.createGain();
-    o.type = 'triangle';
-    o.frequency.value = 330 * Math.pow(2, SCALE[noteIdx++ % SCALE.length] / 12);
-    g.gain.setValueAtTime(0.08, now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-    o.connect(g).connect(audio.destination);
-    o.start(now); o.stop(now + 0.4);
+    if (!soundOn || !audio || audio.currentTime - lastBeep < 0.045) return;
+    lastBeep = audio.currentTime;
+    tone(330 * Math.pow(2, SCALE[noteIdx++ % SCALE.length] / 12), 0.35, 'triangle', 0.07);
   }
-
-  function bumpSound(strength) {
-    if (!soundOn || !audio) return;
-    const now = audio.currentTime;
-    if (now - lastBump < 0.03) return;
-    lastBump = now;
-    const o = audio.createOscillator(), g = audio.createGain();
-    o.type = 'sine';
-    o.frequency.value = 900 + Math.random() * 500;
-    g.gain.setValueAtTime(0.025 + 0.04 * Math.min(1, strength), now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-    o.connect(g).connect(audio.destination);
-    o.start(now); o.stop(now + 0.1);
+  function popSound(size) {
+    if (!soundOn || !audio || audio.currentTime - lastPop < 0.04) return;
+    lastPop = audio.currentTime;
+    tone(700 - size * 1800, 0.12, 'sine', 0.06);
   }
-  let lastBump = 0;
 
   // ---------- balls ----------
-  // A fixed set of hues lets trails be stroked per color and balls drawn from cached sprites.
   const HUES = 24;
   const COLORS = Array.from({ length: HUES }, (_, i) => `hsl(${i * 360 / HUES}, 85%, 66%)`);
-  function randomColor() { return Math.floor(Math.random() * HUES); }
+  const radius = b => grow ? Math.min(RMAX, R0 + b.age * growRate) : R0;
+  function randomDir() {
+    const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+    return { x: s * Math.cos(phi), y: u, z: s * Math.sin(phi) };
+  }
+  const q3 = (p, a, b) => (p.x * p.x + p.z * p.z) / (a * a) + p.y * p.y / (b * b);
   function randomInside() {
     for (;;) {
-      const x = (Math.random() * 2 - 1) * A * 0.95, y = (Math.random() * 2 - 1) * B * 0.95;
-      if (x * x / (A * A) + y * y / (B * B) < 0.9) return { x, y };
+      const p = { x: (Math.random() * 2 - 1) * A, y: (Math.random() * 2 - 1) * B, z: (Math.random() * 2 - 1) * A };
+      if (q3(p, A * 0.85, B * 0.85) < 1) return p;
     }
   }
-  function addBall(angle, from) {
+  function addBall(dir, from) {
     if (balls.length >= MAX_BALLS) return;
     const p = from || (mode === 'focus' ? { ...F_START } : randomInside());
-    const a = angle ?? Math.random() * Math.PI * 2;
+    const d = dir || randomDir();
     balls.push({
-      x: p.x, y: p.y, vx: Math.cos(a), vy: Math.sin(a),
-      color: randomColor(),
-      pts: [{ x: p.x, y: p.y }],
-      nearTop: false, nearBottom: Math.hypot(p.x - F_START.x, p.y - F_START.y) < FOCUS_R,
-      // A new ball passes through others until it is clear of them, so balls launched from the same focus don't explode apart.
-      ghost: true, ghostT: 0.4, flash: 0,
+      x: p.x, y: p.y, z: p.z, vx: d.x, vy: d.y, vz: d.z,
+      age: 0, color: Math.floor(Math.random() * HUES),
+      pts: [{ x: p.x, y: p.y, z: p.z }],
+      nearTop: false, ghost: true, ghostT: GHOST_TIME, touching: false, dead: false,
     });
     $('nBalls').textContent = balls.length;
   }
 
-  // Distance from a point to a segment, for counting passes through a focus.
-  function segDist(px, py, ax, ay, bx, by) {
-    const dx = bx - ax, dy = by - ay;
-    const L = dx * dx + dy * dy;
-    let t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0;
+  function segDist(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    const L = dx * dx + dy * dy + dz * dz;
+    let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / L : 0;
     t = Math.max(0, Math.min(1, t));
-    return Math.hypot(ax + t * dx - px, ay + t * dy - py);
+    return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y, a.z + t * dz - p.z);
   }
-
-  function checkFocus(b, ax, ay, bx, by) {
-    const dTop = segDist(F_TARGET.x, F_TARGET.y, ax, ay, bx, by);
-    const inTop = dTop < FOCUS_R;
+  function checkFocus(b, a, e) {
+    const inTop = segDist(F_TARGET, a, e) < FOCUS_R;
     if (inTop && !b.nearTop) { hits++; flashTop = 1; beep(); }
     b.nearTop = inTop;
-    const inBot = segDist(F_START.x, F_START.y, ax, ay, bx, by) < FOCUS_R;
-    if (inBot && !b.nearBottom) flashBottom = 1;
-    b.nearBottom = inBot;
+    if (b.age > 0.2 && segDist(F_START, a, e) < FOCUS_R) flashBottom = 1;
   }
 
+  // The ball's centre bounces off the shell shrunk by its radius, so a big ball touches the wall with its surface.
   function stepBall(b, dist) {
+    const r = radius(b);
+    const a = Math.max(0.1, A - r), bb = Math.max(0.1, B - r);
+    const q0 = q3(b, a, bb);
+    if (q0 >= 0.999) { const k = Math.sqrt(0.998 / q0); b.x *= k; b.y *= k; b.z *= k; }
+    const ia = 1 / (a * a), ib = 1 / (bb * bb);
     for (let iter = 0; iter < 4 && dist > 1e-9; iter++) {
-      const dx = b.vx * dist, dy = b.vy * dist;
-      const nx = b.x + dx, ny = b.y + dy;
-      if (nx * nx / (A * A) + ny * ny / (B * B) < 1) {
-        checkFocus(b, b.x, b.y, nx, ny);
-        b.x = nx; b.y = ny;
-        return;
-      }
-      // Solve |p + t·d| on the ellipse for t in (0, 1].
-      const qa = dx * dx / (A * A) + dy * dy / (B * B);
-      const qb = 2 * (b.x * dx / (A * A) + b.y * dy / (B * B));
-      const qc = b.x * b.x / (A * A) + b.y * b.y / (B * B) - 1;
+      const dx = b.vx * dist, dy = b.vy * dist, dz = b.vz * dist;
+      const n = { x: b.x + dx, y: b.y + dy, z: b.z + dz };
+      if (q3(n, a, bb) < 1) { checkFocus(b, b, n); b.x = n.x; b.y = n.y; b.z = n.z; return; }
+      const qa = (dx * dx + dz * dz) * ia + dy * dy * ib;
+      const qb = 2 * ((b.x * dx + b.z * dz) * ia + b.y * dy * ib);
+      const qc = q3(b, a, bb) - 1;
       const t = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
-      const hx = b.x + dx * t, hy = b.y + dy * t;
-      checkFocus(b, b.x, b.y, hx, hy);
-      // Reflect about the wall normal (gradient of the ellipse equation).
-      let gx = hx / (A * A), gy = hy / (B * B);
-      const gl = Math.hypot(gx, gy); gx /= gl; gy /= gl;
-      const dot = b.vx * gx + b.vy * gy;
-      b.vx -= 2 * dot * gx; b.vy -= 2 * dot * gy;
-      b.x = hx * 0.999999; b.y = hy * 0.999999;
-      b.pts.push({ x: b.x, y: b.y });
+      const h = { x: b.x + dx * t, y: b.y + dy * t, z: b.z + dz * t };
+      checkFocus(b, b, h);
+      let gx = h.x * ia, gy = h.y * ib, gz = h.z * ia;
+      const gl = Math.hypot(gx, gy, gz); gx /= gl; gy /= gl; gz /= gl;
+      const dot = b.vx * gx + b.vy * gy + b.vz * gz;
+      b.vx -= 2 * dot * gx; b.vy -= 2 * dot * gy; b.vz -= 2 * dot * gz;
+      b.x = h.x * 0.999999; b.y = h.y * 0.999999; b.z = h.z * 0.999999;
+      b.pts.push({ x: b.x, y: b.y, z: b.z });
       if (b.pts.length > TRAIL_POINTS) b.pts.shift();
       dist *= (1 - t);
     }
   }
 
-  // ---------- drawing ----------
-  function resize() {
-    const r = stage.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = Math.round(r.width * dpr);
-    cv.height = Math.round(r.height * dpr);
-    const pad = 10 * dpr;
-    const hintH = $('hint').hidden || getComputedStyle($('hint')).display === 'none' ? 0 : 18 * dpr;
-    scale = Math.min((cv.width - pad * 2) / (2 * A), (cv.height - pad * 2 - hintH) / (2 * B));
-    cx = cv.width / 2;
-    cy = (cv.height - hintH) / 2;
-    buildLayers();
+  // When two balls touch, the older one pops and the younger keeps flying.
+  function collideAll() {
+    for (const b of balls) b.touching = false;
+    const n = balls.length;
+    let any = false;
+    for (let i = 0; i < n; i++) {
+      const p = balls[i]; if (p.dead) continue;
+      const rp = radius(p);
+      for (let j = i + 1; j < n; j++) {
+        const o = balls[j]; if (o.dead) continue;
+        const rs = rp + radius(o);
+        const dx = o.x - p.x; if (dx > rs || dx < -rs) continue;
+        const dy = o.y - p.y; if (dy > rs || dy < -rs) continue;
+        const dz = o.z - p.z;
+        if (dx * dx + dy * dy + dz * dz >= rs * rs) continue;
+        p.touching = o.touching = true;
+        if (p.ghost || o.ghost) continue;
+        const older = p.age >= o.age ? p : o;
+        older.dead = true; any = true;
+        popped++;
+        pops.push({ x: older.x, y: older.y, z: older.z, r: radius(older), t: 0, color: older.color });
+        popSound(radius(older));
+        if (older === p) break;
+      }
+    }
+    if (any) {
+      balls = balls.filter(b => !b.dead);
+      $('nPopped').textContent = popped;
+      $('nBalls').textContent = balls.length;
+    }
+    for (const b of balls) if (b.ghost && (!b.touching || b.ghostT <= 0)) b.ghost = false;
   }
-  const X = x => cx + x * scale;
-  const Y = y => cy + y * scale;
 
-  function drawFocus(f, flash, color) {
-    const r = FOCUS_R * scale * 0.9;
-    ctx.lineWidth = 2 * dpr;
-    ctx.strokeStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = (6 + flash * 20) * dpr;
+  // ---------- camera ----------
+  function updateCam() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); }
+  const pa = { x: 0, y: 0, s: 0, z: 0 }, pb = { x: 0, y: 0, s: 0, z: 0 };
+  function project(p, o) {
+    const x1 = p.x * cY + p.z * sY;
+    const z0 = -p.x * sY + p.z * cY;
+    const y1 = p.y * cP - z0 * sP;
+    const z1 = p.y * sP + z0 * cP;
+    const s = CAM_D / (CAM_D - z1) * baseScale * zoom;
+    o.x = W / 2 + x1 * s; o.y = H / 2 - y1 * s; o.s = s; o.z = z1;
+    return o;
+  }
+  // camera-space vector -> world
+  function camToWorld(vx, vy, vz) {
+    const y = vy * cP + vz * sP;
+    const z0 = -vy * sP + vz * cP;
+    return { x: vx * cY - z0 * sY, y, z: vx * sY + z0 * cY };
+  }
+
+  // ---------- drawing ----------
+  const sprites = [];
+  const SPR = 64, SPR_CORE = 18;  // sprite canvas size and the ball radius drawn in it
+  (function buildSprites() {
+    for (const color of COLORS) {
+      const c = document.createElement('canvas');
+      c.width = c.height = SPR;
+      const g = c.getContext('2d'), m = SPR / 2;
+      const glow = g.createRadialGradient(m, m, SPR_CORE * 0.6, m, m, m);
+      glow.addColorStop(0, color); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.45; g.fillStyle = glow; g.beginPath(); g.arc(m, m, m, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1;
+      const body = g.createRadialGradient(m - SPR_CORE * 0.35, m - SPR_CORE * 0.35, 1, m, m, SPR_CORE);
+      body.addColorStop(0, '#ffffff'); body.addColorStop(0.25, color); body.addColorStop(1, color);
+      g.fillStyle = body; g.beginPath(); g.arc(m, m, SPR_CORE, 0, Math.PI * 2); g.fill();
+      sprites.push(c);
+    }
+  })();
+
+  // Shell wireframe: rings of latitude and lines of longitude.
+  const WIRE = [];
+  (function buildWire() {
+    const N = 48;
+    for (const lat of [-60, -30, 0, 30, 60]) {
+      const ph = lat * Math.PI / 180, ring = [];
+      for (let i = 0; i <= N; i++) { const t = i / N * Math.PI * 2; ring.push({ x: A * Math.cos(ph) * Math.cos(t), y: B * Math.sin(ph), z: A * Math.cos(ph) * Math.sin(t) }); }
+      WIRE.push(ring);
+    }
+    for (let k = 0; k < 8; k++) {
+      const lon = k / 8 * Math.PI * 2, ring = [];
+      for (let i = 0; i <= N / 2; i++) { const ph = -Math.PI / 2 + i / (N / 2) * Math.PI; ring.push({ x: A * Math.cos(ph) * Math.cos(lon), y: B * Math.sin(ph), z: A * Math.cos(ph) * Math.sin(lon) }); }
+      WIRE.push(ring);
+    }
+  })();
+  function drawWire(front) {
     ctx.beginPath();
-    ctx.arc(X(f.x), Y(f.y), r * (1 + flash * 0.5), 0, Math.PI * 2);
+    for (const ring of WIRE) {
+      for (let i = 1; i < ring.length; i++) {
+        project(ring[i - 1], pa); project(ring[i], pb);
+        if ((pa.z + pb.z >= 0) !== front) continue;
+        ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
+      }
+    }
     ctx.stroke();
-    ctx.shadowBlur = 0;
+  }
+  // Outline: the points of the shell whose normal is perpendicular to the view direction.
+  function drawRim() {
+    const v = camToWorld(0, 0, 1);
+    let w = { x: v.x / A, y: v.y / B, z: v.z / A };
+    const wl = Math.hypot(w.x, w.y, w.z); w = { x: w.x / wl, y: w.y / wl, z: w.z / wl };
+    const t = Math.abs(w.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+    let e1 = { x: w.y * t.z - w.z * t.y, y: w.z * t.x - w.x * t.z, z: w.x * t.y - w.y * t.x };
+    const l1 = Math.hypot(e1.x, e1.y, e1.z); e1 = { x: e1.x / l1, y: e1.y / l1, z: e1.z / l1 };
+    const e2 = { x: w.y * e1.z - w.z * e1.y, y: w.z * e1.x - w.x * e1.z, z: w.x * e1.y - w.y * e1.x };
+    ctx.beginPath();
+    for (let i = 0; i <= 96; i++) {
+      const a = i / 96 * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const u = { x: c * e1.x + s * e2.x, y: c * e1.y + s * e2.y, z: c * e1.z + s * e2.z };
+      project({ x: A * u.x, y: B * u.y, z: A * u.z }, pa);
+      if (i === 0) ctx.moveTo(pa.x, pa.y); else ctx.lineTo(pa.x, pa.y);
+    }
+    ctx.strokeStyle = 'rgba(95, 227, 232, 0.18)'; ctx.lineWidth = 10 * dpr; ctx.stroke();
+    ctx.strokeStyle = '#5fe3e8'; ctx.lineWidth = 3 * dpr; ctx.stroke();
+  }
+  function drawFocus(f, flash, color) {
+    project(f, pa);
+    const r = Math.max(6 * dpr, FOCUS_R * pa.s) * (1 + flash * 0.5);
+    ctx.strokeStyle = color; ctx.lineWidth = 2 * dpr;
+    ctx.globalAlpha = 0.6 + flash * 0.4;
+    ctx.beginPath(); ctx.arc(pa.x, pa.y, r, 0, Math.PI * 2); ctx.stroke();
+    if (flash > 0.05) { ctx.globalAlpha = flash * 0.5; ctx.lineWidth = 6 * dpr; ctx.stroke(); }
+    ctx.globalAlpha = 1;
   }
 
   function draw() {
     ctx.fillStyle = '#0b0c10';
     ctx.fillRect(0, 0, cv.width, cv.height);
 
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeStyle = 'rgba(95, 227, 232, 0.10)';
+    drawWire(false);
+    drawFocus(F_TARGET, flashTop, '#f5a54a');
+    drawFocus(F_START, flashBottom, '#f5c25b');
+
     if (showTrails) {
       ctx.lineWidth = 1 * dpr;
-      ctx.globalAlpha = balls.length > 120 ? 0.45 : 0.75;
-      // Shorter trails when crowded keeps phones smooth.
-      const trailLen = balls.length > 150 ? 3 : TRAIL_POINTS;
+      ctx.globalAlpha = balls.length > 120 ? 0.4 : 0.65;
       for (let h = 0; h < HUES; h++) {
         ctx.strokeStyle = COLORS[h];
         ctx.beginPath();
         for (const b of balls) {
           if (b.color !== h) continue;
-          const i0 = Math.max(0, b.pts.length - trailLen);
-          ctx.moveTo(X(b.pts[i0].x), Y(b.pts[i0].y));
-          for (let i = i0 + 1; i < b.pts.length; i++) ctx.lineTo(X(b.pts[i].x), Y(b.pts[i].y));
-          ctx.lineTo(X(b.x), Y(b.y));
+          project(b.pts[0], pa); ctx.moveTo(pa.x, pa.y);
+          for (let i = 1; i < b.pts.length; i++) { project(b.pts[i], pa); ctx.lineTo(pa.x, pa.y); }
+          project(b, pa); ctx.lineTo(pa.x, pa.y);
         }
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
 
-    ctx.drawImage(wallLayer, 0, 0);
-
-    drawFocus(F_TARGET, flashTop, '#f5a54a');
-    drawFocus(F_START, flashBottom, '#f5c25b');
-
-    // Balls
-    const half = sprites.size / 2;
-    for (const b of balls) ctx.drawImage(sprites.imgs[b.color], X(b.x) - half, Y(b.y) - half);
-    // white ring on balls that just bumped
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr;
-    for (const b of balls) if (b.flash > 0) {
-      ctx.globalAlpha = b.flash;
-      ctx.beginPath(); ctx.arc(X(b.x), Y(b.y), ballR * scale * (1.6 + (1 - b.flash)), 0, Math.PI * 2); ctx.stroke();
+    // balls, far to near; nearer balls are brighter
+    for (const b of balls) { project(b, pa); b.sx = pa.x; b.sy = pa.y; b.ss = pa.s; b.sz = pa.z; }
+    const order = balls.slice().sort((p, q) => p.sz - q.sz);
+    for (const b of order) {
+      const size = radius(b) * b.ss * SPR / SPR_CORE;
+      ctx.globalAlpha = (b.ghost ? 0.5 : 1) * (0.55 + 0.45 * Math.max(0, Math.min(1, (b.sz + B) / (2 * B))));
+      ctx.drawImage(sprites[b.color], b.sx - size / 2, b.sy - size / 2, size, size);
     }
     ctx.globalAlpha = 1;
-  }
 
-  // Static layers rebuilt on resize: the glowing wall and one ball sprite per hue.
-  const wallLayer = document.createElement('canvas');
-  const sprites = { size: 0, imgs: [] };
-  function buildLayers() {
-    wallLayer.width = cv.width; wallLayer.height = cv.height;
-    const w = wallLayer.getContext('2d');
-    w.lineWidth = 3.5 * dpr;
-    w.strokeStyle = '#5fe3e8';
-    w.shadowColor = '#5fe3e8';
-    w.shadowBlur = 10 * dpr;
-    w.beginPath();
-    w.ellipse(cx, cy, A * scale, B * scale, 0, 0, Math.PI * 2);
-    w.stroke();
-
-    const br = Math.max(3.2 * dpr, scale * 0.022);
-    ballR = br / scale;
-    const size = Math.ceil(br * 4.4);
-    sprites.size = size;
-    sprites.imgs = COLORS.map(color => {
-      const c = document.createElement('canvas');
-      c.width = c.height = size;
-      const g = c.getContext('2d'), m = size / 2;
-      g.fillStyle = color;
-      g.shadowColor = color;
-      g.shadowBlur = br * 1.6;
-      g.beginPath(); g.arc(m, m, br, 0, Math.PI * 2); g.fill();
-      g.shadowBlur = 0;
-      g.fillStyle = 'rgba(255,255,255,0.75)';
-      g.beginPath(); g.arc(m - br * 0.3, m - br * 0.3, br * 0.35, 0, Math.PI * 2); g.fill();
-      return c;
-    });
-  }
-
-  // ---------- ball-to-ball collisions ----------
-  // Equal masses, perfectly elastic: the two balls swap the parts of their velocity along the line between centres.
-  function keepInside(b) {
-    const q = b.x * b.x / (A * A) + b.y * b.y / (B * B);
-    if (q >= 0.998) { const k = Math.sqrt(0.998 / q); b.x *= k; b.y *= k; }
-  }
-  function collideAll() {
-    const D = ballR * 2, D2 = D * D;
-    const grid = new Map();
-    for (const b of balls) {
-      b.touching = false;
-      const key = Math.floor(b.x / D) * 4096 + Math.floor(b.y / D);
-      const cell = grid.get(key);
-      if (cell) cell.push(b); else grid.set(key, [b]);
+    // pops: an expanding ring where an older ball vanished
+    for (const p of pops) {
+      project(p, pa);
+      const k = p.t / 0.45;
+      ctx.globalAlpha = Math.max(0, 1 - k);
+      ctx.strokeStyle = COLORS[p.color]; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.arc(pa.x, pa.y, p.r * pa.s * (1 + k * 1.5), 0, Math.PI * 2); ctx.stroke();
     }
-    for (const b of balls) {
-      const gx = Math.floor(b.x / D), gy = Math.floor(b.y / D);
-      for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) {
-        const cell = grid.get(ix * 4096 + iy);
-        if (!cell) continue;
-        for (const o of cell) {
-          if (o === b) continue;
-          const dx = o.x - b.x, dy = o.y - b.y, d2 = dx * dx + dy * dy;
-          if (d2 >= D2) continue;
-          b.touching = true;
-          if (b.ghost || o.ghost || o === b || (b.x > o.x || (b.x === o.x && b.y > o.y))) continue; // each pair once
-          const d = Math.sqrt(d2) || 1e-9, nx = dx / d, ny = dy / d;
-          const rel = (b.vx - o.vx) * nx + (b.vy - o.vy) * ny;
-          if (rel > 0) {
-            b.vx -= rel * nx; b.vy -= rel * ny;
-            o.vx += rel * nx; o.vy += rel * ny;
-            bumps++; b.flash = o.flash = 1;
-            bumpSound(rel);
-            b.pts.push({ x: b.x, y: b.y }); if (b.pts.length > TRAIL_POINTS) b.pts.shift();
-            o.pts.push({ x: o.x, y: o.y }); if (o.pts.length > TRAIL_POINTS) o.pts.shift();
-          }
-          const push = (D - d) / 2;
-          b.x -= nx * push; b.y -= ny * push;
-          o.x += nx * push; o.y += ny * push;
-          keepInside(b); keepInside(o);
-        }
-      }
-    }
-    for (const b of balls) if (b.ghost && (!b.touching || b.ghostT <= 0)) b.ghost = false;
+    ctx.globalAlpha = 1;
+
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeStyle = 'rgba(95, 227, 232, 0.22)';
+    drawWire(true);
+    drawRim();
+  }
+
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const hintH = $('hint').hidden || getComputedStyle($('hint')).display === 'none' ? 0 : 18;
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
+    W = cv.width; H = cv.height - hintH * dpr;
+    baseScale = Math.min(W / (2 * A * 1.25), H / (2 * B * 1.12));
   }
 
   // ---------- loop ----------
@@ -445,26 +488,23 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    if (spin && now > spinPausedUntil) yaw += dt * 0.25;
+    updateCam();
     if (auto && balls.length < MAX_BALLS) {
       spawnClock += dt;
       if (spawnClock > 0.9) { spawnClock = 0; addBall(); }
     }
+    for (const b of balls) { b.age += dt; if (b.ghost) b.ghostT -= dt; }
     const dist = 0.9 * speedMul * dt;
     if (collide) {
-      // Substeps no longer than one radius, so fast balls can't skip through each other.
-      const n = Math.max(1, Math.ceil(dist * 1.6 / ballR));
-      for (let i = 0; i < n; i++) {
-        for (const b of balls) stepBall(b, dist / n);
-        collideAll();
-      }
-      $('nBumps').textContent = bumps;
+      // substeps no longer than a newborn's radius so small fast balls can't pass through each other
+      const n = Math.max(1, Math.min(6, Math.ceil(dist / R0)));
+      for (let i = 0; i < n; i++) { for (const b of balls) stepBall(b, dist / n); collideAll(); }
     } else {
       for (const b of balls) stepBall(b, dist);
     }
-    for (const b of balls) {
-      if (b.flash) b.flash = Math.max(0, b.flash - dt * 5);
-      if (b.ghost) b.ghostT -= dt;
-    }
+    for (const p of pops) p.t += dt;
+    pops = pops.filter(p => p.t < 0.45);
     flashTop *= 0.9; flashBottom *= 0.9;
     $('nHits').textContent = hits;
     draw();
@@ -474,10 +514,13 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   // ---------- controls ----------
   function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   function reset() {
-    balls = []; hits = 0; bumps = 0; spawnClock = 0;
-    $('nBumps').textContent = 0;
-    $('nBalls').textContent = 0;
+    balls = []; pops = []; hits = 0; popped = 0; spawnClock = 0;
+    $('nBalls').textContent = 0; $('nPopped').textContent = 0;
     for (let i = 0; i < 8; i++) addBall();
+  }
+  function unlockAudio() {
+    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } }
+    if (audio && audio.state === 'suspended') audio.resume();
   }
   $('modeFocus').onclick = () => { mode = 'focus'; setPressed($('modeFocus'), true); setPressed($('modeRandom'), false); reset(); };
   $('modeRandom').onclick = () => { mode = 'random'; setPressed($('modeFocus'), false); setPressed($('modeRandom'), true); reset(); };
@@ -486,53 +529,96 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   $('auto').onclick = () => { auto = !auto; setPressed($('auto'), auto); };
   $('trails').onclick = () => { showTrails = !showTrails; setPressed($('trails'), showTrails); };
   $('reset').onclick = reset;
+  $('spin').onclick = () => { spin = !spin; setPressed($('spin'), spin); };
+  $('view').onclick = () => {
+    viewIdx = (viewIdx + 1) % DEFAULT_VIEWS.length;
+    yaw = DEFAULT_VIEWS[viewIdx].yaw; pitch = DEFAULT_VIEWS[viewIdx].pitch; zoom = 1;
+    spin = viewIdx === 0; setPressed($('spin'), spin);
+  };
   $('collide').onclick = () => {
     collide = !collide; setPressed($('collide'), collide);
-    for (const b of balls) { b.ghost = true; b.ghostT = 0.4; }
+    for (const b of balls) { b.ghost = true; b.ghostT = GHOST_TIME; }
   };
+  $('grow').onclick = () => { grow = !grow; setPressed($('grow'), grow); };
   $('speed').oninput = e => { speedMul = parseFloat(e.target.value); };
+  $('growRate').oninput = e => { growRate = parseFloat(e.target.value); };
   $('sound').onclick = () => {
     soundOn = !soundOn;
-    if (soundOn && !audio) {
-      try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { soundOn = false; }
-    }
-    if (audio && audio.state === 'suspended') audio.resume();
+    if (soundOn) unlockAudio();
+    if (!audio) soundOn = false;
     setPressed($('sound'), soundOn);
   };
 
-  // Tap inside the ellipse: aim a ball from the lower focus toward the tap.
+  // ---------- drag to rotate, pinch / wheel to zoom, tap to launch ----------
+  const pointers = new Map();
+  let pinchDist = 0, gesture = null;
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
-    requestWakeLock();
-    const r = cv.getBoundingClientRect();
-    const wx = ((e.clientX - r.left) * dpr - cx) / scale;
-    const wy = ((e.clientY - r.top) * dpr - cy) / scale;
-    if (wx * wx / (A * A) + wy * wy / (B * B) >= 1) return;
-    const from = mode === 'focus' ? F_START : { x: wx, y: wy };
-    let a;
-    if (mode === 'focus') a = Math.atan2(wy - F_START.y, wx - F_START.x);
-    addBall(a, { ...from });
-    if (!$('hint').hidden) { $('hint').hidden = true; resize(); }
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) gesture = { x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
+    if (pointers.size === 2) {
+      const [p, q] = [...pointers.values()];
+      pinchDist = Math.hypot(p.x - q.x, p.y - q.y);
+      if (gesture) gesture.moved = true;
+    }
   });
-
-  // Keep the phone screen on while watching; optional, ignored if refused.
-  let wakeLock = null;
-  async function requestWakeLock() {
-    if (wakeLock || !('wakeLock' in navigator)) return;
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } catch (e) { /* not allowed here */ }
+  cv.addEventListener('pointermove', e => {
+    const prev = pointers.get(e.pointerId);
+    if (!prev) return;
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    prev.x = e.clientX; prev.y = e.clientY;
+    if (pointers.size === 1) {
+      if (gesture && Math.hypot(e.clientX - gesture.x0, e.clientY - gesture.y0) > 6) gesture.moved = true;
+      if (gesture && gesture.moved) {
+        yaw += dx * 0.008;
+        pitch = Math.max(-1.52, Math.min(1.52, pitch + dy * 0.008));
+        spinPausedUntil = performance.now() + 2500;
+      }
+    } else if (pointers.size === 2) {
+      const [p, q] = [...pointers.values()];
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (pinchDist > 0) zoom = Math.max(0.5, Math.min(3, zoom * d / pinchDist));
+      pinchDist = d;
+    }
+  });
+  function endPointer(e) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0 && gesture && !gesture.moved && e.type === 'pointerup' && performance.now() - gesture.t0 < 400) launchAt(e);
+    if (pointers.size < 2) pinchDist = 0;
+    if (pointers.size === 0) gesture = null;
   }
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { last = performance.now(); if (soundOn) requestWakeLock(); }
-  });
+  cv.addEventListener('pointerup', endPointer);
+  cv.addEventListener('pointercancel', endPointer);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoom = Math.max(0.5, Math.min(3, zoom * Math.exp(-e.deltaY * 0.0015)));
+  }, { passive: false });
+
+  // A tap fires a ball from the launch point toward the tapped spot, in the plane facing you.
+  function launchAt(e) {
+    unlockAudio();
+    const r = cv.getBoundingClientRect();
+    const tx = (e.clientX - r.left) * dpr, ty = (e.clientY - r.top) * dpr;
+    const from = mode === 'focus' ? { ...F_START } : randomInside();
+    project(from, pa);
+    let dx = tx - pa.x, dy = ty - pa.y;
+    if (Math.hypot(dx, dy) < 1) dx = 1;
+    const right = camToWorld(1, 0, 0), up = camToWorld(0, 1, 0);
+    let d = { x: right.x * dx - up.x * dy, y: right.y * dx - up.y * dy, z: right.z * dx - up.z * dy };
+    const l = Math.hypot(d.x, d.y, d.z); d = { x: d.x / l, y: d.y / l, z: d.z / l };
+    addBall(d, from);
+    if (!$('hint').hidden) { $('hint').hidden = true; resize(); }
+  }
 
   window.addEventListener('resize', resize);
   if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
   resize();
+  updateCam();
   reset();
   requestAnimationFrame(frame);
+  window.__ellipse = { get balls() { return balls; }, get popped() { return popped; }, setView(y, p) { yaw = y; pitch = p; spin = false; } };
 })();
 </script>
 </body>
