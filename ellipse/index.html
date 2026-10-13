@@ -85,7 +85,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   width: 100%; max-width: 520px; margin: 0 auto;
 }
 .controls .seg { grid-column: span 2; }
-.controls .speed { grid-column: 1 / -1; justify-content: center; }
+.controls .speed { grid-column: span 3; justify-content: center; }
 button, .seg {
   font: 600 0.9rem var(--font-body);
   color: var(--fg);
@@ -135,6 +135,7 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     <div class="stats">
       <span><span class="k">balls:</span> <span class="v" id="nBalls">0</span></span>
       <span><span class="k">hits:</span> <span class="v" id="nHits">0</span></span>
+      <span><span class="k">bumps:</span> <span class="v" id="nBumps">0</span></span>
     </div>
   </header>
 
@@ -154,6 +155,7 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     <button id="trails" aria-pressed="true">เส้นทาง</button>
     <button id="sound" aria-pressed="false">เสียง</button>
     <button id="reset">เริ่มใหม่</button>
+    <button id="collide" aria-pressed="true">ชนกันได้</button>
     <label class="speed" for="speed">ความเร็ว <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1"></label>
   </div>
 </div>
@@ -183,6 +185,7 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   let spawnClock = 0;
   let flashTop = 0, flashBottom = 0;
   let scale = 1, cx = 0, cy = 0, dpr = 1;
+  let collide = true, bumps = 0, ballR = 0.022; // ball radius in world units, set from the sprite size
 
   // ---------- sound ----------
   let audio = null, soundOn = false, lastBeep = 0, noteIdx = 0;
@@ -200,6 +203,21 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     o.connect(g).connect(audio.destination);
     o.start(now); o.stop(now + 0.4);
   }
+
+  function bumpSound(strength) {
+    if (!soundOn || !audio) return;
+    const now = audio.currentTime;
+    if (now - lastBump < 0.03) return;
+    lastBump = now;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine';
+    o.frequency.value = 900 + Math.random() * 500;
+    g.gain.setValueAtTime(0.025 + 0.04 * Math.min(1, strength), now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    o.connect(g).connect(audio.destination);
+    o.start(now); o.stop(now + 0.1);
+  }
+  let lastBump = 0;
 
   // ---------- balls ----------
   // A fixed set of hues lets trails be stroked per color and balls drawn from cached sprites.
@@ -221,6 +239,8 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
       color: randomColor(),
       pts: [{ x: p.x, y: p.y }],
       nearTop: false, nearBottom: Math.hypot(p.x - F_START.x, p.y - F_START.y) < FOCUS_R,
+      // A new ball passes through others until it is clear of them, so balls launched from the same focus don't explode apart.
+      ghost: true, ghostT: 0.4, flash: 0,
     });
     $('nBalls').textContent = balls.length;
   }
@@ -332,6 +352,13 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     // Balls
     const half = sprites.size / 2;
     for (const b of balls) ctx.drawImage(sprites.imgs[b.color], X(b.x) - half, Y(b.y) - half);
+    // white ring on balls that just bumped
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr;
+    for (const b of balls) if (b.flash > 0) {
+      ctx.globalAlpha = b.flash;
+      ctx.beginPath(); ctx.arc(X(b.x), Y(b.y), ballR * scale * (1.6 + (1 - b.flash)), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Static layers rebuilt on resize: the glowing wall and one ball sprite per hue.
@@ -349,6 +376,7 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     w.stroke();
 
     const br = Math.max(3.2 * dpr, scale * 0.022);
+    ballR = br / scale;
     const size = Math.ceil(br * 4.4);
     sprites.size = size;
     sprites.imgs = COLORS.map(color => {
@@ -366,6 +394,52 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
     });
   }
 
+  // ---------- ball-to-ball collisions ----------
+  // Equal masses, perfectly elastic: the two balls swap the parts of their velocity along the line between centres.
+  function keepInside(b) {
+    const q = b.x * b.x / (A * A) + b.y * b.y / (B * B);
+    if (q >= 0.998) { const k = Math.sqrt(0.998 / q); b.x *= k; b.y *= k; }
+  }
+  function collideAll() {
+    const D = ballR * 2, D2 = D * D;
+    const grid = new Map();
+    for (const b of balls) {
+      b.touching = false;
+      const key = Math.floor(b.x / D) * 4096 + Math.floor(b.y / D);
+      const cell = grid.get(key);
+      if (cell) cell.push(b); else grid.set(key, [b]);
+    }
+    for (const b of balls) {
+      const gx = Math.floor(b.x / D), gy = Math.floor(b.y / D);
+      for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iy = gy - 1; iy <= gy + 1; iy++) {
+        const cell = grid.get(ix * 4096 + iy);
+        if (!cell) continue;
+        for (const o of cell) {
+          if (o === b) continue;
+          const dx = o.x - b.x, dy = o.y - b.y, d2 = dx * dx + dy * dy;
+          if (d2 >= D2) continue;
+          b.touching = true;
+          if (b.ghost || o.ghost || o === b || (b.x > o.x || (b.x === o.x && b.y > o.y))) continue; // each pair once
+          const d = Math.sqrt(d2) || 1e-9, nx = dx / d, ny = dy / d;
+          const rel = (b.vx - o.vx) * nx + (b.vy - o.vy) * ny;
+          if (rel > 0) {
+            b.vx -= rel * nx; b.vy -= rel * ny;
+            o.vx += rel * nx; o.vy += rel * ny;
+            bumps++; b.flash = o.flash = 1;
+            bumpSound(rel);
+            b.pts.push({ x: b.x, y: b.y }); if (b.pts.length > TRAIL_POINTS) b.pts.shift();
+            o.pts.push({ x: o.x, y: o.y }); if (o.pts.length > TRAIL_POINTS) o.pts.shift();
+          }
+          const push = (D - d) / 2;
+          b.x -= nx * push; b.y -= ny * push;
+          o.x += nx * push; o.y += ny * push;
+          keepInside(b); keepInside(o);
+        }
+      }
+    }
+    for (const b of balls) if (b.ghost && (!b.touching || b.ghostT <= 0)) b.ghost = false;
+  }
+
   // ---------- loop ----------
   let last = performance.now();
   function frame(now) {
@@ -376,7 +450,21 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
       if (spawnClock > 0.9) { spawnClock = 0; addBall(); }
     }
     const dist = 0.9 * speedMul * dt;
-    for (const b of balls) stepBall(b, dist);
+    if (collide) {
+      // Substeps no longer than one radius, so fast balls can't skip through each other.
+      const n = Math.max(1, Math.ceil(dist * 1.6 / ballR));
+      for (let i = 0; i < n; i++) {
+        for (const b of balls) stepBall(b, dist / n);
+        collideAll();
+      }
+      $('nBumps').textContent = bumps;
+    } else {
+      for (const b of balls) stepBall(b, dist);
+    }
+    for (const b of balls) {
+      if (b.flash) b.flash = Math.max(0, b.flash - dt * 5);
+      if (b.ghost) b.ghostT -= dt;
+    }
     flashTop *= 0.9; flashBottom *= 0.9;
     $('nHits').textContent = hits;
     draw();
@@ -386,7 +474,8 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   // ---------- controls ----------
   function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   function reset() {
-    balls = []; hits = 0; spawnClock = 0;
+    balls = []; hits = 0; bumps = 0; spawnClock = 0;
+    $('nBumps').textContent = 0;
     $('nBalls').textContent = 0;
     for (let i = 0; i < 8; i++) addBall();
   }
@@ -397,6 +486,10 @@ input[type="range"] { accent-color: var(--rim); flex: 1; max-width: 220px; heigh
   $('auto').onclick = () => { auto = !auto; setPressed($('auto'), auto); };
   $('trails').onclick = () => { showTrails = !showTrails; setPressed($('trails'), showTrails); };
   $('reset').onclick = reset;
+  $('collide').onclick = () => {
+    collide = !collide; setPressed($('collide'), collide);
+    for (const b of balls) { b.ghost = true; b.ghostT = 0.4; }
+  };
   $('speed').oninput = e => { speedMul = parseFloat(e.target.value); };
   $('sound').onclick = () => {
     soundOn = !soundOn;
