@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neon Ellipse Bounce</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=IBM+Plex+Sans+Thai:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one full-height arcade screen — question on top, the ellipse stage in the middle, a control strip at the bottom. Single dark look by choice. */
+:root {
+  --bg: #0b0c10;
+  --panel: #15171d;
+  --line: #262a33;
+  --fg: #e9ecf2;
+  --muted: #8a92a3;
+  --rim: #5fe3e8;      /* ellipse wall */
+  --count: #2fd8b0;    /* "balls:" label */
+  --gold: #f5c25b;     /* foci and numbers */
+  --font-display: "Fredoka", "Baloo 2", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-inline: 16px;
+  padding-block: 12px;
+  box-sizing: border-box;
+  gap: 8px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+header { text-align: center; display: grid; gap: 4px; }
+h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.25rem, 5vw, 1.9rem);
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+.stats {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.1rem, 4.4vw, 1.5rem);
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.stats .k { color: var(--count); }
+.stats .v { color: var(--gold); }
+.stage { position: relative; flex: 1; min-height: 0; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: manipulation; }
+.hint {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  text-align: center; font-size: 0.8rem; color: var(--muted);
+  pointer-events: none;
+}
+.controls {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+}
+button, .seg {
+  font: 600 0.9rem var(--font-body);
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--rim); outline-offset: 2px; }
+button[aria-pressed="true"] { border-color: var(--rim); color: var(--rim); }
+.seg { display: inline-flex; padding: 3px; gap: 2px; }
+.seg button { border: 0; padding: 5px 12px; background: transparent; }
+.seg button[aria-pressed="true"] { background: var(--line); }
+label.speed {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; color: var(--muted);
+}
+input[type="range"] { accent-color: var(--rim); width: 90px; }
+@media (prefers-reduced-motion: reduce) { .hint { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Will they all hit the same point?</h1>
+    <div class="stats">
+      <span><span class="k">balls:</span> <span class="v" id="nBalls">0</span></span>
+      <span><span class="k">hits:</span> <span class="v" id="nHits">0</span></span>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="cv" aria-label="วงรีที่มีลูกบอลเด้งไปมา"></canvas>
+    <div class="hint" id="hint">แตะในวงรีเพื่อยิงลูกบอลจากจุดโฟกัสล่างไปทางนั้น</div>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="จุดปล่อยลูกบอล">
+      <button id="modeFocus" aria-pressed="true">ปล่อยจากโฟกัส</button>
+      <button id="modeRandom" aria-pressed="false">ปล่อยจากจุดสุ่ม</button>
+    </div>
+    <button id="add1">+1 ลูก</button>
+    <button id="add10">+10 ลูก</button>
+    <button id="auto" aria-pressed="true">เพิ่มอัตโนมัติ</button>
+    <button id="trails" aria-pressed="true">เส้นทาง</button>
+    <button id="sound" aria-pressed="false">เปิดเสียง</button>
+    <button id="reset">เริ่มใหม่</button>
+    <label class="speed" for="speed">ความเร็ว <input id="speed" type="range" min="0.3" max="3" step="0.1" value="1"></label>
+  </div>
+</div>
+
+<script>
+(() => {
+  // World units: ellipse x²/A² + y²/B² = 1, tall like the reference video. y points down.
+  const A = 1, B = 1.55;
+  const C = Math.sqrt(B * B - A * A);
+  const F_START = { x: 0, y: C };   // lower focus: launch point
+  const F_TARGET = { x: 0, y: -C }; // upper focus: where every reflected ray meets
+  const MAX_BALLS = 400;
+  const TRAIL_POINTS = 7;
+  const FOCUS_R = 0.045;
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const stage = document.getElementById('stage');
+  const $ = id => document.getElementById(id);
+
+  let balls = [];
+  let hits = 0;
+  let mode = 'focus';
+  let auto = true;
+  let showTrails = true;
+  let speedMul = 1;
+  let spawnClock = 0;
+  let flashTop = 0, flashBottom = 0;
+  let scale = 1, cx = 0, cy = 0, dpr = 1;
+
+  // ---------- sound ----------
+  let audio = null, soundOn = false, lastBeep = 0, noteIdx = 0;
+  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+  function beep() {
+    if (!soundOn || !audio) return;
+    const now = audio.currentTime;
+    if (now - lastBeep < 0.045) return;
+    lastBeep = now;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'triangle';
+    o.frequency.value = 330 * Math.pow(2, SCALE[noteIdx++ % SCALE.length] / 12);
+    g.gain.setValueAtTime(0.08, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    o.connect(g).connect(audio.destination);
+    o.start(now); o.stop(now + 0.4);
+  }
+
+  // ---------- balls ----------
+  function randomColor() {
+    return `hsl(${Math.floor(Math.random() * 360)}, 85%, 66%)`;
+  }
+  function randomInside() {
+    for (;;) {
+      const x = (Math.random() * 2 - 1) * A * 0.95, y = (Math.random() * 2 - 1) * B * 0.95;
+      if (x * x / (A * A) + y * y / (B * B) < 0.9) return { x, y };
+    }
+  }
+  function addBall(angle, from) {
+    if (balls.length >= MAX_BALLS) return;
+    const p = from || (mode === 'focus' ? { ...F_START } : randomInside());
+    const a = angle ?? Math.random() * Math.PI * 2;
+    balls.push({
+      x: p.x, y: p.y, vx: Math.cos(a), vy: Math.sin(a),
+      color: randomColor(),
+      pts: [{ x: p.x, y: p.y }],
+      nearTop: false, nearBottom: Math.hypot(p.x - F_START.x, p.y - F_START.y) < FOCUS_R,
+    });
+    $('nBalls').textContent = balls.length;
+  }
+
+  // Distance from a point to a segment, for counting passes through a focus.
+  function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const L = dx * dx + dy * dy;
+    let t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(ax + t * dx - px, ay + t * dy - py);
+  }
+
+  function checkFocus(b, ax, ay, bx, by) {
+    const dTop = segDist(F_TARGET.x, F_TARGET.y, ax, ay, bx, by);
+    const inTop = dTop < FOCUS_R;
+    if (inTop && !b.nearTop) { hits++; flashTop = 1; beep(); }
+    b.nearTop = inTop;
+    const inBot = segDist(F_START.x, F_START.y, ax, ay, bx, by) < FOCUS_R;
+    if (inBot && !b.nearBottom) flashBottom = 1;
+    b.nearBottom = inBot;
+  }
+
+  function stepBall(b, dist) {
+    for (let iter = 0; iter < 4 && dist > 1e-9; iter++) {
+      const dx = b.vx * dist, dy = b.vy * dist;
+      const nx = b.x + dx, ny = b.y + dy;
+      if (nx * nx / (A * A) + ny * ny / (B * B) < 1) {
+        checkFocus(b, b.x, b.y, nx, ny);
+        b.x = nx; b.y = ny;
+        return;
+      }
+      // Solve |p + t·d| on the ellipse for t in (0, 1].
+      const qa = dx * dx / (A * A) + dy * dy / (B * B);
+      const qb = 2 * (b.x * dx / (A * A) + b.y * dy / (B * B));
+      const qc = b.x * b.x / (A * A) + b.y * b.y / (B * B) - 1;
+      const t = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
+      const hx = b.x + dx * t, hy = b.y + dy * t;
+      checkFocus(b, b.x, b.y, hx, hy);
+      // Reflect about the wall normal (gradient of the ellipse equation).
+      let gx = hx / (A * A), gy = hy / (B * B);
+      const gl = Math.hypot(gx, gy); gx /= gl; gy /= gl;
+      const dot = b.vx * gx + b.vy * gy;
+      b.vx -= 2 * dot * gx; b.vy -= 2 * dot * gy;
+      b.x = hx * 0.999999; b.y = hy * 0.999999;
+      b.pts.push({ x: b.x, y: b.y });
+      if (b.pts.length > TRAIL_POINTS) b.pts.shift();
+      dist *= (1 - t);
+    }
+  }
+
+  // ---------- drawing ----------
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(r.width * dpr);
+    cv.height = Math.round(r.height * dpr);
+    const pad = 14 * dpr;
+    scale = Math.min((cv.width - pad * 2) / (2 * A), (cv.height - pad * 2 - 18 * dpr) / (2 * B));
+    cx = cv.width / 2;
+    cy = (cv.height - 18 * dpr) / 2;
+  }
+  const X = x => cx + x * scale;
+  const Y = y => cy + y * scale;
+
+  function drawFocus(f, flash, color) {
+    const r = FOCUS_R * scale * 0.9;
+    ctx.lineWidth = 2 * dpr;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = (6 + flash * 20) * dpr;
+    ctx.beginPath();
+    ctx.arc(X(f.x), Y(f.y), r * (1 + flash * 0.5), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0b0c10';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+
+    if (showTrails) {
+      ctx.lineWidth = 1 * dpr;
+      ctx.globalAlpha = balls.length > 120 ? 0.45 : 0.75;
+      for (const b of balls) {
+        ctx.strokeStyle = b.color;
+        ctx.beginPath();
+        ctx.moveTo(X(b.pts[0].x), Y(b.pts[0].y));
+        for (let i = 1; i < b.pts.length; i++) ctx.lineTo(X(b.pts[i].x), Y(b.pts[i].y));
+        ctx.lineTo(X(b.x), Y(b.y));
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Ellipse wall
+    ctx.lineWidth = 3.5 * dpr;
+    ctx.strokeStyle = '#5fe3e8';
+    ctx.shadowColor = '#5fe3e8';
+    ctx.shadowBlur = 10 * dpr;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, A * scale, B * scale, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    drawFocus(F_TARGET, flashTop, '#f5a54a');
+    drawFocus(F_START, flashBottom, '#f5c25b');
+
+    // Balls
+    const br = Math.max(3.2 * dpr, scale * 0.022);
+    for (const b of balls) {
+      ctx.fillStyle = b.color;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 8 * dpr;
+      ctx.beginPath();
+      ctx.arc(X(b.x), Y(b.y), br, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    for (const b of balls) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.beginPath();
+      ctx.arc(X(b.x) - br * 0.3, Y(b.y) - br * 0.3, br * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (auto && balls.length < MAX_BALLS) {
+      spawnClock += dt;
+      if (spawnClock > 0.9) { spawnClock = 0; addBall(); }
+    }
+    const dist = 0.9 * speedMul * dt;
+    for (const b of balls) stepBall(b, dist);
+    flashTop *= 0.9; flashBottom *= 0.9;
+    $('nHits').textContent = hits;
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- controls ----------
+  function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  function reset() {
+    balls = []; hits = 0; spawnClock = 0;
+    $('nBalls').textContent = 0;
+    for (let i = 0; i < 8; i++) addBall();
+  }
+  $('modeFocus').onclick = () => { mode = 'focus'; setPressed($('modeFocus'), true); setPressed($('modeRandom'), false); reset(); };
+  $('modeRandom').onclick = () => { mode = 'random'; setPressed($('modeFocus'), false); setPressed($('modeRandom'), true); reset(); };
+  $('add1').onclick = () => addBall();
+  $('add10').onclick = () => { for (let i = 0; i < 10; i++) addBall(); };
+  $('auto').onclick = () => { auto = !auto; setPressed($('auto'), auto); };
+  $('trails').onclick = () => { showTrails = !showTrails; setPressed($('trails'), showTrails); };
+  $('reset').onclick = reset;
+  $('speed').oninput = e => { speedMul = parseFloat(e.target.value); };
+  $('sound').onclick = () => {
+    soundOn = !soundOn;
+    if (soundOn && !audio) {
+      try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { soundOn = false; }
+    }
+    if (audio && audio.state === 'suspended') audio.resume();
+    setPressed($('sound'), soundOn);
+    $('sound').textContent = soundOn ? 'ปิดเสียง' : 'เปิดเสียง';
+  };
+
+  // Tap inside the ellipse: aim a ball from the lower focus toward the tap.
+  cv.addEventListener('pointerdown', e => {
+    const r = cv.getBoundingClientRect();
+    const wx = ((e.clientX - r.left) * dpr - cx) / scale;
+    const wy = ((e.clientY - r.top) * dpr - cy) / scale;
+    if (wx * wx / (A * A) + wy * wy / (B * B) >= 1) return;
+    const from = mode === 'focus' ? F_START : { x: wx, y: wy };
+    let a;
+    if (mode === 'focus') a = Math.atan2(wy - F_START.y, wx - F_START.x);
+    addBall(a, { ...from });
+    $('hint').hidden = true;
+  });
+
+  window.addEventListener('resize', resize);
+  resize();
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
