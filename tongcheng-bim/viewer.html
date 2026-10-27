@@ -55,6 +55,9 @@ h2{font-size:18px;font-weight:600}
 .side{border-left:1px solid var(--rule);display:flex;flex-direction:column;min-width:0}
 .side section{padding:12px 14px;border-bottom:1px solid var(--rule-2)}
 .layers{display:grid;gap:2px;margin-top:6px}
+.stages{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;margin-top:6px}
+.stages .btn{padding:4px 0;font-family:var(--f-mono)}
+.stg{margin:6px 0 0;font-size:12.5px;color:var(--ink-2);min-height:2.6em}
 .layer{display:grid;grid-template-columns:18px 12px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px;cursor:pointer;padding:2px 0}
 .layer input{margin:0;accent-color:var(--ink)}
 .sw{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,.2)}
@@ -136,7 +139,8 @@ tr.st-ok td:first-child{box-shadow:inset 3px 0 var(--ok)}
     </div>
     <aside class="side">
       <section>
-        <div class="eyebrow">ชั้นข้อมูล (Layers)</div>
+        <div class="eyebrow">ขั้นการก่อสร้าง (ไล่จากระดับล่างสุด)</div><div class="stages" id="stages" role="group" aria-label="ขั้นการก่อสร้าง"></div><p class="stg" id="stgd"></p>
+        <div class="eyebrow" style="margin-top:10px">ชั้นข้อมูล (Layers)</div>
         <div class="layers" id="layers"></div>
         <div class="clip"><label for="clipz">ตัดระดับ</label><input id="clipz" type="range" min="-24" max="16" step="0.1" value="16"><span class="mono" id="clipv">ปิด</span></div>
       </section>
@@ -278,6 +282,15 @@ const clipz=document.getElementById("clipz"), clipv=document.getElementById("cli
 clipz.addEventListener("input",()=>{const v=+clipz.value; clipPlane.constant = v>=16?1e4:v; clipv.textContent = v>=16?"ปิด":(v>=0?"+":"")+v.toFixed(2); });
 clipPlane.constant=1e4;
 
+/* ---------- construction stages ---------- */
+let stageMax = 8;
+const STG = D.meta.stages, stCount = {}; D.els.forEach(e=>stCount[e.st]=(stCount[e.st]||0)+1);
+const stBox = document.getElementById("stages");
+stBox.innerHTML = Object.keys(STG).map(k=>`<button class="btn" data-st="${k}" title="${esc(STG[k])}" aria-pressed="${+k===8}">${k}</button>`).join("");
+function setStage(n){ stageMax=n; stBox.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.st===n));
+  document.getElementById("stgd").textContent = `ขั้น 0–${n}: ${STG[n]} (${fmt(stCount[n]||0)} ชิ้น, สีส้ม = ขั้นล่าสุด)`; refresh(); }
+stBox.addEventListener("click",ev=>{const b=ev.target.closest("button"); if(b){ show4D=false; isoTask=-1; stop(); setStage(+b.dataset.st);} });
+
 /* ---------- 4D state ---------- */
 const T = D.tasks.map(t=>({...t,s:P(t.start),f:P(t.finish)}));
 const t0 = T.reduce((a,t)=>t.s<a?t.s:a,T[0].s), t1 = T.reduce((a,t)=>t.f>a?t.f:a,T[0].f);
@@ -295,14 +308,14 @@ function state(e){ // 0 future, 1 active, 2 done, 3 removed
 const Z = new THREE.Matrix4().makeScale(0,0,0);
 function refresh(){
   for(const cat in groups){ const g=groups[cat];
-    g.ids.forEach((i,k)=>{ const e=D.els[i], s=state(e); let vis=layerOn[cat]&&s!==3&&(s!==0||ghost);
+    g.ids.forEach((i,k)=>{ const e=D.els[i], s=state(e); let vis=layerOn[cat]&&e.st<=stageMax&&s!==3&&(s!==0||ghost);
       if(isoTask>=0 && e.t!==isoTask && vis){ /* keep but ghost */ }
       g.mesh.setMatrixAt(k, vis?g.mats[k]:Z);
       let c = base[cat].col;
-      if(s===0 || (isoTask>=0 && e.t!==isoTask)) c=GH; if(s===1) c=ACC; if(isoTask>=0 && e.t===isoTask) c=ACC; if(i===sel) c=SEL;
+      if(s===0 || (isoTask>=0 && e.t!==isoTask)) c=GH; if(s===1) c=ACC; if(isoTask>=0 && e.t===isoTask) c=ACC; if(!show4D && stageMax<8 && e.st===stageMax) c=ACC; if(i===sel) c=SEL;
       g.mesh.setColorAt(k,c); });
     g.mesh.instanceMatrix.needsUpdate=true; g.mesh.instanceColor.needsUpdate=true; }
-  prismMeshes.forEach(({mesh,i})=>{ const e=D.els[i], s=state(e); mesh.visible = layerOn[e.g]&&s!==3&&(s!==0||ghost);
+  prismMeshes.forEach(({mesh,i})=>{ const e=D.els[i], s=state(e); mesh.visible = layerOn[e.g]&&e.st<=stageMax&&s!==3&&(s!==0||ghost);
     mesh.material.color.copy(i===sel?SEL:(s===1?ACC:(s===0?GH:base[e.g].col))); });
   // date + active tasks
   const d=dayOf(cur);
@@ -411,5 +424,5 @@ drawGantt();
 /* ---------- QTO ---------- */
 document.getElementById("qt").innerHTML = `<thead><tr><th>รายการ BOQ</th><th>Mark</th><th>ชิ้นส่วน</th><th>จำนวน</th><th>ความยาว ม.</th><th>พื้นที่ ตร.ม.</th><th>ปริมาตร ลบ.ม.</th><th>เหล็ก กก.</th><th>4D</th><th>ที่มา</th></tr></thead><tbody>`+
   D.qto.map(q=>`<tr><td>${esc(q.boq)}</td><td class="mono">${esc(q.mark)}</td><td>${esc(q.name)}</td><td class="num">${fmt(q.n)}</td><td class="num">${fmt(q.len,2)}</td><td class="num">${fmt(q.area,2)}</td><td class="num">${fmt(q.vol,2)}</td><td class="num">${q.kg?fmt(q.kg,0):"–"}</td><td class="mono">${q.task}</td><td>${/สมมติ/.test(q.src)?`<span class="badge b-assume">${esc(q.src)}</span>`:esc(q.src)}</td></tr>`).join("")+"</tbody>";
-refresh();
+setStage(8);
 </script>
