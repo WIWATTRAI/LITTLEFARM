@@ -122,6 +122,34 @@ def offset_rect_poly(poly, d):
     return out
 
 
+
+# ---------------- perimeter walls (shared by model + BOQ) ----------------
+WALL_T, WALL_TOP, TIE_Z, COL_W = 0.15, 4.35, 2.60, 0.30
+DOOR_BAYS = {"A": [(24.0, 30.0)], "J": [(36.0, 42.0)]}          # ประตูม้วน 6.00 ม. (เต็มช่วงเสา)
+D1_DOORS = {"1": [29.44], "11": [11.39]}                        # ประตู D1 กว้าง 1.00 ม. สูง 2.10 ม. (A101)
+
+
+def wall_bays():
+    out = []
+    for name, fixed, axis, n in [("A", 0.0, "x", 10), ("J", BD, "x", 10), ("1", 0.0, "y", 9), ("11", BW, "y", 9)]:
+        bays, masonry, stiff = [], [], []
+        for i in range(n):
+            a0, a1 = 6.0*i, 6.0*(i+1)
+            if any(abs(a0-d0) < 0.01 for d0, _ in DOOR_BAYS.get(name, [])): continue
+            s0, s1 = a0 + COL_W/2, a1 - COL_W/2
+            P = (lambda t: (t, fixed)) if axis == "x" else (lambda t: (fixed, t))
+            bays.append((P(s0), P(s1)))
+            doors = [d for d in D1_DOORS.get(name, []) if a0 < d < a1]
+            if doors:
+                for d in doors:
+                    stiff += [P(d-0.55), P(d+0.55)]
+                    masonry += [(P(s0), P(d-0.5)), (P(d+0.5), P(s1))]
+            else:
+                stiff.append(P((a0+a1)/2)); masonry.append((P(s0), P(s1)))
+        out.append(dict(name=f"ผนังแนวกริด {name}", grid=name, bays=bays, masonry=masonry, stiff=stiff,
+                        doors=len(D1_DOORS.get(name, [])), roll=len(DOOR_BAYS.get(name, []))))
+    return out
+
 # =====================================================================
 #  ELEMENT REGISTRY
 # =====================================================================
@@ -405,22 +433,25 @@ def build():
                  "M34", "3.1 หลังคาและผนังภายนอก (ท่อน้ำฝน)", pre="RIGIDSEGMENT", src="สมมติ")
 
     # ---------------- walls ----------------
-    openings = {(0, 0, BW, 0): [(24.0, 30.0)], (0, BD, BW, BD): [(36.0, 42.0)]}
+    # ผนังก่อ +0.50 ถึง +4.35 (ต่ำกว่าหัวเสา 15 ซม.) + คานทับหลัง +4.35..+4.50, เสาเอ็นกลางช่วง/ข้างวงกบ, คานเอ็นระดับหลังประตู
+    for w in wall_bays():
+        for seg in w["masonry"]:
+            (ax0, ay0), (ax1, ay1) = seg
+            vbox("wall", "IfcWall", f"ผนังก่ออิฐมวลเบา หนา 0.15 +0.50 ถึง +4.35 ({w['name']})", "W1",
+                 min(ax0, ax1)-(WALL_T/2 if ax0 == ax1 else 0), min(ay0, ay1)-(WALL_T/2 if ay0 == ay1 else 0),
+                 max(ax0, ax1)+(WALL_T/2 if ax0 == ax1 else 0), max(ay0, ay1)+(WALL_T/2 if ay0 == ay1 else 0),
+                 LV["ffl"], WALL_TOP, "M36", "3.2.1 ผนังก่ออิฐ", pre="SOLIDWALL", src="ผู้ว่าจ้างกำหนดระดับ / A202")
+        for (p, q) in w["bays"]:
+            member("wall", "IfcBeam", "คานทับหลัง คสล. 0.15x0.15 ม. +4.35..+4.50", "LB", (p[0], p[1], WALL_TOP+0.075), (q[0], q[1], WALL_TOP+0.075),
+                   WALL_T, 0.15, "M36", "3.2.3 คานทับหลัง", pre="LINTEL", src="ผู้ว่าจ้างกำหนดระดับ")
+            member("wall", "IfcBeam", "คานเอ็น คสล. 0.15x0.10 ม. ระดับหลังประตู +2.60", "TB", (p[0], p[1], TIE_Z+0.05), (q[0], q[1], TIE_Z+0.05),
+                   WALL_T, 0.10, "M36", "3.2.4 คานเอ็น", pre="BEAM", src="สมมติตามมาตรฐานผนังก่อ (สูง > 3 ม.)")
+        for (x_, y_) in w["stiff"]:
+            hx, hy = (0.05, 0.075) if w["grid"] in ("A", "J") else (0.075, 0.05)
+            vbox("wall", "IfcColumn", "เสาเอ็น คสล. 0.15x0.10 ม. +0.50 ถึง +4.35", "SC", x_-hx, y_-hy, x_+hx, y_+hy,
+                 LV["ffl"], WALL_TOP, "M36", "3.2.5 เสาเอ็น", pre="COLUMN", src="สมมติ: กลางช่วงเสา 6 ม. และข้างวงกบ")
     for (x0_, y0_, x1_, y1_) in [(0, 0, BW, 0), (0, BD, BW, BD), (0, 0, 0, BD), (BW, 0, BW, BD)]:
         horiz = y0_ == y1_
-        L = (x1_-x0_) if horiz else (y1_-y0_)
-        segs = [(0.0, L)]
-        for (oa, ob) in openings.get((x0_, y0_, x1_, y1_), []):
-            segs = [(0.0, oa), (ob, L)]
-        for (sa, sb) in segs:
-            p0 = (x0_+sa, y0_, 0) if horiz else (x0_, y0_+sa, 0)
-            p1 = (x0_+sb, y0_, 0) if horiz else (x0_, y0_+sb, 0)
-            off = (0, 0.075 if y0_ == 0 else -0.075) if horiz else (0.075 if x0_ == 0 else -0.075, 0)
-            # lower masonry wall +0.50 -> +4.50 (assumed)
-            vbox("wall", "IfcWall", "ผนังก่ออิฐมวลเบา หนา 0.15 ฉาบปูน 2 ด้าน + ทาสี (ถึง +4.50)", "W1",
-                 min(p0[0], p1[0])+off[0]-0.075, min(p0[1], p1[1])+off[1]-0.075,
-                 max(p0[0], p1[0])+off[0]+0.075, max(p0[1], p1[1])+off[1]+0.075,
-                 LV["ffl"], LV["col_top_rc"], "M36", "3.2 ผนังก่ออิฐฉาบปูน", pre="SOLIDWALL", src="สมมติ (ตาม A202)")
         # metal sheet cladding +5.20 -> eave / gable
         o = (-0.12 if x0_ == 0 and not horiz else (0.12 if x0_ == BW and not horiz else 0))
         oy = (-0.12 if horiz and y0_ == 0 else (0.12 if horiz and y0_ == BD else 0))
