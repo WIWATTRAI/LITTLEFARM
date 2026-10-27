@@ -14,7 +14,7 @@
 ระบบพิกัด: x = แนวกริด 1->11 (0..60 ม.), y = แนวกริด A->J (0..54 ม.), z = ระดับ (±0.00 = ระดับถนนรอบอาคาร)
 ทุกชิ้นส่วนมี: หมวด WBS, อ้างอิงรายการ BOQ, กิจกรรม 4D, แหล่งที่มา (จากแบบ / สมมติ)
 """
-import math
+import math, json, os
 
 GX = [6.0 * i for i in range(11)]          # grid 1..11
 GY = [6.0 * i for i in range(10)]          # grid A..J
@@ -32,18 +32,25 @@ LV = {
     "eave": 9.00,        # ระดับหัวเสารับหลังคา
     "ridge": 14.10,      # ระดับสันหลังคา
     "jack": 15.25,       # ระดับสัน JACKROOF
+    # --- ระดับฐานราก (รอยืนยันจากแบบขยาย) ---
+    "f2p_bot": -1.20,    # ท้องฐาน F2P (หลังฐาน -0.40 จากความยาวเสา C1 4.90 ม. ในตาราง S4.1)
+    "drop_bot": 0.10,    # ท้อง Drop panel F1P (ชิดท้องพื้น S1 +0.30)
+    "f1a_bot": -0.45,    # ท้องฐาน F1A (ชิดท้องพื้นถนน S2 -0.15)
+    "f1p1_bot": -1.00,   # ท้องฐาน F1P-1
+    "tank_bot": -2.85,   # ท้องถังเก็บน้ำใต้ดิน BF (S202)
 }
 PILE_LEN = 22.0          # I22-22 / I26-22 / I35-22 -> 22 ม. (ความยาวจริงยืนยันจากผลเจาะสำรวจดิน P3)
 EXIST_GROUND = -1.50     # สมมติ: ดินเดิม = ระดับถนนอ้างอิง (รอผลสำรวจระดับ P1.2)
 
 # site boundary digitised from A101 (approx. +/-0.5 m)
-SITE = [(-12.6, -15.8), (67.7, -8.6), (75.3, 66.1), (-5.8, 58.2)]
+SITE = [(-12.50, -15.80), (0.88, -14.64), (62.04, -9.33), (68.29, -4.52), (75.19, 66.25), (-5.75, 58.12),
+        (-5.89, 57.04), (-8.33, 38.64), (-9.38, 26.77), (-12.32, -6.44), (-12.51, -8.74)]   # แนวเขตจากเวกเตอร์ S202
 
 # auxiliary footprints (digitised from A101/S202)
-TANK = (-11.0, -13.3, 0.6, -5.8)           # ถังเก็บน้ำใต้ดิน x0,y0,x1,y1  TF -2.60 BF -2.85
-TRANS = (62.2, -8.4, 67.7, -4.7)           # ฐานหม้อแปลง
-TOILET = (-7.4, 18.0, -3.4, 26.0)          # อาคารห้องน้ำ 4x8
-CHEM = (-3.64, 0.0, 0.0, 6.0)              # Chemical Drum Storage Room 21.84 m2
+TANK = (-11.38, -13.34, 0.74, -6.71)          # ถังเก็บน้ำใต้ดิน x0,y0,x1,y1  TF -2.60 BF -2.85
+TRANS = (62.90, -8.44, 66.90, -5.89)          # ฐานหม้อแปลง
+TOILET = (-7.365, 18.007, -4.962, 26.011)         # อาคารห้องน้ำ 4x8
+CHEM = (-4.015, 0.0, 0.0, 6.012)             # Chemical Drum Storage Room 21.84 m2
 MDB = (54.07, 0.0, 60.0, 3.0)              # MDB ROOM 17.79 m2
 ROOMS = (41.2, 0.0, 54.07, 4.0)            # ห้องประกอบแนวกริด A (รอแบบสถาปัตย์)
 MEZZ = (0.0, 0.0, 18.0, 17.0)              # ชั้นลอย F8 306 m2
@@ -191,86 +198,74 @@ def build():
         vbox("temp", "IfcBuildingElementProxy", nm, "TMP", r[0], r[1], r[2], r[3], -0.25, -0.25+hh,
              "M11", item, src="สมมติ", remove_task="M52")
 
-    # ---------------- 2.1 Piles ----------------
-    def pile(x, y, top, size, mark, desc, task, boq, src="แบบ"):
+    # ---------------- 2.1 Piles / 2.2 footings : positions read from S201 vectors (data/s201_vector.json) ----------------
+    V = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "s201_vector.json"), encoding="utf-8"))
+    POS = "แบบ S201 (ตำแหน่ง) / ระดับรอยืนยัน"
+
+    def pile(x, y, top, size, mark, desc, task, boq, src=POS):
         flange = size/1000.0
         vbox("pile", "IfcPile", desc, mark, x-flange/2, y-flange/2, x+flange/2, y+flange/2,
              top-PILE_LEN, top, task, boq, src=src, pre="DRIVEN",
-             extra={"ขนาด": f"I-{size}x{size} มม.", "ความยาว (ม.)": PILE_LEN, "ระดับหัวเข็ม": round(top, 2)})
+             extra={"ขนาด": f"I-{size}x{size} มม.", "ความยาว (ม.)": PILE_LEN, "ระดับหัวเข็ม": round(top, 2),
+                    "ระดับปลายเข็ม": round(top-PILE_LEN, 2), "พิกัดแบบ x,y": f"{x:.3f}, {y:.3f}"})
 
-    # F2P column positions (S201): rows A & J every grid, cols 1, 6, 11 rows B..I
-    colpos = []
-    for i, x in enumerate(GX):
-        colpos.append((x, 0.0, GXN[i]+"/A", "Y")); colpos.append((x, BD, GXN[i]+"/J", "Y"))
-    for gi in (0, 5, 10):
-        for j in range(1, 9):
-            colpos.append((GX[gi], GY[j], GXN[gi]+"/"+GYN[j], "X"))
+    def tag(x, y):
+        gx = min(range(11), key=lambda i: abs(GX[i]-x)); gy = min(range(10), key=lambda j: abs(GY[j]-y))
+        return f"{GXN[gx]}/{GYN[gy]}" if abs(GX[gx]-x) < 0.2 and abs(GY[gy]-y) < 0.2 else f"x{x:.2f} y{y:.2f}"
 
-    # I35-22 under floor: 3x3 m offset 1.5 (S202) = 20 x 18 = 360
-    for i in range(20):
-        for j in range(18):
-            x, y = 1.5+3*i, 1.5+3*j
-            pile(x, y, 0.15, 350, "I35-22", "เสาเข็ม I-350x350 รับพื้นโรงงาน", "M21A", "2.1.2 เสาเข็มใต้พื้น")
-            vbox("found", "IfcFooting", "F1P Drop panel 1.00x1.00x0.20", "F1P", x-0.5, y-0.5, x+0.5, y+0.5,
-                 0.10, 0.30, "M24", "2.3.2 พื้นชั้นล่าง (Drop panel)", pre="PILE_CAP")
-    # I26-22 2 piles per F2P footing
-    for (x, y, tag, ax) in colpos:
-        dx, dy = (0.0, 0.45) if ax == "Y" else (0.45, 0.0)
-        for s in (-1, 1):
-            pile(x+s*dx, y+s*dy, -1.15, 260, "I26-22", "เสาเข็ม I-260x260 รับฐานรากอาคาร (F2P)", "M21A", "2.1.1 เสาเข็มฐานราก")
-        a, b = (0.6, 1.5) if ax == "Y" else (1.5, 0.6)
-        vbox("found", "IfcFooting", f"ฐานราก F2P 0.60x1.50x0.80 @ {tag}", "F2P", x-a/2, y-b/2, x+a/2, y+b/2,
-             -1.20, -0.40, "M22", "2.2.1 ฐานราก F2P", pre="PILE_CAP")
-        # C1 RC column -0.40 -> +4.50 (0.30 x 0.50, long side along frame/x)
-        ca, cb = (0.50, 0.30) if ax == "X" or x in (0.0, BW) else (0.30, 0.50)
-        vbox("rc", "IfcColumn", f"เสา คสล. C1 0.30x0.50 @ {tag}", "C1", x-ca/2, y-cb/2, x+ca/2, y+cb/2,
-             -0.40, LV["col_top_rc"], "M23", "2.2.2 เสาตอม่อ คสล.", pre="COLUMN")
-        # steel column H250x175 +4.50 -> +9.00
-        vbox("steel", "IfcColumn", f"เสาเหล็ก H250x175x44.1 kg/m @ {tag}", "SC1", x-0.0875, y-0.125, x+0.0875, y+0.125,
-             LV["col_top_rc"], LV["eave"], "M31", "2.4.1 โครงสร้างเหล็ก", pre="COLUMN",
-             extra={"น้ำหนัก (กก./ม.)": 44.1})
-
-    # F1P-1 single-pile footings for annex (11) - positions assumed
-    annex_pts = [(TOILET[0], TOILET[1]), (TOILET[2], TOILET[1]), (TOILET[0], 22.0), (TOILET[2], 22.0),
-                 (TOILET[0], TOILET[3]), (TOILET[2], TOILET[3]),
-                 (CHEM[0], CHEM[1]), (CHEM[0], 3.0), (CHEM[0], CHEM[3]),
-                 (RAMP_N[0], RAMP_N[1]), (RAMP_N[2], RAMP_N[1])]
-    for (x, y) in annex_pts:
-        pile(x, y, -0.55, 260, "I26-22", "เสาเข็ม I-260x260 อาคารประกอบ (F1P-1)", "M21A", "2.1.3 เสาเข็มอาคารประกอบ", src="สมมติตำแหน่ง")
-        vbox("found", "IfcFooting", "ฐานราก F1P-1 0.60x0.60x0.60", "F1P-1", x-0.3, y-0.3, x+0.3, y+0.3,
-             -0.60, 0.0, "M22", "2.5 โครงสร้างอาคารประกอบ", src="สมมติตำแหน่ง", pre="PILE_CAP")
-        if not (y < 0):  # ramp corners have no column
-            vbox("rc", "IfcColumn", "เสา คสล. C3 0.20x0.20", "C3", x-0.1, y-0.1, x+0.1, y+0.1, 0.0, 3.0,
-                 "M44", "2.5 โครงสร้างอาคารประกอบ", src="สมมติตำแหน่ง", pre="COLUMN")
-
-    # I26 under underground tank (17) - lowered 1 m
-    tx = [TANK[0]+0.8+i*(TANK[2]-TANK[0]-1.6)/5 for i in range(6)]
-    ty = [TANK[1]+0.8, (TANK[1]+TANK[3])/2, TANK[3]-0.8]
-    tank_pts = [(x, y) for y in ty for x in tx][:17]
-    for (x, y) in tank_pts:
-        pile(x, y, -2.85, 260, "I26", "เสาเข็ม I-260x260 รับถังใต้ดิน (ลดระดับ 1 ม.)", "M21B", "2.1.3 เสาเข็มถังใต้ดิน", src="สมมติตำแหน่ง")
+    # I35-22 under floor + F1P drop panel (360)
+    for x, y in V["I35"]:
+        pile(x, y, LV["drop_bot"]+0.05, 350, "I35-22", "เสาเข็ม I-350x350 รับพื้นโรงงาน", "M21A", "2.1.2 เสาเข็มใต้พื้น")
+        vbox("found", "IfcFooting", "Drop panel F1P 1.00x1.00x0.20", "F1P", x-0.5, y-0.5, x+0.5, y+0.5,
+             LV["drop_bot"], LV["drop_bot"]+0.20, "M24", "2.2.2 Drop panel F1P", pre="PILE_CAP", src=POS)
+    # F2P 46 footings, 2 x I26-22 each (pile positions from drawing)
+    for d in V["F2P"]:
+        x, y = d["x"], d["y"]
+        a_, b_ = (1.5, 0.6) if d["long"] == "X" else (0.6, 1.5)
+        vbox("found", "IfcFooting", f"ฐานราก F2P 0.60x1.50x0.80 @ {tag(x, y)}", "F2P", x-a_/2, y-b_/2, x+a_/2, y+b_/2,
+             LV["f2p_bot"], LV["f2p_bot"]+0.80, "M22", "2.2.1 ฐานราก F2P", pre="PILE_CAP", src=POS)
+    for x, y in V["I26_F2P"]:
+        pile(x, y, LV["f2p_bot"]+0.05, 260, "I26-22", "เสาเข็ม I-260x260 รับฐานราก F2P (หนวดกุ้ง 4-DB12-2.5 ม.)", "M21A", "2.1.1 เสาเข็มฐานราก")
+    # C1 45 + C2 1 (S201) : RC columns from top of footing to +4.50
+    for d in V["C1"]:
+        x, y = d["x"], d["y"]
+        ca, cb = (0.50, 0.30) if d["long"] == "X" else (0.30, 0.50)
+        vbox("rc", "IfcColumn", f"เสา คสล. C1 0.30x0.50 @ {tag(x, y)}", "C1", x-ca/2, y-cb/2, x+ca/2, y+cb/2,
+             LV["f2p_bot"]+0.80, LV["col_top_rc"], "M23", "2.3.1 เสา คสล. C1", pre="COLUMN", src=POS)
+    for x, y in V["C2"]:
+        vbox("rc", "IfcColumn", f"เสา คสล. C2 0.50x0.50 @ {tag(x, y)}", "C2", x-0.25, y-0.25, x+0.25, y+0.25,
+             LV["f2p_bot"]+0.80, LV["col_top_rc"], "M23", "2.3.2 เสา คสล. C2", pre="COLUMN", src=POS)
+    for d in V["C1"] + [{"x": p[0], "y": p[1]} for p in V["C2"]]:
+        x, y = d["x"], d["y"]
+        vbox("steel", "IfcColumn", f"เสาเหล็ก H250x175x44.1 kg/m @ {tag(x, y)}", "SC1", x-0.0875, y-0.125, x+0.0875, y+0.125,
+             LV["col_top_rc"], LV["eave"], "M31", "2.5.1 เสาเหล็ก", pre="COLUMN", extra={"น้ำหนัก (กก./ม.)": 44.1})
+    # F1P-1 single-pile footings (11) + I26
+    for x, y in V["F1P1"]:
+        vbox("found", "IfcFooting", f"ฐานราก F1P-1 0.60x0.60x0.60 @ {tag(x, y)}", "F1P-1", x-0.3, y-0.3, x+0.3, y+0.3,
+             LV["f1p1_bot"], LV["f1p1_bot"]+0.60, "M22", "2.2.3 ฐาน F1P-1", pre="PILE_CAP", src=POS)
+    for x, y in V["I26_F1P1"]:
+        pile(x, y, LV["f1p1_bot"]+0.05, 260, "I26-22", "เสาเข็ม I-260x260 อาคารประกอบ (F1P-1)", "M21A", "2.1.3 เสาเข็มอาคารประกอบ")
+    for x, y in V["C3"]:
+        vbox("rc", "IfcColumn", "เสา คสล. C3 0.20x0.20", "C3", x-0.1, y-0.1, x+0.1, y+0.1, LV["f1p1_bot"]+0.60, 3.0,
+             "M44", "2.3.3 เสา คสล. C3", pre="COLUMN", src=POS)
+    # I26 underground tank (17), cut-off lowered
+    for x, y in V["I26_tank"]:
+        pile(x, y, LV["tank_bot"]+0.05, 260, "I26", "เสาเข็ม I-260x260 รับถังใต้ดิน (ลดระดับ 1 ม.)", "M21B", "2.1.4 เสาเข็มถังใต้ดิน")
     # I22-TR transformer (6)
-    for i in range(3):
-        for j in range(2):
-            x = TRANS[0]+0.8+i*(TRANS[2]-TRANS[0]-1.6)/2; y = TRANS[1]+0.8+j*(TRANS[3]-TRANS[1]-1.6)
-            pile(x, y, -0.30, 220, "I22-TR", "เสาเข็ม I-220x220 รับฐานหม้อแปลง", "M21B", "4.3 ฐานหม้อแปลง", src="สมมติตำแหน่ง")
-
-    # I22-22 perimeter road piles (249) with F1A pads, 3 m grid outside building
-    blocked = [TANK, TRANS, TOILET, CHEM, RAMP_N, RAMP_S]
-    cand = []
-    for i in range(-6, 27):
-        for j in range(-7, 25):
-            x, y = 1.5+3*i, 1.5+3*j
-            if -0.75 < x < BW+0.75 and -0.75 < y < BD+0.75: continue
-            if not in_poly((x, y), SITE) or dist_to_poly_edge((x, y), SITE) < 0.7: continue
-            if any(r[0]-0.6 < x < r[2]+0.6 and r[1]-0.6 < y < r[3]+0.6 for r in blocked): continue
-            dx = max(-x, 0, x-BW); dy = max(-y, 0, y-BD)
-            cand.append((math.hypot(dx, dy), x, y))
-    cand.sort()
-    for _, x, y in cand[:249]:
-        pile(x, y, -0.40, 220, "I22-22", "เสาเข็ม I-220x220 รับพื้นถนนรอบอาคาร", "M21C", "4.1 งานพื้นถนนรอบอาคาร (เข็ม)", src="แบบ (ตำแหน่งตามระยะ 3 ม.)")
-        vbox("ext", "IfcFooting", "ฐาน F1A 0.60x0.60x0.30 รับพื้นรอบอาคาร", "F1A", x-0.3, y-0.3, x+0.3, y+0.3,
-             -0.45, -0.15, "M41", "4.1 งานพื้นถนนรอบอาคาร (ฐาน F1A)", pre="PILE_CAP")
+    for x, y in V["I22_TR"]:
+        pile(x, y, -0.40, 220, "I22-TR", "เสาเข็ม I-220x220 รับฐานหม้อแปลง", "M21B", "4.3.1 เข็มฐานหม้อแปลง")
+    # I22-22 road piles + F1A (232 on plan)
+    for x, y in V["I22_road"]:
+        pile(x, y, LV["f1a_bot"]+0.05, 220, "I22-22", "เสาเข็ม I-220x220 รับพื้นถนนรอบอาคาร", "M21C", "4.1.1 เข็มพื้นถนน")
+    for x, y in V["F1A"]:
+        vbox("ext", "IfcFooting", "ฐาน F1A 0.60x0.60x0.30 รับพื้นถนน", "F1A", x-0.3, y-0.3, x+0.3, y+0.3,
+             LV["f1a_bot"], LV["f1a_bot"]+0.30, "M41", "4.1.2 ฐาน F1A", pre="PILE_CAP", src=POS)
+    # 0.66 m pads with I26 along south/east boundary (function unknown)
+    for x, y in V["SQ66"]:
+        vbox("found", "IfcFooting", "ฐาน 0.66x0.66 แนวเขตที่ดิน (ไม่ทราบหน้าที่)", "SQ66", x-0.33, y-0.33, x+0.33, y+0.33,
+             -0.45, -0.15, "M41", "4.6.1 ฐาน 0.66 แนวเขต", pre="PILE_CAP", src="แบบ S201 (ตำแหน่ง) / หน้าที่+ระดับรอยืนยัน")
+    for x, y in V["I26_SQ66"]:
+        pile(x, y, -0.40, 260, "I26-B", "เสาเข็ม I-260x260 ใต้ฐาน 0.66 แนวเขตที่ดิน", "M21C", "4.6.1 ฐาน 0.66 แนวเขต", src="แบบ S201 (ตำแหน่ง) / หน้าที่+ระดับรอยืนยัน")
 
     # ---------------- 2.3 grade beams B1 (perimeter + grid 6) top +0.50 ----------------
     B1 = [((0, 0), (BW, 0)), ((0, BD), (BW, BD)), ((0, 0), (0, BD)), ((BW, 0), (BW, BD)), ((30, 0), (30, BD))]

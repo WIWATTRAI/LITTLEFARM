@@ -123,6 +123,45 @@ V = [
     ("แบบ", "กรอบชื่อแบบ", "—", "ช่องโครงการระบุ \"แบบก่อสร้างบ้านพักอาศัย คสล 1 ชั้น\" ทุกแผ่น / Date 03/31/22", "—", "diff", "แก้กรอบชื่อแบบก่อนแนบประกอบใบเสนอราคา"),
 ]
 
+# ---------------------------------------------------------------- staging + world coordinates
+# ขึ้นรูปไล่จากระดับล่างสุดตามลำดับก่อสร้าง: ส่งออกเฉพาะขั้นที่ยืนยันแล้ว/กำลังตรวจ (MAX_STAGE)
+STAGES = {0: "พื้นที่/ดินถม/สิ่งชั่วคราว", 1: "เสาเข็ม", 2: "ฐานราก / Drop panel / ฐาน F1A / พื้นถังใต้ดิน",
+          3: "เสา-คาน คสล.", 4: "พื้น คสล.", 5: "โครงสร้างเหล็ก", 6: "หลังคา ผนัง ประตู", 7: "อาคารประกอบ / ชั้นลอย", 8: "งานบริเวณ"}
+MAX_STAGE = int(os.environ.get("MAX_STAGE", "2"))
+
+
+def stage(e):
+    c, m = e["cat"], e["mark"]
+    if c in ("site", "earth", "temp"): return 0
+    if c == "pile": return 1
+    if c == "found" or m in ("F1A",) or (m == "UGT" and e.get("pre") == "BASESLAB"): return 2
+    if c == "rc": return 3
+    if c == "slab" and m in ("S1", "AF01"): return 4
+    if c == "steel" and m not in ("MC", "MB", "ST"): return 5
+    if c in ("roof", "wall", "door"): return 6
+    if c in ("annex",) or m in ("MC", "MB", "ST", "F8", "WC", "S2") and c != "ext": return 7
+    return 8
+
+
+def W(v): return (v[0], -v[1], v[2])     # drawing (y down the sheet) -> world (y north/up the sheet)
+
+
+def to_world(e):
+    e = dict(e)
+    if e["kind"] == "box":
+        e["c"], e["ex"], e["ez"] = W(e["c"]), W(e["ex"]), W(e["ez"])
+        e["ey"] = tuple(-c for c in W(e["ey"]))          # keep frame right-handed (box symmetric about centre)
+    elif abs(e["ez"][2]) > 0.99:                          # plan prism: mirror the profile
+        e["o"] = W(e["o"]); e["outer"] = [(p[0], -p[1]) for p in e["outer"]]; e["holes"] = [[(p[0], -p[1]) for p in h] for h in e["holes"]]
+    else:                                                 # vertical prism (gable): move plane, keep frame
+        o = W(e["o"]); e["o"] = (o[0], o[1] - e["ez"][1]*e["h"]*1.0 if e["ez"][1] > 0 else o[1] + e["h"], o[2])
+    return e
+
+
+E_ALL = E
+E = [to_world(dict(e, stage=stage(e))) for e in E_ALL if stage(e) <= MAX_STAGE]
+print("stage <=", MAX_STAGE, "elements", len(E), "of", len(E_ALL))
+
 # ---------------------------------------------------------------- IFC
 import ifcopenshell, ifcopenshell.api, ifcopenshell.guid
 
@@ -202,7 +241,7 @@ for i, e in enumerate(E):
     by_task[e["task"]].append(el)
     t = S[e["task"]]
     q = qty(e)
-    props = {"WBS": e["wbs"], "BOQ_Item": e["boq"], "TypeMark": e["mark"], "Source": e["src"],
+    props = {"Stage": e["stage"], "StageName": STAGES[e["stage"]], "WBS": e["wbs"], "BOQ_Item": e["boq"], "TypeMark": e["mark"], "Source": e["src"],
              "TaskID": e["task"], "TaskName": t["name"], "PlannedStart": t["start"].isoformat(),
              "PlannedFinish": t["finish"].isoformat(), "Volume_m3": round(q["vol"], 4)}
     if e["kind"] == "box": props.update({"Length_m": round(e["h"], 3), "Width_m": round(e["a"], 3), "Depth_m": round(e["b"], 3)})
@@ -272,7 +311,7 @@ def rnd(v, n=3): return [round(x, n) for x in v]
 
 els = []
 for i, e in enumerate(E):
-    rec = {"g": e["cat"], "n": sid(e["name"]), "m": sid(e["mark"]), "t": TASK_ORDER.index(e["task"]),
+    rec = {"st": e["stage"], "g": e["cat"], "n": sid(e["name"]), "m": sid(e["mark"]), "t": TASK_ORDER.index(e["task"]),
            "b": sid(e["boq"]), "s": sid(e["src"]), "i": sid(e["ifc"])}
     if e.get("remove_task"): rec["r"] = TASK_ORDER.index(e["remove_task"])
     q = qty(e); rec["v"] = round(q["vol"], 3)
@@ -300,7 +339,8 @@ data = dict(
               site="เลขที่ 10/7 หมู่ที่ 5 ต.ท่าข้าม อ.สามพราน จ.นครปฐม 73110", no="WEC-TC-6901",
               contractor="WISDOM Engineering & Construction", generated=dt.date.today().isoformat(),
               drawings=["S201", "S201-B", "S202", "A101", "A202"], levels=M.LV, exist_ground=M.EXIST_GROUND,
-              grid=dict(x=M.GX, y=M.GY, xn=M.GXN, yn=M.GYN), site_poly=M.SITE,
+              grid=dict(x=M.GX, y=[-v for v in M.GY], xn=M.GXN, yn=M.GYN), site_poly=[(p[0], -p[1]) for p in M.SITE],
+              stages=STAGES, max_stage=MAX_STAGE, north="สมมติ: ทิศเหนือ = ด้านบนของแบบ (แนวกริด A) – แบบไม่มีลูกศรทิศเหนือ",
               kpi=dict(elements=len(E), piles=sum(1 for e in E if e["ifc"] == "IfcPile"), pile_len=round(pile_len),
                        steel_t=round(tot_kg*1.1/1000, 1), fill=round(fill_vol), site_area=round(site_area), road_area=round(road_area),
                        roof_area=round(roof_area), start_main=S["M0"]["start"].isoformat(), finish=S["M52"]["finish"].isoformat()),

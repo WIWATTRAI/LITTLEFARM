@@ -228,15 +228,16 @@ function applyTheme(){ scene.background = new THREE.Color(themeColor("--scene")|
 const gridMat = new THREE.LineBasicMaterial({color:0x555555,transparent:true,opacity:0.45});
 {
   const pts=[]; const g=D.meta.grid, z=0.52;
-  g.x.forEach(x=>{pts.push(mp(x,-6,z),mp(x,60,z));});
+  g.x.forEach(x=>{pts.push(mp(x,6,z),mp(x,-60,z));});
   g.y.forEach(y=>{pts.push(mp(-6,y,z),mp(66,y,z));});
   scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),gridMat));
   const label=(t,p)=>{const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d");
     x.fillStyle="#fff";x.beginPath();x.arc(64,64,56,0,7);x.fill();x.lineWidth=8;x.strokeStyle="#15262b";x.stroke();
     x.fillStyle="#15262b";x.font="600 60px IBM Plex Mono, monospace";x.textAlign="center";x.textBaseline="middle";x.fillText(t,64,68);
     const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));s.scale.set(2.6,2.6,1);s.position.copy(p);s.renderOrder=5;scene.add(s);};
-  g.x.forEach((x,i)=>label(g.xn[i],mp(x,-8,0.6)));
+  g.x.forEach((x,i)=>label(g.xn[i],mp(x,8,0.6)));
   g.y.forEach((y,i)=>label(g.yn[i],mp(-8,y,0.6)));
+  label("N",mp(-16,14,0.6)); { const a=new THREE.ArrowHelper(new THREE.Vector3(0,0,-1),mp(-16,8,0.6),5,0xd23b2c,1.6,1.1); scene.add(a); }
 }
 
 /* elements */
@@ -354,12 +355,12 @@ function focusTask(id){ const k=T.findIndex(t=>t.id===id); if(k<0) return; stop(
   cur=Math.round((T[k].f-t0)/864e5); tl.value=cur; refresh(); document.querySelector(".bay").scrollIntoView({behavior:"smooth",block:"start"}); }
 
 /* ---------- camera views ---------- */
-const C0=mp(30,27,4);
+const C0=mp(30,-27,4);
 function view(v){ const tg=C0.clone(); let p;
-  if(v==="top"){ p=mp(30,27.01,150); } else if(v==="front"){ p=mp(30,-95,10); tg.y=6; }
-  else if(v==="side"){ p=mp(-100,27,10); tg.y=6; } else if(v==="under"){ p=mp(-55,-60,-28); tg.copy(mp(30,27,-10));
+  if(v==="top"){ p=mp(30,-27.01,150); } else if(v==="front"){ p=mp(30,95,10); tg.y=6; }
+  else if(v==="side"){ p=mp(-100,-27,10); tg.y=6; } else if(v==="under"){ p=mp(-55,60,-28); tg.copy(mp(30,-27,-10));
     ["roof","wall","steel","slab","annex","door","temp"].forEach(c=>{layerOn[c]=false; const cb=document.getElementById("ly-"+c); if(cb) cb.checked=false;}); refresh(); }
-  else { p=mp(-48,-62,58);
+  else { p=mp(-48,62,58);
     CATS.forEach(c=>{layerOn[c[0]]=LAYER_ON[c[0]]!==undefined?LAYER_ON[c[0]]:true; const cb=document.getElementById("ly-"+c[0]); if(cb) cb.checked=layerOn[c[0]];}); refresh(); }
   cam.position.copy(p); ctl.target.copy(tg); ctl.update(); }
 document.querySelector(".views").addEventListener("click",ev=>{const v=ev.target.dataset&&ev.target.dataset.view; if(v) view(v);});
