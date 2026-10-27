@@ -54,8 +54,8 @@ for e in E:
 cnt = collections.Counter(e["mark"] for e in E)
 tot_kg = sum(steel_kg(e) for e in E)
 pile_len = sum(e["h"] for e in E if e["ifc"] == "IfcPile")
-fill_ext = next(e for e in E if e["mark"] == "FILL-EXT"); fill_b = next(e for e in E if e["mark"] == "FILL-BLDG")
-fill_vol = qty(fill_ext)["vol"] + qty(fill_b)["vol"]
+fill_e = next(e for e in E if e["mark"] == "FILL")
+fill_vol = qty(fill_e)["vol"]; fill_area = prism_area(fill_e)
 site_area = M.poly_area(M.SITE); site_per = M.poly_perim(M.SITE)
 road = next(e for e in E if e["mark"] == "S2" and e["kind"] == "prism")
 road_area = prism_area(road)
@@ -66,23 +66,19 @@ drain_len = sum(e["h"] for e in E if e["mark"] == "DR")
 b1_len = sum(e["h"] for e in E if e["mark"] == "B1")
 
 
-def fill_for(eg):
-    ext = (site_area - 3240.0) * (-0.25 - eg); b = 3240.0 * (0.10 - eg)
-    return ext + b
-
-
-fill_scen = [(eg, fill_for(eg)) for eg in (-1.50, -1.00, -0.50)]
-fdt_layers = math.ceil((0.10 - M.EXIST_GROUND) / 0.20)
-fdt_tests = fdt_layers * math.ceil(site_area / 500)
+fill_scen = [("อาคาร + เผื่อ 2 ม. (64x58) – ใช้คิด BOQ", fill_area), ("เฉพาะอาคาร (60x54)", 3240.0), ("ทั้งแปลงที่ดิน", site_area)]
+fill_scen = [(k, a_ * M.FILL_T) for k, a_ in fill_scen]
+fdt_layers = math.ceil(M.FILL_T / 0.20)
+fdt_tests = fdt_layers * math.ceil(fill_area / 500)
 
 # ---------------------------------------------------------------- verification
 # status: ok | diff | missing | assume
 V = [
-    ("1.3.1", "ถมดินปรับระดับ (ลบ.ม.)", "1,856", "ถนนอ้างอิง -1.50 / ถนนรอบอาคาร ±0.00 / FFL +0.50 (A202)",
-     f"{fill_vol:,.0f}", "diff",
-     f"BOQ สมมติถมเฉลี่ย 0.50 ม. แต่แบบ A202 ระดับถนนอ้างอิงต่ำกว่าถนนรอบอาคาร 1.50 ม. ถ้าดินเดิมอยู่ที่ -1.50 ต้องถม ~{fill_vol:,.0f} ลบ.ม. (ดินเดิม -1.00 ≈ {fill_scen[1][1]:,.0f} / -0.50 ≈ {fill_scen[2][1]:,.0f}) ให้ยืนยันด้วยผลสำรวจระดับ P1.2 ก่อนยื่นราคา และเสนอเป็นราคาต่อ ลบ.ม."),
+    ("1.3.1", "ถมดินปรับระดับ (ลบ.ม.)", "1,856", "ดินเดิม ±0.00 = ระดับถนนรอบอาคาร (-1.50 คือถนนสาธารณะ)",
+     f"{fill_vol:,.2f}", "diff",
+     f"ผู้ว่าจ้างยืนยัน: ดินเดิม ±0.00 ถมหนา 0.30 ม. → {fill_area:,.0f} ตร.ม. (64x58) x 0.30 = {fill_vol:,.2f} ลบ.ม. (เดิมคิด 0.50 ม.) ปริมาณจริงเบิกตามผลสำรวจระดับ P1.2"),
     ("1.4.3", "ทดสอบความแน่นดินถม (จุด)", "6", "ทุก 500 ตร.ม./ชั้น (ข้อกำหนด 1.3.2 ชั้นละ 0.20 ม.)",
-     f"{fdt_tests}", "diff", f"พื้นที่ {site_area:,.0f} ตร.ม. ÷ 500 = {math.ceil(site_area/500)} จุด/ชั้น × {fdt_layers} ชั้น (ถมหนา {0.10-M.EXIST_GROUND:.2f} ม.) = {fdt_tests} จุด"),
+     f"{fdt_tests}", "diff", f"พื้นที่ถม {fill_area:,.0f} ตร.ม. ÷ 500 = {math.ceil(fill_area/500)} จุด/ชั้น × {fdt_layers} ชั้น (ถม 0.30 ม. ชั้นละไม่เกิน 0.20) = {fdt_tests} จุด"),
     ("2.1", "เสาเข็มรวม (ต้น)", "470", "737 (S201-B ตาราง S2)", f"{sum(1 for e in E if e['ifc']=='IfcPile')}", "diff",
      "BOQ ขาด 267 ต้น: เข็มพื้นถนนรอบอาคาร I22 249 ต้น, ฐานหม้อแปลง 6 ต้น, ถังใต้ดิน 17 ต้น; ระบุขนาดเข็มตามแบบ (I22/I26/I35) ยาว 22 ม."),
     ("2.1.1", "เข็มฐานราก I-260x260 ยาว 22 ม. (ต้น)", "92", "105 (I26-22)", f"{cnt['I26-22']}", "diff",
@@ -344,7 +340,7 @@ data = dict(
               kpi=dict(elements=len(E), piles=sum(1 for e in E if e["ifc"] == "IfcPile"), pile_len=round(pile_len),
                        steel_t=round(tot_kg*1.1/1000, 1), fill=round(fill_vol), site_area=round(site_area), road_area=round(road_area),
                        roof_area=round(roof_area), start_main=S["M0"]["start"].isoformat(), finish=S["M52"]["finish"].isoformat()),
-              fill_scen=[[a, round(b)] for a, b in fill_scen]),
+              fill_scen=[[a, round(b_, 2)] for a, b_ in fill_scen]),
     strings=strings, els=els, tasks=tasks_json, qto=qto_json,
     verify=[dict(item=a, desc=b, boq=c, dwg=d, model=e_, st=s_, note=n) for (a, b, c, d, e_, s_, n) in V])
 with open(os.path.join(OUT, "model.json"), "w", encoding="utf-8") as fh:
@@ -399,8 +395,8 @@ sheet(ws3, "แผนงานก่อสร้าง (CPM) วันทำง�
 for row in ws3.iter_rows(min_row=4, min_col=5, max_col=6):
     for c in row: c.number_format = "dd/mm/yyyy"
 ws4 = wb.create_sheet("4-ดินถม")
-sheet(ws4, "สถานการณ์ปริมาณดินถม (ยืนยันด้วยสำรวจระดับ P1.2)", ["ระดับดินเดิมสมมติ", "ภายนอกอาคาร ถมถึง -0.25 (ลบ.ม.)", "ใต้อาคาร ถมถึง +0.10 (ลบ.ม.)", "รวม (ลบ.ม. บดอัด)", "เทียบ BOQ 1,856"],
-      [[eg, round((site_area-3240)*(-0.25-eg)), round(3240*(0.10-eg)), round(v), f"x{v/1856:.1f}"] for eg, v in fill_scen], [18, 26, 24, 18, 14])
+sheet(ws4, "ปริมาณดินถม: ดินเดิม ±0.00 ถมหนา 0.30 ม. (ผู้ว่าจ้างกำหนด)", ["ฐานพื้นที่", "พื้นที่ (ตร.ม.)", "ความหนา (ม.)", "ปริมาตร (ลบ.ม. บดอัด)", "เทียบ BOQ เดิม 1,856"],
+      [[k, round(v/M.FILL_T, 2), M.FILL_T, round(v, 2), f"{v/1856:.2f} เท่า"] for k, v in fill_scen], [40, 16, 12, 20, 18])
 xl = os.path.join(OUT, "TC-WH_BIM_QTO.xlsx"); wb.save(xl)
 print("xlsx", xl)
 print("KPI", data["meta"]["kpi"])

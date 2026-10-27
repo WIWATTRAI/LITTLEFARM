@@ -188,7 +188,7 @@ tr.st-ok td:first-child{box-shadow:inset 3px 0 var(--ok)}
 const D = /*__DATA__*/null;
 const S = i => D.strings[i];
 const CATS = [
-  ["site","ผิวดินเดิม (สมมติ -1.50)",0x8a7a5c,0.35],["earth","ดินถมบดอัด",0xc9b27c,0.28],["temp","สิ่งก่อสร้างชั่วคราว",0x6f8f3a,1],
+  ["site","ผิวดินเดิม ±0.00",0x8a7a5c,0.35],["earth","ดินถมบดอัด",0xc9b27c,0.28],["temp","สิ่งก่อสร้างชั่วคราว",0x6f8f3a,1],
   ["pile","เสาเข็ม I-section",0x8c6d4f,1],["found","ฐานราก / Drop panel",0x9aa3a6,1],["rc","เสา-คาน คสล.",0xb8bdb9,1],
   ["slab","พื้น คสล.",0xcfd3cf,1],["steel","โครงสร้างเหล็ก",0x3d6f8a,1],["roof","หลังคา / Jack roof / รางน้ำ",0xa9bcc4,0.92],
   ["wall","ผนัง",0xd9d4c7,0.95],["door","ประตูม้วน",0x5b6b70,1],["annex","อาคารประกอบ / ห้อง",0xe0c9a6,1],["ext","งานบริเวณ (ถนน ถัง ราง)",0x9e9c95,1]
@@ -206,7 +206,7 @@ document.getElementById("refs").innerHTML = D.meta.drawings.map(d=>`<span class=
 const K = D.meta.kpi;
 document.getElementById("kpis").innerHTML = [
   [fmt(K.elements),"ชิ้นส่วนในโมเดล"],[fmt(K.piles),`เสาเข็ม (BOQ 470) · ${fmt(K.pile_len)} ม.`],[fmt(K.steel_t,1)+" ตัน","เหล็กโครงสร้าง (ประมาณ)"],
-  [fmt(K.fill)+" ลบ.ม.","ดินถม (BOQ 1,856)","warn"],[fmt(K.road_area)+" ตร.ม.","พื้นถนนรอบอาคาร (ไม่มีใน BOQ)","warn"],
+  [fmt(K.fill)+" ลบ.ม.","ดินถมหนา 0.30 ม. (BOQ เดิม 1,856)"],[fmt(K.road_area)+" ตร.ม.","พื้นถนนรอบอาคาร (ไม่มีใน BOQ)","warn"],
   [thDate(P(K.finish)),`ส่งมอบตามแผน (เริ่มงานหลัก ${thDate(P(K.start_main))})`]
 ].map(([b,s,w])=>`<div class="kpi ${w||""}"><b>${b}</b><span>${s}</span></div>`).join("");
 
