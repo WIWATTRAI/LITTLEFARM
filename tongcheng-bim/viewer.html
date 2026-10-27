@@ -1,0 +1,414 @@
+<title>Tongcheng Warehouse BIM</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drawing-sheet header + model bay (canvas | inspector) + 4D strip, then register sections (verify, schedule, QTO) */
+:root{
+  --paper:#f3f4f1; --sheet:#ffffff; --ink:#15262b; --ink-2:#4b5b5f; --rule:#d5dad6; --rule-2:#e7eae6;
+  --accent:#d9861c; --accent-ink:#8a4f00; --steel:#2f5d73;
+  --ok:#2f7a4b; --ok-bg:#e1f0e5; --diff:#a35a07; --diff-bg:#fbebd6; --miss:#b3261e; --miss-bg:#f9dedb; --asm:#7a6a00; --asm-bg:#f5efc8;
+  --scene:#e9ecea;
+  --f-body:"IBM Plex Sans Thai",system-ui,"Noto Sans Thai",Tahoma,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0f1517; --sheet:#151d20; --ink:#e3e9e7; --ink-2:#9fb0b2; --rule:#2a373b; --rule-2:#1e292c;
+  --accent:#f0a33c; --accent-ink:#f6c27a; --steel:#7fb2c9;
+  --ok:#7fd19b; --ok-bg:#173324; --diff:#f3b46b; --diff-bg:#3a2810; --miss:#ff8f86; --miss-bg:#3d1714; --asm:#e6d36a; --asm-bg:#33300f;
+  --scene:#1a2326; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f1517; --sheet:#151d20; --ink:#e3e9e7; --ink-2:#9fb0b2; --rule:#2a373b; --rule-2:#1e292c;
+  --accent:#f0a33c; --accent-ink:#f6c27a; --steel:#7fb2c9;
+  --ok:#7fd19b; --ok-bg:#173324; --diff:#f3b46b; --diff-bg:#3a2810; --miss:#ff8f86; --miss-bg:#3d1714; --asm:#e6d36a; --asm-bg:#33300f;
+  --scene:#1a2326; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1440px;margin:0 auto;display:grid;gap:22px}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.25}
+h1{font-size:clamp(20px,2.4vw,28px);font-weight:700}
+h2{font-size:18px;font-weight:600}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+/* title block */
+.tb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 28px;align-items:end;border-bottom:2px solid var(--ink);padding-bottom:14px}
+.tb p{margin:4px 0 0;color:var(--ink-2)}
+.tb .refs{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.tag{font-family:var(--f-mono);font-size:12px;border:1px solid var(--rule);padding:2px 8px;border-radius:3px;background:var(--sheet)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:1px solid var(--rule);background:var(--sheet)}
+.kpi{padding:10px 14px;border-right:1px solid var(--rule-2)}
+.kpi:last-child{border-right:0}
+.kpi b{display:block;font-family:var(--f-mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--ink-2)}
+.kpi.warn b{color:var(--miss)}
+/* bay */
+.bay{display:grid;grid-template-columns:minmax(0,1fr) 300px;border:1px solid var(--rule);background:var(--sheet)}
+.stage{position:relative;min-height:520px;height:68vh;max-height:760px;background:var(--scene)}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.views{position:absolute;top:10px;left:10px;display:flex;flex-wrap:wrap;gap:6px}
+.btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);padding:5px 10px;border-radius:3px;cursor:pointer}
+.btn:hover{border-color:var(--ink-2)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.hint{position:absolute;bottom:10px;left:10px;font-size:12px;color:var(--ink-2);background:color-mix(in srgb,var(--sheet) 80%,transparent);padding:3px 8px;border-radius:3px}
+.side{border-left:1px solid var(--rule);display:flex;flex-direction:column;min-width:0}
+.side section{padding:12px 14px;border-bottom:1px solid var(--rule-2)}
+.layers{display:grid;gap:2px;margin-top:6px}
+.layer{display:grid;grid-template-columns:18px 12px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px;cursor:pointer;padding:2px 0}
+.layer input{margin:0;accent-color:var(--ink)}
+.sw{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,.2)}
+.layer .c{font-family:var(--f-mono);font-size:12px;color:var(--ink-2)}
+.clip{display:grid;grid-template-columns:auto minmax(0,1fr) 64px;gap:8px;align-items:center;font-size:13px;margin-top:8px}
+.clip input{width:100%}
+#props{font-size:13px;flex:1;overflow:auto}
+#props dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;margin:8px 0 0}
+#props dt{color:var(--ink-2)}
+#props dd{margin:0;overflow-wrap:anywhere}
+.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:600}
+.b-ok{background:var(--ok-bg);color:var(--ok)}.b-diff{background:var(--diff-bg);color:var(--diff)}
+.b-missing{background:var(--miss-bg);color:var(--miss)}.b-assume{background:var(--asm-bg);color:var(--asm)}
+/* 4D strip */
+.strip{grid-column:1/-1;border-top:1px solid var(--rule);padding:12px 14px;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:12px;align-items:center}
+.strip input[type=range]{width:100%;accent-color:var(--accent)}
+.date{font-family:var(--f-mono);font-size:15px;min-width:118px}
+.active{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;min-height:26px}
+.chip{font-size:12px;border:1px solid var(--accent);color:var(--accent-ink);border-radius:3px;padding:1px 8px;background:color-mix(in srgb,var(--accent) 10%,transparent);cursor:pointer}
+.chip.done{border-color:var(--rule);color:var(--ink-2);background:transparent}
+/* registers */
+.reg{background:var(--sheet);border:1px solid var(--rule);padding:16px}
+.reg header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.reg header p{margin:2px 0 0;color:var(--ink-2);max-width:75ch}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.tbl{overflow-x:auto;border:1px solid var(--rule-2)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:var(--rule-2);text-align:left;font-weight:600;padding:7px 9px;white-space:nowrap}
+td{padding:7px 9px;border-top:1px solid var(--rule-2);vertical-align:top}
+td.num{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.st-missing td:first-child{box-shadow:inset 3px 0 var(--miss)}
+tr.st-diff td:first-child{box-shadow:inset 3px 0 var(--diff)}
+tr.st-assume td:first-child{box-shadow:inset 3px 0 var(--asm)}
+tr.st-ok td:first-child{box-shadow:inset 3px 0 var(--ok)}
+.note{min-width:280px;max-width:520px}
+#gantt{display:block;min-width:900px}
+#gantt text{font-family:var(--f-body);font-size:11.5px;fill:var(--ink)}
+#gantt .ax{font-family:var(--f-mono);font-size:10.5px;fill:var(--ink-2)}
+#gantt .row:hover rect.bg{fill:var(--rule-2)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:8px;margin-right:5px;vertical-align:middle;border-radius:1px}
+.foot{font-size:12px;color:var(--ink-2);max-width:110ch}
+.foot code{font-family:var(--f-mono);font-size:12px}
+@media (max-width:900px){
+  .bay{grid-template-columns:minmax(0,1fr)}
+  .side{border-left:0;border-top:1px solid var(--rule)}
+  .stage{height:56vh;min-height:360px}
+  .tb{grid-template-columns:minmax(0,1fr)}.tb .refs{justify-content:flex-start}
+  .strip{grid-template-columns:auto auto minmax(0,1fr)}
+  .strip .date{grid-column:1/-1;order:-1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="tb">
+    <div>
+      <div class="eyebrow" id="pno">WEC-TC-6901 · BIM LOD 200–300 · เพื่อเสนอราคา</div>
+      <h1>อาคารโกดังและงานบริเวณ บริษัท ตงเฉิน อีเล็คทริค เคเบิ้ล แอนด์ไวร์</h1>
+      <p id="site"></p>
+    </div>
+    <div class="refs" id="refs"></div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="bay">
+    <div class="stage">
+      <canvas id="cv" aria-label="โมเดลสามมิติอาคารโกดัง"></canvas>
+      <div class="views" role="group" aria-label="มุมมอง">
+        <button class="btn" data-view="iso" id="v-iso">3D</button>
+        <button class="btn" data-view="top" id="v-top">แปลน</button>
+        <button class="btn" data-view="front" id="v-front">รูปด้านหน้า (A)</button>
+        <button class="btn" data-view="side" id="v-side">รูปด้านข้าง (1)</button>
+        <button class="btn" data-view="under" id="v-under">ใต้ดิน/เข็ม</button>
+        <button class="btn" id="ghost" aria-pressed="false">โปร่งแสงงานที่ยังไม่สร้าง</button>
+      </div>
+      <div class="hint">ลากเพื่อหมุน · คลิกขวา/สองนิ้วเพื่อเลื่อน · คลิกชิ้นส่วนเพื่อดูข้อมูล</div>
+    </div>
+    <aside class="side">
+      <section>
+        <div class="eyebrow">ชั้นข้อมูล (Layers)</div>
+        <div class="layers" id="layers"></div>
+        <div class="clip"><label for="clipz">ตัดระดับ</label><input id="clipz" type="range" min="-24" max="16" step="0.1" value="16"><span class="mono" id="clipv">ปิด</span></div>
+      </section>
+      <section id="props"><div class="eyebrow">ข้อมูลชิ้นส่วน</div><p style="color:var(--ink-2);margin:8px 0 0">คลิกชิ้นส่วนในโมเดลเพื่อดูรายการ BOQ กิจกรรม 4D ขนาด ปริมาตร และแหล่งที่มา</p></section>
+    </aside>
+    <div class="strip">
+      <button class="btn" id="play" aria-pressed="false">▶ เล่น 4D</button>
+      <button class="btn" id="all">แสดงทั้งหมด</button>
+      <input type="range" id="tl" min="0" max="100" value="100" aria-label="วันที่ในแผนงาน">
+      <div class="date" id="date"></div>
+      <div class="active" id="active"></div>
+    </div>
+  </div>
+
+  <section class="reg" id="verify">
+    <header>
+      <div><div class="eyebrow">ทวนสอบ</div><h2>BOQ เทียบแบบและโมเดล</h2>
+        <p>ตรวจทีละรายการระหว่าง 01_BOQ_งานหลัก / 00_BOQ_Preconstruction กับตารางปริมาณในแบบ S201-B, S202 และปริมาณที่ถอดจากโมเดล</p></div>
+      <div class="filters" id="vf"></div>
+    </header>
+    <div class="tbl"><table id="vt"></table></div>
+  </section>
+
+  <section class="reg" id="plan">
+    <header>
+      <div><div class="eyebrow">ลำดับงาน 4D</div><h2>แผนงานก่อสร้าง (CPM)</h2>
+        <p id="planp"></p></div>
+      <div class="legend"><span><i style="background:var(--miss)"></i>สายงานวิกฤต</span><span><i style="background:var(--steel)"></i>มีเวลาลอย</span><span><i style="background:var(--accent)"></i>วันที่เลือก</span></div>
+    </header>
+    <div class="tbl"><svg id="gantt"></svg></div>
+  </section>
+
+  <section class="reg" id="qto">
+    <header><div><div class="eyebrow">Quantity take-off</div><h2>ปริมาณที่ถอดจากโมเดล</h2>
+      <p>รวมตาม Type Mark และรายการ BOQ ความยาวเป็นความยาวชิ้นส่วนตามแกน พื้นที่ของผนัง/หลังคาเป็นพื้นที่ผิว เหล็กคิดจากน้ำหนักต่อเมตร</p></div></header>
+    <div class="tbl"><table id="qt"></table></div>
+  </section>
+
+  <p class="foot">ไฟล์ประกอบในโฟลเดอร์ <code>tongcheng-bim/out/</code>: <code>TC-WH_BIM.ifc</code> (IFC4 เปิดใน Revit, Navisworks, BIMcollab Zoom, Solibri, BlenderBIM; มี IfcTask/IfcWorkSchedule และ Pset_TC_BOQ_4D ทุกชิ้นส่วนสำหรับ TimeLiner) และ <code>TC-WH_BIM_QTO.xlsx</code>. ชิ้นส่วนที่ระบุ “สมมติ” ยังไม่มีแบบขยาย ต้องยืนยันก่อนใช้ราคา.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const S = i => D.strings[i];
+const CATS = [
+  ["site","ผิวดินเดิม (สมมติ -1.50)",0x8a7a5c,0.35],["earth","ดินถมบดอัด",0xc9b27c,0.28],["temp","สิ่งก่อสร้างชั่วคราว",0x6f8f3a,1],
+  ["pile","เสาเข็ม I-section",0x8c6d4f,1],["found","ฐานราก / Drop panel",0x9aa3a6,1],["rc","เสา-คาน คสล.",0xb8bdb9,1],
+  ["slab","พื้น คสล.",0xcfd3cf,1],["steel","โครงสร้างเหล็ก",0x3d6f8a,1],["roof","หลังคา / Jack roof / รางน้ำ",0xa9bcc4,0.92],
+  ["wall","ผนัง",0xd9d4c7,0.95],["door","ประตูม้วน",0x5b6b70,1],["annex","อาคารประกอบ / ห้อง",0xe0c9a6,1],["ext","งานบริเวณ (ถนน ถัง ราง)",0x9e9c95,1]
+];
+const LAYER_ON = {site:false,earth:false};
+const ST_LBL = {ok:"ตรง",diff:"ต่าง",missing:"ขาดใน BOQ",assume:"สมมติ/ตรวจ"};
+const fmt = (n,d=0)=>Number(n).toLocaleString("th-TH",{minimumFractionDigits:d,maximumFractionDigits:d});
+const thDate = d => { const m=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]; return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()+543}`; };
+const P = s => new Date(s+"T00:00:00");
+const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- header ---------- */
+document.getElementById("site").textContent = `${D.meta.owner} · ${D.meta.site} · ผู้เสนอราคา ${D.meta.contractor}`;
+document.getElementById("refs").innerHTML = D.meta.drawings.map(d=>`<span class="tag">${d}</span>`).join("") + `<span class="tag">IFC4</span><span class="tag">${D.meta.generated}</span>`;
+const K = D.meta.kpi;
+document.getElementById("kpis").innerHTML = [
+  [fmt(K.elements),"ชิ้นส่วนในโมเดล"],[fmt(K.piles),`เสาเข็ม (BOQ 470) · ${fmt(K.pile_len)} ม.`],[fmt(K.steel_t,1)+" ตัน","เหล็กโครงสร้าง (ประมาณ)"],
+  [fmt(K.fill)+" ลบ.ม.","ดินถม (BOQ 1,856)","warn"],[fmt(K.road_area)+" ตร.ม.","พื้นถนนรอบอาคาร (ไม่มีใน BOQ)","warn"],
+  [thDate(P(K.finish)),`ส่งมอบตามแผน (เริ่มงานหลัก ${thDate(P(K.start_main))})`]
+].map(([b,s,w])=>`<div class="kpi ${w||""}"><b>${b}</b><span>${s}</span></div>`).join("");
+
+/* ---------- three.js scene ---------- */
+const cv = document.getElementById("cv");
+const renderer = new THREE.WebGLRenderer({canvas:cv,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.localClippingEnabled = true;
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(40,1,0.5,2000);
+const ctl = new THREE.OrbitControls(cam,cv);
+ctl.enableDamping = true; ctl.dampingFactor = 0.12;
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a8a80,0.75));
+const sun = new THREE.DirectionalLight(0xffffff,0.75); sun.position.set(-60,120,80); scene.add(sun);
+const sun2 = new THREE.DirectionalLight(0xffffff,0.25); sun2.position.set(120,40,-90); scene.add(sun2);
+const clipPlane = new THREE.Plane(new THREE.Vector3(0,-1,0),16);
+const mp = (x,y,z)=>new THREE.Vector3(x,z,-y);           // plan(x,y,z) -> three
+
+function themeColor(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function applyTheme(){ scene.background = new THREE.Color(themeColor("--scene")||"#e9ecea"); gridMat.color.set(themeColor("--ink-2")||"#555"); }
+
+/* grid lines + bubbles */
+const gridMat = new THREE.LineBasicMaterial({color:0x555555,transparent:true,opacity:0.45});
+{
+  const pts=[]; const g=D.meta.grid, z=0.52;
+  g.x.forEach(x=>{pts.push(mp(x,-6,z),mp(x,60,z));});
+  g.y.forEach(y=>{pts.push(mp(-6,y,z),mp(66,y,z));});
+  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),gridMat));
+  const label=(t,p)=>{const c=document.createElement("canvas");c.width=c.height=128;const x=c.getContext("2d");
+    x.fillStyle="#fff";x.beginPath();x.arc(64,64,56,0,7);x.fill();x.lineWidth=8;x.strokeStyle="#15262b";x.stroke();
+    x.fillStyle="#15262b";x.font="600 60px IBM Plex Mono, monospace";x.textAlign="center";x.textBaseline="middle";x.fillText(t,64,68);
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));s.scale.set(2.6,2.6,1);s.position.copy(p);s.renderOrder=5;scene.add(s);};
+  g.x.forEach((x,i)=>label(g.xn[i],mp(x,-8,0.6)));
+  g.y.forEach((y,i)=>label(g.yn[i],mp(-8,y,0.6)));
+}
+
+/* elements */
+const groups = {};      // cat -> {mesh, idx:[elIndex], mats:[Matrix4]}
+const prismMeshes = [];  // {mesh, el}
+const base = {}; CATS.forEach(c=>base[c[0]]={col:new THREE.Color(c[2]),op:c[3],label:c[1]});
+const unit = new THREE.BoxGeometry(1,1,1);
+function mkMat(cat){ const b=base[cat]; return new THREE.MeshLambertMaterial({color:0xffffff,transparent:b.op<1,opacity:b.op,side:THREE.DoubleSide,clippingPlanes:[clipPlane],depthWrite:b.op>=0.5}); }
+const boxEls = {}; D.els.forEach((e,i)=>{ if(e.k===0)(boxEls[e.g]=boxEls[e.g]||[]).push(i); });
+for(const cat in boxEls){
+  const ids = boxEls[cat];
+  const mesh = new THREE.InstancedMesh(unit,mkMat(cat),ids.length);
+  const mats = ids.map((i,k)=>{ const M=D.els[i].M;
+    const cx=mp(M[0],M[1],M[2]), cy=mp(M[3],M[4],M[5]), cz=mp(M[6],M[7],M[8]), t=mp(M[9],M[10],M[11]);
+    const m=new THREE.Matrix4().set(cx.x,cy.x,cz.x,t.x, cx.y,cy.y,cz.y,t.y, cx.z,cy.z,cz.z,t.z, 0,0,0,1);
+    mesh.setMatrixAt(k,m); mesh.setColorAt(k,base[cat].col); return m; });
+  mesh.instanceColor.needsUpdate=true;
+  scene.add(mesh); groups[cat]={mesh,ids,mats};
+}
+D.els.forEach((e,i)=>{ if(e.k!==1) return;
+  const sh=new THREE.Shape(e.P.map(p=>new THREE.Vector2(p[0],p[1])));
+  e.H.forEach(h=>sh.holes.push(new THREE.Path(h.map(p=>new THREE.Vector2(p[0],p[1])))));
+  const geo=new THREE.ExtrudeGeometry(sh,{depth:e.h,bevelEnabled:false});
+  const ex=mp(...e.ex), ey=mp(...e.ey), ez=mp(...e.ez), o=mp(...e.o);
+  geo.applyMatrix4(new THREE.Matrix4().set(ex.x,ey.x,ez.x,o.x, ex.y,ey.y,ez.y,o.y, ex.z,ey.z,ez.z,o.z, 0,0,0,1));
+  geo.computeVertexNormals();
+  const mat=mkMat(e.g); mat.color.copy(base[e.g].col);
+  const mesh=new THREE.Mesh(geo,mat); scene.add(mesh); prismMeshes.push({mesh,i});
+});
+
+/* ---------- layers ---------- */
+const counts={}; D.els.forEach(e=>counts[e.g]=(counts[e.g]||0)+1);
+const layerOn={}; CATS.forEach(c=>layerOn[c[0]]=LAYER_ON[c[0]]!==undefined?LAYER_ON[c[0]]:true);
+document.getElementById("layers").innerHTML = CATS.filter(c=>counts[c[0]]).map(c=>
+  `<label class="layer" for="ly-${c[0]}"><input type="checkbox" id="ly-${c[0]}" data-cat="${c[0]}" ${layerOn[c[0]]?"checked":""}><span class="sw" style="background:#${c[2].toString(16).padStart(6,"0")}"></span><span>${c[1]}</span><span class="c">${fmt(counts[c[0]])}</span></label>`).join("");
+document.getElementById("layers").addEventListener("change",ev=>{const c=ev.target.dataset.cat; if(c){layerOn[c]=ev.target.checked; refresh();}});
+const clipz=document.getElementById("clipz"), clipv=document.getElementById("clipv");
+clipz.addEventListener("input",()=>{const v=+clipz.value; clipPlane.constant = v>=16?1e4:v; clipv.textContent = v>=16?"ปิด":(v>=0?"+":"")+v.toFixed(2); });
+clipPlane.constant=1e4;
+
+/* ---------- 4D state ---------- */
+const T = D.tasks.map(t=>({...t,s:P(t.start),f:P(t.finish)}));
+const t0 = T.reduce((a,t)=>t.s<a?t.s:a,T[0].s), t1 = T.reduce((a,t)=>t.f>a?t.f:a,T[0].f);
+const span = Math.round((t1-t0)/864e5)+1;
+const tl=document.getElementById("tl"); tl.max=span; tl.value=span;
+let cur = span, show4D=false, ghost=false, sel=-1, isoTask=-1;
+const ACC = new THREE.Color(0xe08a1e), SEL = new THREE.Color(0xd23b2c), GH = new THREE.Color(0xb8c4c8);
+function dayOf(i){ return new Date(t0.getTime()+i*864e5); }
+function state(e){ // 0 future, 1 active, 2 done, 3 removed
+  if(!show4D) return 2;
+  const d=dayOf(cur), t=T[e.t];
+  if(e.r!==undefined && d>T[e.r].f) return 3;
+  if(d<t.s) return 0; if(d<=t.f) return 1; return 2;
+}
+const Z = new THREE.Matrix4().makeScale(0,0,0);
+function refresh(){
+  for(const cat in groups){ const g=groups[cat];
+    g.ids.forEach((i,k)=>{ const e=D.els[i], s=state(e); let vis=layerOn[cat]&&s!==3&&(s!==0||ghost);
+      if(isoTask>=0 && e.t!==isoTask && vis){ /* keep but ghost */ }
+      g.mesh.setMatrixAt(k, vis?g.mats[k]:Z);
+      let c = base[cat].col;
+      if(s===0 || (isoTask>=0 && e.t!==isoTask)) c=GH; if(s===1) c=ACC; if(isoTask>=0 && e.t===isoTask) c=ACC; if(i===sel) c=SEL;
+      g.mesh.setColorAt(k,c); });
+    g.mesh.instanceMatrix.needsUpdate=true; g.mesh.instanceColor.needsUpdate=true; }
+  prismMeshes.forEach(({mesh,i})=>{ const e=D.els[i], s=state(e); mesh.visible = layerOn[e.g]&&s!==3&&(s!==0||ghost);
+    mesh.material.color.copy(i===sel?SEL:(s===1?ACC:(s===0?GH:base[e.g].col))); });
+  // date + active tasks
+  const d=dayOf(cur);
+  document.getElementById("date").textContent = show4D?thDate(d):"ทั้งโครงการ";
+  const act = show4D? T.filter(t=>t.s<=d&&d<=t.f):[];
+  const done = show4D? T.filter(t=>t.f<d).length:T.length;
+  document.getElementById("active").innerHTML = show4D
+    ? (act.length? act.map(t=>{const p=Math.min(100,Math.round(((d-t.s)/864e5+1)/((t.f-t.s)/864e5+1)*100));return `<span class="chip" data-t="${t.id}" title="${esc(t.crew)}">${t.id} ${esc(t.name)} · ${p}%</span>`;}).join("") : `<span class="chip done">ไม่มีกิจกรรมในวันนี้ (วันหยุด/รองาน)</span>`) + `<span class="chip done">เสร็จแล้ว ${done}/${T.length} กิจกรรม</span>`
+    : `<span class="chip done">เลื่อนแถบเวลา หรือกด “เล่น 4D” เพื่อดูลำดับการก่อสร้าง</span>`;
+  drawCursor();
+}
+tl.addEventListener("input",()=>{cur=+tl.value; show4D=true; refresh();});
+document.getElementById("all").addEventListener("click",()=>{show4D=false; isoTask=-1; cur=span; tl.value=span; stop(); refresh();});
+document.getElementById("ghost").addEventListener("click",ev=>{ghost=!ghost; ev.currentTarget.setAttribute("aria-pressed",ghost); refresh();});
+let timer=null; const playBtn=document.getElementById("play");
+function stop(){ if(timer){clearInterval(timer);timer=null;} playBtn.textContent="▶ เล่น 4D"; playBtn.setAttribute("aria-pressed","false"); }
+playBtn.addEventListener("click",()=>{ if(timer){stop();return;} show4D=true; isoTask=-1; if(cur>=span) cur=0;
+  playBtn.textContent="❚❚ หยุด"; playBtn.setAttribute("aria-pressed","true");
+  timer=setInterval(()=>{ cur=Math.min(span,cur+2); tl.value=cur; refresh(); if(cur>=span) stop(); },110); });
+document.getElementById("active").addEventListener("click",ev=>{const id=ev.target.dataset&&ev.target.dataset.t; if(id) focusTask(id);});
+
+/* ---------- picking ---------- */
+const ray=new THREE.Raycaster(); const ptr=new THREE.Vector2(); let down=null;
+cv.addEventListener("pointerdown",e=>down=[e.clientX,e.clientY]);
+cv.addEventListener("pointerup",e=>{ if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>4) return;
+  const r=cv.getBoundingClientRect(); ptr.set((e.clientX-r.left)/r.width*2-1, -(e.clientY-r.top)/r.height*2+1);
+  ray.setFromCamera(ptr,cam);
+  const objs=[...Object.values(groups).map(g=>g.mesh),...prismMeshes.filter(p=>p.mesh.visible).map(p=>p.mesh)];
+  const hits=ray.intersectObjects(objs,false).filter(h=>{ if(clipPlane.constant<1e3 && h.point.y>clipPlane.constant) return false;
+    if(h.instanceId!==undefined){const g=Object.values(groups).find(g=>g.mesh===h.object); return !g.mesh.material.transparent||g.mesh.material.opacity>0.5;} return true;});
+  if(!hits.length){ sel=-1; refresh(); return; }
+  const h=hits[0]; let idx;
+  if(h.instanceId!==undefined){ const g=Object.values(groups).find(g=>g.mesh===h.object); idx=g.ids[h.instanceId]; }
+  else idx=prismMeshes.find(p=>p.mesh===h.object).i;
+  sel=idx; showProps(idx); refresh(); });
+function showProps(i){
+  const e=D.els[i], t=T[e.t], src=S(e.s), asm=/สมมติ/.test(src);
+  const dims = e.k===0 ? `${e.d[0]} × ${e.d[1]} × ${e.d[2]} ม.` : `พื้นที่ ${fmt(e.ar,1)} ตร.ม. หนา ${e.h} ม.`;
+  document.getElementById("props").innerHTML = `<div class="eyebrow">ข้อมูลชิ้นส่วน · #${i}</div>
+   <h3 style="font-size:15px;margin-top:6px">${esc(S(e.n))}</h3>
+   <dl><dt>Type Mark</dt><dd class="mono">${esc(S(e.m))}</dd><dt>IFC</dt><dd class="mono">${esc(S(e.i))}</dd>
+   <dt>รายการ BOQ</dt><dd>${esc(S(e.b))}</dd><dt>ขนาด</dt><dd class="mono">${dims}</dd>
+   <dt>ปริมาตร</dt><dd class="mono">${fmt(e.v,3)} ลบ.ม.</dd>${e.kg?`<dt>เหล็ก</dt><dd class="mono">${fmt(e.kg,1)} กก.</dd>`:""}
+   <dt>กิจกรรม 4D</dt><dd>${t.id} ${esc(t.name)}<br><span class="mono">${thDate(t.s)} – ${thDate(t.f)}</span></dd>
+   <dt>ที่มา</dt><dd><span class="badge ${asm?"b-assume":"b-ok"}">${esc(src)}</span></dd></dl>
+   <p style="margin:10px 0 0"><button class="btn" id="isoBtn">แสดงเฉพาะกิจกรรม ${t.id}</button></p>`;
+  document.getElementById("isoBtn").onclick=()=>focusTask(t.id);
+}
+function focusTask(id){ const k=T.findIndex(t=>t.id===id); if(k<0) return; stop(); isoTask=k; show4D=true;
+  cur=Math.round((T[k].f-t0)/864e5); tl.value=cur; refresh(); document.querySelector(".bay").scrollIntoView({behavior:"smooth",block:"start"}); }
+
+/* ---------- camera views ---------- */
+const C0=mp(30,27,4);
+function view(v){ const tg=C0.clone(); let p;
+  if(v==="top"){ p=mp(30,27.01,150); } else if(v==="front"){ p=mp(30,-95,10); tg.y=6; }
+  else if(v==="side"){ p=mp(-100,27,10); tg.y=6; } else if(v==="under"){ p=mp(-55,-60,-28); tg.copy(mp(30,27,-10));
+    ["roof","wall","steel","slab","annex","door","temp"].forEach(c=>{layerOn[c]=false; const cb=document.getElementById("ly-"+c); if(cb) cb.checked=false;}); refresh(); }
+  else { p=mp(-48,-62,58);
+    CATS.forEach(c=>{layerOn[c[0]]=LAYER_ON[c[0]]!==undefined?LAYER_ON[c[0]]:true; const cb=document.getElementById("ly-"+c[0]); if(cb) cb.checked=layerOn[c[0]];}); refresh(); }
+  cam.position.copy(p); ctl.target.copy(tg); ctl.update(); }
+document.querySelector(".views").addEventListener("click",ev=>{const v=ev.target.dataset&&ev.target.dataset.view; if(v) view(v);});
+
+function resize(){ const r=cv.parentElement.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); cam.aspect=r.width/r.height; cam.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(cv.parentElement);
+applyTheme();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+view("iso"); resize();
+(function loop(){ requestAnimationFrame(loop); ctl.update(); renderer.render(scene,cam); })();
+
+/* ---------- verification table ---------- */
+let vfilter="all";
+function drawV(){
+  const rows=D.verify.filter(r=>vfilter==="all"||r.st===vfilter);
+  document.getElementById("vt").innerHTML = `<thead><tr><th>รายการ</th><th>รายละเอียด</th><th>BOQ</th><th>แบบ</th><th>โมเดล</th><th>ผล</th><th>ข้อสังเกต / สิ่งที่ต้องแก้</th></tr></thead><tbody>`+
+   rows.map(r=>`<tr class="st-${r.st}"><td class="mono">${esc(r.item)}</td><td>${esc(r.desc)}</td><td class="num">${esc(r.boq)}</td><td>${esc(r.dwg)}</td><td class="num">${esc(r.model)}</td><td><span class="badge b-${r.st}">${ST_LBL[r.st]}</span></td><td class="note">${esc(r.note)}</td></tr>`).join("")+"</tbody>";
+}
+{ const c={all:D.verify.length}; D.verify.forEach(r=>c[r.st]=(c[r.st]||0)+1);
+  const vf=document.getElementById("vf");
+  vf.innerHTML=[["all","ทั้งหมด"],["missing","ขาดใน BOQ"],["diff","ต่าง"],["assume","สมมติ/ตรวจ"],["ok","ตรง"]].filter(([k])=>c[k])
+    .map(([k,l])=>`<button class="btn" data-f="${k}" aria-pressed="${k==="all"}">${l} <span class="mono">${c[k]}</span></button>`).join("");
+  vf.addEventListener("click",ev=>{const b=ev.target.closest("button"); if(!b) return; vfilter=b.dataset.f; vf.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b)); drawV();});
+  drawV(); }
+
+/* ---------- gantt ---------- */
+const crit=T.filter(t=>t.crit);
+document.getElementById("planp").textContent = `${T.length} กิจกรรม · ทำงานจันทร์–เสาร์ หักวันหยุดราชการ · Preconstruction ${thDate(T[0].s)} → งานหลักเริ่ม ${thDate(P(K.start_main))} → ส่งมอบ ${thDate(t1)} · คลิกแถวเพื่อดูชิ้นส่วนของกิจกรรมนั้นในโมเดล`;
+const G=document.getElementById("gantt"); const LW=330, RH=22, TOP=34, W=1180;
+const xs=d=>LW+(d-t0)/864e5/span*(W-LW-10);
+function drawGantt(){
+  let s=`<rect x="0" y="0" width="${W}" height="${TOP+T.length*RH+8}" fill="transparent"/>`;
+  for(let d=new Date(t0.getFullYear(),t0.getMonth(),1); d<=t1; d=new Date(d.getFullYear(),d.getMonth()+1,1)){
+    const x=Math.max(LW,xs(d)); s+=`<line x1="${x}" x2="${x}" y1="${TOP-6}" y2="${TOP+T.length*RH}" stroke="var(--rule)" stroke-width="1"/><text class="ax" x="${x+3}" y="${TOP-12}">${thDate(d).split(" ").slice(1).join(" ")}</text>`; }
+  T.forEach((t,k)=>{ const y=TOP+k*RH, x0=xs(t.s), x1=xs(new Date(t.f.getTime()+864e5));
+    s+=`<g class="row" data-t="${t.id}" style="cursor:pointer"><rect class="bg" x="0" y="${y}" width="${W}" height="${RH}" fill="transparent"/>
+      <text x="4" y="${y+15}" class="ax">${t.id}</text><text x="44" y="${y+15}">${esc(t.name.length>40?t.name.slice(0,39)+"…":t.name)}</text>
+      <rect x="${x0}" y="${y+5}" width="${Math.max(2,x1-x0)}" height="${RH-10}" rx="2" fill="${t.crit?"var(--miss)":"var(--steel)"}"><title>${esc(t.name)} | ${thDate(t.s)} – ${thDate(t.f)} | ${t.dur} วันทำงาน | Float ${t.fl} วัน | ${esc(t.crew)}</title></rect>
+      <text x="${x1+4}" y="${y+15}" class="ax">${t.dur}d${t.fl>0?" · F"+t.fl:""}</text></g>`; });
+  s+=`<line id="gcur" x1="0" x2="0" y1="${TOP-6}" y2="${TOP+T.length*RH}" stroke="var(--accent)" stroke-width="2"/>`;
+  G.setAttribute("viewBox",`0 0 ${W} ${TOP+T.length*RH+8}`); G.setAttribute("width",W); G.innerHTML=s;
+  G.addEventListener("click",ev=>{const g=ev.target.closest(".row"); if(g) focusTask(g.dataset.t);});
+}
+function drawCursor(){ const l=document.getElementById("gcur"); if(!l) return; const x=show4D?xs(dayOf(cur)):-10; l.setAttribute("x1",x); l.setAttribute("x2",x); }
+drawGantt();
+
+/* ---------- QTO ---------- */
+document.getElementById("qt").innerHTML = `<thead><tr><th>รายการ BOQ</th><th>Mark</th><th>ชิ้นส่วน</th><th>จำนวน</th><th>ความยาว ม.</th><th>พื้นที่ ตร.ม.</th><th>ปริมาตร ลบ.ม.</th><th>เหล็ก กก.</th><th>4D</th><th>ที่มา</th></tr></thead><tbody>`+
+  D.qto.map(q=>`<tr><td>${esc(q.boq)}</td><td class="mono">${esc(q.mark)}</td><td>${esc(q.name)}</td><td class="num">${fmt(q.n)}</td><td class="num">${fmt(q.len,2)}</td><td class="num">${fmt(q.area,2)}</td><td class="num">${fmt(q.vol,2)}</td><td class="num">${q.kg?fmt(q.kg,0):"–"}</td><td class="mono">${q.task}</td><td>${/สมมติ/.test(q.src)?`<span class="badge b-assume">${esc(q.src)}</span>`:esc(q.src)}</td></tr>`).join("")+"</tbody>";
+refresh();
+</script>
