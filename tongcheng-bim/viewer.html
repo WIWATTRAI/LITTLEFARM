@@ -189,7 +189,7 @@ const D = /*__DATA__*/null;
 const S = i => D.strings[i];
 const CATS = [
   ["site","ผิวดินเดิม ±0.00",0x8a7a5c,0.35],["earth","ดินถมบดอัด",0xc9b27c,0.28],["temp","สิ่งก่อสร้างชั่วคราว",0x6f8f3a,1],
-  ["pile","เสาเข็ม I-section",0x8c6d4f,1],["found","ฐานราก / Drop panel",0x9aa3a6,1],["rc","เสา-คาน คสล.",0xb8bdb9,1],
+  ["pile_b","เสาเข็มอาคาร (I35, I26 ฐาน F2P)",0x8c6d4f,1],["pile_a","เสาเข็มอาคารประกอบ/อื่นๆ",0xb0703a,1],["pile_r","เสาเข็มถนน I22",0x6f7f8c,1],["found","ฐานราก / Drop panel",0x9aa3a6,1],["rc","เสา-คาน คสล.",0xb8bdb9,1],
   ["slab","พื้น คสล.",0xcfd3cf,1],["steel","โครงสร้างเหล็ก",0x3d6f8a,1],["roof","หลังคา / Jack roof / รางน้ำ",0xa9bcc4,0.92],
   ["wall","ผนัง",0xd9d4c7,0.95],["door","ประตูม้วน",0x5b6b70,1],["annex","อาคารประกอบ / ห้อง",0xe0c9a6,1],["ext","งานบริเวณ (ถนน ถัง ราง)",0x9e9c95,1]
 ];
@@ -205,7 +205,7 @@ document.getElementById("site").textContent = `${D.meta.owner} · ${D.meta.site}
 document.getElementById("refs").innerHTML = D.meta.drawings.map(d=>`<span class="tag">${d}</span>`).join("") + `<span class="tag">IFC4</span><span class="tag">${D.meta.generated}</span>`;
 const K = D.meta.kpi;
 document.getElementById("kpis").innerHTML = [
-  [fmt(K.elements),"ชิ้นส่วนในโมเดล"],[fmt(K.piles),`เสาเข็ม (BOQ 470) · ${fmt(K.pile_len)} ม.`],[fmt(K.steel_t,1)+" ตัน","เหล็กโครงสร้าง (ประมาณ)"],
+  [fmt(K.elements),"ชิ้นส่วนในโมเดล"],[fmt(K.piles)+" + 17",`เสาเข็ม: อาคาร ${fmt(D.meta.pile_groups.pile_b)} · ประกอบ/อื่นๆ ${fmt(D.meta.pile_groups.pile_a)} · ถนน ${fmt(D.meta.pile_groups.pile_r)}+17`],[fmt(K.steel_t,1)+" ตัน","เหล็กโครงสร้าง (ประมาณ)"],
   [fmt(K.fill)+" ลบ.ม.","ดินถมหนา 0.30 ม. (BOQ เดิม 1,856)"],[fmt(K.road_area)+" ตร.ม.","พื้นถนนรอบอาคาร (ไม่มีใน BOQ)","warn"],
   [thDate(P(K.finish)),`ส่งมอบตามแผน (เริ่มงานหลัก ${thDate(P(K.start_main))})`]
 ].map(([b,s,w])=>`<div class="kpi ${w||""}"><b>${b}</b><span>${s}</span></div>`).join("");
@@ -288,7 +288,7 @@ const STG = D.meta.stages, stCount = {}; D.els.forEach(e=>stCount[e.st]=(stCount
 const stBox = document.getElementById("stages");
 stBox.innerHTML = Object.keys(STG).map(k=>`<button class="btn" data-st="${k}" title="${esc(STG[k])}" aria-pressed="${+k===8}">${k}</button>`).join("");
 function setStage(n){ stageMax=n; stBox.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.st===n));
-  document.getElementById("stgd").textContent = `ขั้น 0–${n}: ${STG[n]} (${fmt(stCount[n]||0)} ชิ้น, สีส้ม = ขั้นล่าสุด)`; refresh(); }
+  document.getElementById("stgd").textContent = `ขั้น 0–${n}: ${STG[n]} (${fmt(stCount[n]||0)} ชิ้น, ขั้นล่าสุดเน้นโทนส้ม)`; refresh(); }
 stBox.addEventListener("click",ev=>{const b=ev.target.closest("button"); if(b){ show4D=false; isoTask=-1; stop(); setStage(+b.dataset.st);} });
 
 /* ---------- 4D state ---------- */
@@ -306,13 +306,14 @@ function state(e){ // 0 future, 1 active, 2 done, 3 removed
   if(d<t.s) return 0; if(d<=t.f) return 1; return 2;
 }
 const Z = new THREE.Matrix4().makeScale(0,0,0);
+const TMPC = new THREE.Color();
 function refresh(){
   for(const cat in groups){ const g=groups[cat];
     g.ids.forEach((i,k)=>{ const e=D.els[i], s=state(e); let vis=layerOn[cat]&&e.st<=stageMax&&s!==3&&(s!==0||ghost);
       if(isoTask>=0 && e.t!==isoTask && vis){ /* keep but ghost */ }
       g.mesh.setMatrixAt(k, vis?g.mats[k]:Z);
       let c = base[cat].col;
-      if(s===0 || (isoTask>=0 && e.t!==isoTask)) c=GH; if(s===1) c=ACC; if(isoTask>=0 && e.t===isoTask) c=ACC; if(!show4D && stageMax<8 && e.st===stageMax) c=ACC; if(i===sel) c=SEL;
+      if(s===0 || (isoTask>=0 && e.t!==isoTask)) c=GH; if(s===1) c=ACC; if(isoTask>=0 && e.t===isoTask) c=ACC; if(!show4D && stageMax<8 && e.st===stageMax) c=TMPC.copy(base[cat].col).lerp(ACC,0.3).multiplyScalar(1.1); if(i===sel) c=SEL;
       g.mesh.setColorAt(k,c); });
     g.mesh.instanceMatrix.needsUpdate=true; g.mesh.instanceColor.needsUpdate=true; }
   prismMeshes.forEach(({mesh,i})=>{ const e=D.els[i], s=state(e); mesh.visible = layerOn[e.g]&&e.st<=stageMax&&s!==3&&(s!==0||ghost);
@@ -372,7 +373,7 @@ const C0=mp(30,-27,4);
 function view(v){ const tg=C0.clone(); let p;
   if(v==="top"){ p=mp(30,-27.01,150); } else if(v==="front"){ p=mp(30,95,10); tg.y=6; }
   else if(v==="side"){ p=mp(-100,-27,10); tg.y=6; } else if(v==="under"){ p=mp(-55,60,-28); tg.copy(mp(30,-27,-10));
-    ["roof","wall","steel","slab","annex","door","temp"].forEach(c=>{layerOn[c]=false; const cb=document.getElementById("ly-"+c); if(cb) cb.checked=false;}); refresh(); }
+    ["roof","wall","steel","slab","annex","door","temp","ext"].forEach(c=>{layerOn[c]=false; const cb=document.getElementById("ly-"+c); if(cb) cb.checked=false;}); refresh(); }
   else { p=mp(-48,62,58);
     CATS.forEach(c=>{layerOn[c[0]]=LAYER_ON[c[0]]!==undefined?LAYER_ON[c[0]]:true; const cb=document.getElementById("ly-"+c[0]); if(cb) cb.checked=layerOn[c[0]];}); refresh(); }
   cam.position.copy(p); ctl.target.copy(tg); ctl.update(); }
