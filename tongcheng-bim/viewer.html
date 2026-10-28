@@ -357,7 +357,7 @@ function showProps(i){
   const dims = e.k===0 ? `${e.d[0]} × ${e.d[1]} × ${e.d[2]} ม.` : `พื้นที่ ${fmt(e.ar,1)} ตร.ม. หนา ${e.h} ม.`;
   document.getElementById("props").innerHTML = `<div class="eyebrow">ข้อมูลชิ้นส่วน · #${i}</div>
    <h3 style="font-size:15px;margin-top:6px">${esc(S(e.n))}</h3>
-   <dl><dt>Type Mark</dt><dd class="mono">${esc(S(e.m))}</dd><dt>IFC</dt><dd class="mono">${esc(S(e.i))}</dd>
+   <dl>${e.id?`<dt>รหัส · กริด</dt><dd class="mono">${esc(e.id)}</dd>`:""}<dt>Type Mark</dt><dd class="mono">${esc(S(e.m))}</dd><dt>IFC</dt><dd class="mono">${esc(S(e.i))}</dd>
    <dt>รายการ BOQ</dt><dd>${esc(S(e.b))}</dd><dt>ขนาด</dt><dd class="mono">${dims}</dd>
    <dt>ปริมาตร</dt><dd class="mono">${fmt(e.v,3)} ลบ.ม.</dd>${e.kg?`<dt>เหล็ก</dt><dd class="mono">${fmt(e.kg,1)} กก.</dd>`:""}
    <dt>กิจกรรม 4D</dt><dd>${t.id} ${esc(t.name)}<br><span class="mono">${thDate(t.s)} – ${thDate(t.f)}</span></dd>

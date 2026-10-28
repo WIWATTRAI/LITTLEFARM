@@ -310,6 +310,7 @@ for i, e in enumerate(E):
     rec = {"st": e["stage"], "g": e["cat"], "n": sid(e["name"]), "m": sid(e["mark"]), "t": TASK_ORDER.index(e["task"]),
            "b": sid(e["boq"]), "s": sid(e["src"]), "i": sid(e["ifc"])}
     if e.get("remove_task"): rec["r"] = TASK_ORDER.index(e["remove_task"])
+    if e.get("id"): rec["id"] = e["id"] + " · " + e["grid"]
     q = qty(e); rec["v"] = round(q["vol"], 3)
     kg = steel_kg(e)
     if kg: rec["kg"] = round(kg, 1)

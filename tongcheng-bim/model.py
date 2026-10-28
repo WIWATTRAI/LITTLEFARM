@@ -50,9 +50,10 @@ SITE = [(-12.50, -15.80), (0.88, -14.64), (62.04, -9.33), (68.29, -4.52), (75.19
 
 # auxiliary footprints (digitised from A101/S202)
 TANK = (-11.38, -13.34, 0.74, -6.71)          # ถังเก็บน้ำใต้ดิน x0,y0,x1,y1  TF -2.60 BF -2.85
-TRANS = (62.90, -8.44, 66.90, -5.89)          # ฐานหม้อแปลง
+TRANS = (62.40, -8.665, 67.40, -5.665)         # แท่นหม้อแปลง 5.00x3.00 ม. (A104) ศูนย์กลางตามเข็ม I22-TR ใน S201
 TOILET = (-7.365, 18.007, -4.962, 26.011)         # อาคารห้องน้ำ 4x8
-CHEM = (-4.015, 0.0, 0.0, 6.012)             # Chemical Drum Storage Room 21.84 m2
+CHEM = (-4.015, 0.0, 0.0, 6.012)
+CHEM_FFL = 0.40                                  # ระดับพื้นห้องเก็บสารเคมี (A103)             # Chemical Drum Storage Room 21.84 m2
 MDB = (54.07, 0.0, 60.0, 3.0)              # MDB ROOM 17.79 m2
 ROOMS = (41.2, 0.0, 54.07, 4.0)            # ห้องประกอบแนวกริด A (รอแบบสถาปัตย์)
 MEZZ = (0.0, 0.0, 18.0, 17.0)              # ชั้นลอย F8 306 m2
@@ -305,14 +306,14 @@ def build():
             member("rc", "IfcBeam", "คานคอดิน B1 0.20x0.60", "B1", (a[0], a[1], 0.20), (b[0], b[1], 0.20),
                    0.20, 0.60, "M24", "2.3.1 คานคอดิน คสล.", pre="BEAM")
     # B3 0.20x0.40 annex beams
-    for r, z in [(TOILET, LV["ffl"]-0.20), (CHEM, -0.20)]:   # S3: B3 ระดับพื้นชั้น 1 (ห้องน้ำ 23.30 ม.) / ระดับถนน (ห้องสารเคมี 17.15 ม.)
+    for r, z in [(TOILET, LV["ffl"]-0.20), (CHEM, CHEM_FFL-0.20)]:   # S3: B3 ระดับพื้นชั้น 1 (ห้องน้ำ 23.30 ม.) / ระดับถนน (ห้องสารเคมี 17.15 ม.)
         pts = rect(*r)
         for i in range(4):
             p0, p1 = pts[i], pts[(i+1) % 4]
             if r is CHEM and p0[0] == 0 and p1[0] == 0: continue
             member("rc", "IfcBeam", "คาน B3 0.20x0.40", "B3", (p0[0], p0[1], z), (p1[0], p1[1], z), 0.2, 0.4,
                    "M44", "2.3.5 คาน B3", pre="BEAM", src="แบบ S202 (ตำแหน่ง+ระดับ)")
-    member("rc", "IfcBeam", "คาน B3 0.20x0.40", "B3", (CHEM[0], 3.006, -0.20), (0.0, 3.006, -0.20), 0.2, 0.4,
+    member("rc", "IfcBeam", "คาน B3 0.20x0.40", "B3", (CHEM[0], 3.006, CHEM_FFL-0.20), (0.0, 3.006, CHEM_FFL-0.20), 0.2, 0.4,
            "M44", "2.3.5 คาน B3", pre="BEAM", src="แบบ S202 (ตำแหน่ง+ระดับ)")
 
     # ---------------- slabs ----------------
@@ -322,9 +323,11 @@ def build():
     road_outer = offset_rect_poly(SITE, 0.6)
     plan_prism("ext", "IfcSlab", "พื้นถนนรอบอาคาร S2 คสล. หนา 0.15 ม. (TOP ±0.00)", "S2", road_outer, holes,
                -0.15, 0.0, "M42", "4.1 งานพื้นถนนรอบอาคาร S2", pre="BASESLAB")
-    vbox("ext", "IfcSlab", "ฐานหม้อแปลง SF02 หนา 0.25", "SF02", *TRANS, -0.25, 0.10, "M45", "4.3 ฐานหม้อแปลง", pre="BASESLAB", src="สมมติขนาด")
+    vbox("ext", "IfcFooting", "ฐานแท่นหม้อแปลง 750 kVA 5.00x3.00x0.40 ม.", "TRP", *TRANS, -0.40, 0.0, "M45", "4.3.2 แท่นหม้อแปลง", pre="PAD_FOOTING", src="แบบ A104")
+    cx_, cy_ = (TRANS[0]+TRANS[2])/2, (TRANS[1]+TRANS[3])/2
+    vbox("ext", "IfcSlab", "แท่นวางหม้อแปลง 3.50x1.75x0.15 ม.", "TRP", cx_-1.75, cy_-0.875, cx_+1.75, cy_+0.875, 0.0, 0.15, "M45", "4.3.2 แท่นหม้อแปลง", pre="BASESLAB", src="แบบ A104")
     vbox("slab", "IfcSlab", "พื้นอาคารห้องน้ำ AF01 หนา 0.10 (TOP +0.50)", "AF01", *TOILET, LV["ffl"]-0.10, LV["ffl"], "M44", "2.4.2 พื้น AF01", pre="FLOOR", src="แบบ S202/S6.1")
-    vbox("slab", "IfcSlab", "พื้นห้องเก็บสารเคมี AF01 หนา 0.10 (TOP ±0.00)", "AF01", *CHEM, -0.10, 0.0, "M44", "2.4.2 พื้น AF01", pre="FLOOR", src="แบบ S202/S6.1")
+    vbox("slab", "IfcSlab", "พื้นห้องเก็บสารเคมี หนา 0.10 (TOP +0.40 ตาม A103)", "AF01", *CHEM, CHEM_FFL-0.10, CHEM_FFL, "M44", "2.4.2 พื้น AF01", pre="FLOOR", src="แบบ S202/S6.1")
     for r, nm in [(RAMP_N, "ทางลาดขนส่งด้านเหนือ (DN)"), (RAMP_S, "ทางลาดขนส่งด้านใต้ (DN)")]:
         y_in = r[3] if r[3] <= 0.01 else r[1]
         y_out = r[1] if r[3] <= 0.01 else r[3]
@@ -480,11 +483,33 @@ def build():
             vbox("annex", "IfcWall", f"{name} - ผนังก่ออิฐ", mark, a0, b0, a1, b1, z0, z1, task, boq, pre="PARTITIONING", src=src)
         vbox("annex", "IfcSlab", f"{name} - หลังคา/ฝ้า", mark, x0, y0, x1, y1, z1, z1+0.1, task, boq, pre="ROOF", src=src)
     room(TOILET, "อาคารห้องน้ำ", "WC", LV["ffl"], 3.0, "M44", "3.6 สถาปัตยกรรมอาคารประกอบ", "สมมติตำแหน่ง/ขนาดจาก A101")
-    room(CHEM, "ห้องเก็บสารเคมี (Chemical Drum Storage) 21.84 ตร.ม.", "CHEM", 0.0, 3.3, "M44", "3.6 สถาปัตยกรรมอาคารประกอบ", "แบบ A101")
+    room(CHEM, "ห้องเก็บสารเคมี (Chemical Drum Storage) 21.84 ตร.ม.", "CHEM", CHEM_FFL, 3.3, "M44", "3.6 สถาปัตยกรรมอาคารประกอบ", "แบบ A101")
     room(MDB, "ห้อง MDB 17.79 ตร.ม.", "MDB", 0.5, 3.3, "M39", "3.6 สถาปัตยกรรมอาคารประกอบ", "แบบ A101")
     room(ROOMS, "ห้องประกอบแนวกริด A (รอแบบ)", "RM", 0.5, 3.3, "M39", "3.6 สถาปัตยกรรมอาคารประกอบ", "สมมติ (A101)")
     vbox("ext", "IfcSlab", "พื้นทางเท้า/ลานหน้าห้องเก็บสารเคมี AF01", "AF01", -3.64, 6.0, 0.0, 10.6, -0.10, 0.0, "M42", "4.1 งานพื้นถนนรอบอาคาร", pre="BASESLAB", src="สมมติตำแหน่ง")
+    assign_ids()
     return ELEMENTS
+
+
+ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "SQ66", "TRP", "C1", "C2", "C3", "B1", "B3", "LB", "TB", "SC")
+
+
+def grid_tag(x, y):
+    gx = min(range(11), key=lambda i: abs(GX[i]-x)); gy = min(range(10), key=lambda j: abs(GY[j]-y))
+    tx = GXN[gx] if abs(GX[gx]-x) < 0.2 else f"{GXN[gx]}{'+' if x > GX[gx] else '-'}{abs(x-GX[gx]):.2f}"
+    ty = GYN[gy] if abs(GY[gy]-y) < 0.2 else f"{GYN[gy]}{'+' if y > GY[gy] else '-'}{abs(y-GY[gy]):.2f}"
+    return f"{tx}/{ty}"
+
+
+def assign_ids():
+    """รหัสชิ้นส่วนตามตารางโครงสร้าง: เรียงจากแนว A->J แล้ว 1->11"""
+    for mk in ID_MARKS:
+        els = [e for e in ELEMENTS if e["mark"] == mk and e["kind"] == "box" and e["ifc"] in ("IfcFooting", "IfcColumn", "IfcBeam", "IfcSlab")]
+        els.sort(key=lambda e: (round(e["c"][1], 1), round(e["c"][0], 1)))
+        for i, e in enumerate(els, 1):
+            e["id"] = f"{mk}-{i:03d}"
+            e["grid"] = grid_tag(e["c"][0], e["c"][1])
+            e["extra"]["รหัสชิ้นส่วน"] = e["id"]; e["extra"]["ตำแหน่งกริด"] = e["grid"]
 
 
 # =====================================================================
