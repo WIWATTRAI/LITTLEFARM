@@ -155,6 +155,12 @@ tr.st-ok td:first-child{box-shadow:inset 3px 0 var(--ok)}
     </div>
   </div>
 
+  <section class="reg" id="details">
+    <header><div><div class="eyebrow">แบบขยาย</div><h2>รายละเอียดรอยต่อและหน้าตัด</h2>
+      <p>สร้างจากค่าในโมเดลโดยตรง เปลี่ยนค่าใน model.py แล้วแบบนี้เปลี่ยนตาม</p></div></header>
+    <div id="dtl"></div>
+  </section>
+
   <section class="reg" id="verify">
     <header>
       <div><div class="eyebrow">ทวนสอบ</div><h2>BOQ เทียบแบบและโมเดล</h2>
@@ -386,6 +392,9 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyTheme)
 new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
 view("iso"); resize();
 (function loop(){ requestAnimationFrame(loop); ctl.update(); renderer.render(scene,cam); })();
+
+/* ---------- details ---------- */
+document.getElementById("dtl").innerHTML = (D.meta.details||[]).map(d=>`<h3 style="font-size:14px;margin:6px 0 8px">${esc(d.title)}</h3><div class="tbl" style="padding:8px">${d.svg}</div>`).join("");
 
 /* ---------- verification table ---------- */
 let vfilter="all";

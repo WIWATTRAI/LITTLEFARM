@@ -33,6 +33,7 @@ def qty(e):
 
 
 def steel_kg(e):
+    if "น้ำหนัก (กก.)" in e["extra"]: return e["extra"]["น้ำหนัก (กก.)"]
     w = e["extra"].get("น้ำหนัก (กก./ม.)")
     if w is None and e["mark"] == "MB": w = 21.3
     if w is None: return 0.0
@@ -131,6 +132,7 @@ def stage(e):
     if c in ("site", "earth", "temp"): return 0
     if c.startswith("pile"): return 1
     if c == "found" or m in ("F1A",) or (m == "UGT" and e.get("pre") == "BASESLAB"): return 2
+    if m == "AB": return 3                                   # anchor bolt หล่อพร้อมเสา คสล.
     if c == "rc": return 3
     if c == "slab" and m in ("S1", "AF01"): return 4
     if c == "steel" and m not in ("MC", "MB", "ST"): return 5
@@ -348,6 +350,8 @@ data = dict(
     verify=[dict(item=a, desc=b, boq=c, dwg=d, model=e_, st=s_, note=n) for (a, b, c, d, e_, s_, n) in V])
 with open(os.path.join(OUT, "model.json"), "w", encoding="utf-8") as fh:
     json.dump(data, fh, ensure_ascii=False, separators=(",", ":"))
+import details_svg
+data["meta"]["details"] = [dict(title="D01 รอยต่อเสาเหล็กกับหัวเสา คสล. (Base plate / Anchor bolt / Top plate)", svg=details_svg.baseplate_svg())]
 tpl = open(os.path.join(HERE, "viewer.html"), encoding="utf-8").read()
 html = tpl.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 with open(os.path.join(HERE, "index.html"), "w", encoding="utf-8") as fh:

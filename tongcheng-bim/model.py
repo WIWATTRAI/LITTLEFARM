@@ -124,6 +124,14 @@ def offset_rect_poly(poly, d):
 
 
 
+# ---------------- steel column base / top plate (ผู้ว่าจ้างกำหนดเบื้องต้น 28/10/69) ----------------
+BP = dict(t=0.020, w=0.200, l=0.450, grout=0.025, bolt_L=0.750, bolt_d=0.020, bolt_proj=0.060,
+          # ตำแหน่งสลัก 6 ตัว (u = ตามด้านยาว 450, v = ตามด้านสั้น 200) ระยะขอบ 50 มม. (สมมติ)
+          bolts=[(u, v) for u in (-0.175, 0.0, 0.175) for v in (-0.050, 0.050)])
+BP_KG = round(BP["t"]*BP["w"]*BP["l"]*7850, 2)                     # 14.13 กก./แผ่น
+AB_KG = round(BP["bolt_L"]*(20**2/162) + 2*0.064 + 0.032, 2)     # แกน M20 ยาว 0.75 ม. + แป้นเกลียว 2 + แหวน 1
+
+
 # ---------------- perimeter walls (shared by model + BOQ) ----------------
 WALL_T, WALL_TOP, TIE_Z, COL_W = 0.15, 4.35, 2.60, 0.30
 DOOR_BAYS = {"A": [(24.0, 30.0)], "J": [(36.0, 42.0)]}          # ประตูม้วน 6.00 ม. (เต็มช่วงเสา)
@@ -264,10 +272,30 @@ def build():
     for x, y in V["C2"]:
         vbox("rc", "IfcColumn", f"เสา คสล. C2 0.50x0.50 @ {tag(x, y)}", "C2", x-0.25, y-0.25, x+0.25, y+0.25,
              LV["f2p_bot"]+0.80, LV["col_top_rc"], "M23", "2.3.2 เสา คสล. C2", pre="COLUMN", src=POS)
-    for d in V["C1"] + [{"x": p[0], "y": p[1]} for p in V["C2"]]:
-        x, y = d["x"], d["y"]
-        vbox("steel", "IfcColumn", f"เสาเหล็ก H250x175x44.1 kg/m @ {tag(x, y)}", "SC1", x-0.0875, y-0.125, x+0.0875, y+0.125,
-             LV["col_top_rc"], LV["eave"], "M31", "2.5.1 เสาเหล็ก", pre="COLUMN", extra={"น้ำหนัก (กก./ม.)": 44.1})
+    # steel column H244x175x7x11 (44.1 kg/m) on RC column: grout + base plate + 6 anchor bolts, top plate at +9.00
+    #   แกนลึกของเสาเหล็กและด้านยาวแผ่นเหล็ก วางตามด้านยาวของเสา คสล. (ผู้ว่าจ้างกำหนด PL20x200x450 + M20x750 6 ชุด)
+    z_rc = LV["col_top_rc"]; z_pl = z_rc + BP["grout"]; z_col0 = z_pl + BP["t"]; z_col1 = LV["eave"] - BP["t"]
+    for d in V["C1"] + [{"x": p[0], "y": p[1], "long": "Y"} for p in V["C2"]]:
+        x, y = d["x"], d["y"]; lx = d["long"] == "X"
+        def R(u, v):  # local (u along long side, v across) -> plan box half-sizes
+            return (u, v) if lx else (v, u)
+        hx, hy = R(0.122, 0.0875)
+        vbox("steel", "IfcColumn", f"เสาเหล็ก H244x175x7x11 (H250x175) 44.1 kg/m @ {tag(x, y)}", "SC1", x-hx, y-hy, x+hx, y+hy,
+             z_col0, z_col1, "M31", "2.5.1 เสาเหล็ก", pre="COLUMN", extra={"น้ำหนัก (กก./ม.)": 44.1})
+        px, py = R(BP["l"]/2, BP["w"]/2)
+        vbox("steel", "IfcPlate", "แผ่นเหล็กฐาน (Base plate) PL20x200x450 มม.", "BP", x-px, y-py, x+px, y+py, z_pl, z_col0,
+             "M31", "2.5.7 แผ่นเหล็กฐาน", pre="USERDEFINED", src="ผู้ว่าจ้างกำหนด (เบื้องต้น)", extra={"น้ำหนัก (กก.)": BP_KG})
+        vbox("steel", "IfcPlate", "แผ่นเหล็กหัวเสา (Top plate) PL20x200x450 มม.", "TP", x-px, y-py, x+px, y+py, z_col1, LV["eave"],
+             "M31", "2.5.8 แผ่นเหล็กหัวเสา", pre="USERDEFINED", src="ผู้ว่าจ้างกำหนด (เบื้องต้น)", extra={"น้ำหนัก (กก.)": BP_KG})
+        gx_, gy_ = R(BP["l"]/2 + 0.025, BP["w"]/2 + 0.025)
+        vbox("steel", "IfcBuildingElementProxy", "ปูนเกราท์ไม่หดตัว หนา 25 มม. ใต้แผ่นเหล็กฐาน", "GR", x-gx_, y-gy_, x+gx_, y+gy_, z_rc, z_pl,
+             "M31", "2.5.6 ปูนเกราท์", pre="USERDEFINED", src="สมมติความหนา 25 มม.")
+        for (u, v) in BP["bolts"]:
+            bx, by = R(u, v)
+            vbox("steel", "IfcMechanicalFastener", "Anchor bolt M20x750 มม. + แป้นเกลียว 2 ตัว + แหวน (ฝังในเสา คสล.)", "AB",
+                 x+bx-0.010, y+by-0.010, x+bx+0.010, y+by+0.010, z_col0 + BP["bolt_proj"] - BP["bolt_L"], z_col0 + BP["bolt_proj"],
+                 "M23", "2.5.9 Anchor bolt", pre="ANCHORBOLT", src="ผู้ว่าจ้างกำหนด (เบื้องต้น) / ตำแหน่งสลักสมมติ",
+                 extra={"น้ำหนัก (กก.)": AB_KG, "ระยะฝังในคอนกรีต (ม.)": round(BP["bolt_L"] - BP["bolt_proj"] - BP["t"] - BP["grout"], 3)})
     # F1P-1 single-pile footings (11) + I26
     for x, y in V["F1P1"]:
         vbox("found", "IfcFooting", f"ฐานราก F1P-1 0.60x0.60x0.60 @ {tag(x, y)}", "F1P-1", x-0.3, y-0.3, x+0.3, y+0.3,
@@ -491,7 +519,7 @@ def build():
     return ELEMENTS
 
 
-ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "SQ66", "TRP", "C1", "C2", "C3", "B1", "B3", "LB", "TB", "SC")
+ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "SQ66", "TRP", "C1", "C2", "C3", "SC1", "B1", "B3", "LB", "TB", "SC")
 
 
 def grid_tag(x, y):
