@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap">
 <style>
-/* Layout: one full-height arcade screen — question on top, the 3D ellipsoid stage in the middle, a control grid at the bottom. Single dark look by choice. */
+/* Layout: one full-height arcade screen — question on top, a glass egg rendered with WebGL in the middle, a control grid at the bottom. Single dark look by choice. */
 :root {
   --bg: #0b0c10;
   --panel: #15171d;
@@ -139,7 +139,7 @@ input[type="range"] { accent-color: var(--rim); flex: 1; min-width: 0; height: 2
   </header>
 
   <div class="stage" id="stage">
-    <canvas id="cv" aria-label="ทรงรีสามมิติที่มีลูกบอลเด้งอยู่ข้างใน ลากเพื่อหมุนมุมมอง"></canvas>
+    <canvas id="cv" aria-label="ไข่แก้วทรงรีสามมิติที่มีลูกบอลเด้งอยู่ข้างใน ลากเพื่อหมุนมุมมอง"></canvas>
     <div class="hint" id="hint">ลากเพื่อหมุน · บีบหรือเลื่อนล้อเมาส์เพื่อซูม · แตะเพื่อยิงลูก</div>
   </div>
 
@@ -163,463 +163,501 @@ input[type="range"] { accent-color: var(--rim); flex: 1; min-width: 0; height: 2
   </div>
 </div>
 
-<script>
-(() => {
-  // World: prolate spheroid x²/A² + y²/B² + z²/A² = 1, long axis vertical (y up).
-  // Any ray from one focus reflects off the shell straight through the other focus.
-  const A = 1, B = 1.55;
-  const C = Math.sqrt(B * B - A * A);
-  const F_START = { x: 0, y: -C, z: 0 };  // lower focus: launch point
-  const F_TARGET = { x: 0, y: C, z: 0 };  // upper focus
-  const MAX_BALLS = 300;
-  const TRAIL_POINTS = 6;
-  const FOCUS_R = 0.05;
-  const R0 = 0.022, RMAX = 0.24;   // newborn and largest ball radius
-  const GHOST_TIME = 0.4;          // a new ball ignores collisions until clear of others, at most this long
-  const CAM_D = 6;                 // camera distance for the perspective
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-  const cv = document.getElementById('cv');
-  const ctx = cv.getContext('2d');
-  const stage = document.getElementById('stage');
-  const $ = id => document.getElementById(id);
+// World: prolate spheroid x²/A² + y²/B² + z²/A² = 1, long axis vertical (y up).
+// Any ray from one focus reflects off the shell straight through the other focus.
+const A = 1, B = 1.55;
+const C = Math.sqrt(B * B - A * A);
+const F_START = { x: 0, y: -C, z: 0 };  // lower focus: launch point
+const F_TARGET = { x: 0, y: C, z: 0 };  // upper focus
+const MAX_BALLS = 300;
+const TRAIL_POINTS = 6;
+const FOCUS_R = 0.05;
+const R0 = 0.022, RMAX = 0.24;   // newborn and largest ball radius
+const GHOST_TIME = 0.4;          // a new ball ignores collisions until clear of others, at most this long
+const FLOOR_Y = -B - 0.2;
 
-  let balls = [], pops = [];
-  let hits = 0, popped = 0;
-  let mode = 'focus', auto = true, showTrails = true, collide = true, grow = true;
-  let speedMul = 1, growRate = 0.012, spawnClock = 0;
-  let flashTop = 0, flashBottom = 0;
-  let W = 1, H = 1, dpr = 1, baseScale = 1;
+const $ = id => document.getElementById(id);
+const cv = $('cv');
+const stage = $('stage');
 
-  // camera
-  const DEFAULT_VIEWS = [
-    { yaw: 0.6, pitch: 0.35 },   // tilted
-    { yaw: 0, pitch: 0 },        // side, like the original video
-    { yaw: 0, pitch: 1.5 },      // looking down the long axis
-  ];
-  let viewIdx = 0;
-  let yaw = DEFAULT_VIEWS[0].yaw, pitch = DEFAULT_VIEWS[0].pitch, zoom = 1;
-  let spin = true, spinPausedUntil = 0;
-  let cY = 1, sY = 0, cP = 1, sP = 0;
+let balls = [], hits = 0, popped = 0;
+let mode = 'focus', auto = true, showTrails = true, collide = true, grow = true;
+let speedMul = 1, growRate = 0.012, spawnClock = 0;
+let flashTop = 0, flashBottom = 0;
 
-  // ---------- sound ----------
-  let audio = null, soundOn = false, lastBeep = 0, lastPop = 0, noteIdx = 0;
-  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
-  function tone(freq, dur, type, vol) {
-    const now = audio.currentTime;
-    const o = audio.createOscillator(), g = audio.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(vol, now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    o.connect(g).connect(audio.destination);
-    o.start(now); o.stop(now + dur + 0.05);
+// ---------- sound ----------
+let audio = null, soundOn = false, lastBeep = 0, lastPop = 0, noteIdx = 0;
+const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+function tone(freq, dur, type, vol) {
+  const now = audio.currentTime;
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  o.connect(g).connect(audio.destination);
+  o.start(now); o.stop(now + dur + 0.05);
+}
+function beep() {
+  if (!soundOn || !audio || audio.currentTime - lastBeep < 0.045) return;
+  lastBeep = audio.currentTime;
+  tone(330 * Math.pow(2, SCALE[noteIdx++ % SCALE.length] / 12), 0.35, 'triangle', 0.07);
+}
+function popSound(size) {
+  if (!soundOn || !audio || audio.currentTime - lastPop < 0.04) return;
+  lastPop = audio.currentTime;
+  tone(700 - size * 1800, 0.12, 'sine', 0.06);
+}
+function unlockAudio() {
+  if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } }
+  if (audio && audio.state === 'suspended') audio.resume();
+}
+
+// ---------- physics ----------
+const HUES = 24;
+const radius = b => grow ? Math.min(RMAX, R0 + b.age * growRate) : R0;
+function randomDir() {
+  const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+  return { x: s * Math.cos(phi), y: u, z: s * Math.sin(phi) };
+}
+const q3 = (p, a, b) => (p.x * p.x + p.z * p.z) / (a * a) + p.y * p.y / (b * b);
+function randomInside() {
+  for (;;) {
+    const p = { x: (Math.random() * 2 - 1) * A, y: (Math.random() * 2 - 1) * B, z: (Math.random() * 2 - 1) * A };
+    if (q3(p, A * 0.85, B * 0.85) < 1) return p;
   }
-  function beep() {
-    if (!soundOn || !audio || audio.currentTime - lastBeep < 0.045) return;
-    lastBeep = audio.currentTime;
-    tone(330 * Math.pow(2, SCALE[noteIdx++ % SCALE.length] / 12), 0.35, 'triangle', 0.07);
+}
+function addBall(dir, from) {
+  if (balls.length >= MAX_BALLS) return;
+  const p = from || (mode === 'focus' ? { ...F_START } : randomInside());
+  const d = dir || randomDir();
+  balls.push({
+    x: p.x, y: p.y, z: p.z, vx: d.x, vy: d.y, vz: d.z,
+    age: 0, color: Math.floor(Math.random() * HUES),
+    pts: [{ x: p.x, y: p.y, z: p.z }],
+    nearTop: false, ghost: true, ghostT: GHOST_TIME, touching: false, dead: false,
+  });
+  $('nBalls').textContent = balls.length;
+}
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const L = dx * dx + dy * dy + dz * dz;
+  let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y, a.z + t * dz - p.z);
+}
+function checkFocus(b, a, e) {
+  const inTop = segDist(F_TARGET, a, e) < FOCUS_R;
+  if (inTop && !b.nearTop) { hits++; flashTop = 1; beep(); }
+  b.nearTop = inTop;
+  if (b.age > 0.2 && segDist(F_START, a, e) < FOCUS_R) flashBottom = Math.max(flashBottom, 0.6);
+}
+// The ball's centre bounces off the shell shrunk by its radius, so a big ball touches the glass with its surface.
+function stepBall(b, dist) {
+  const r = radius(b);
+  const a = Math.max(0.1, A - r), bb = Math.max(0.1, B - r);
+  const q0 = q3(b, a, bb);
+  if (q0 >= 0.999) { const k = Math.sqrt(0.998 / q0); b.x *= k; b.y *= k; b.z *= k; }
+  const ia = 1 / (a * a), ib = 1 / (bb * bb);
+  for (let iter = 0; iter < 4 && dist > 1e-9; iter++) {
+    const dx = b.vx * dist, dy = b.vy * dist, dz = b.vz * dist;
+    const n = { x: b.x + dx, y: b.y + dy, z: b.z + dz };
+    if (q3(n, a, bb) < 1) { checkFocus(b, b, n); b.x = n.x; b.y = n.y; b.z = n.z; return; }
+    const qa = (dx * dx + dz * dz) * ia + dy * dy * ib;
+    const qb = 2 * ((b.x * dx + b.z * dz) * ia + b.y * dy * ib);
+    const qc = q3(b, a, bb) - 1;
+    const t = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
+    const h = { x: b.x + dx * t, y: b.y + dy * t, z: b.z + dz * t };
+    checkFocus(b, b, h);
+    let gx = h.x * ia, gy = h.y * ib, gz = h.z * ia;
+    const gl = Math.hypot(gx, gy, gz); gx /= gl; gy /= gl; gz /= gl;
+    const dot = b.vx * gx + b.vy * gy + b.vz * gz;
+    b.vx -= 2 * dot * gx; b.vy -= 2 * dot * gy; b.vz -= 2 * dot * gz;
+    b.x = h.x * 0.999999; b.y = h.y * 0.999999; b.z = h.z * 0.999999;
+    b.pts.push({ x: b.x, y: b.y, z: b.z });
+    if (b.pts.length > TRAIL_POINTS) b.pts.shift();
+    dist *= (1 - t);
   }
-  function popSound(size) {
-    if (!soundOn || !audio || audio.currentTime - lastPop < 0.04) return;
-    lastPop = audio.currentTime;
-    tone(700 - size * 1800, 0.12, 'sine', 0.06);
-  }
-
-  // ---------- balls ----------
-  const HUES = 24;
-  const COLORS = Array.from({ length: HUES }, (_, i) => `hsl(${i * 360 / HUES}, 85%, 66%)`);
-  const radius = b => grow ? Math.min(RMAX, R0 + b.age * growRate) : R0;
-  function randomDir() {
-    const u = Math.random() * 2 - 1, phi = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
-    return { x: s * Math.cos(phi), y: u, z: s * Math.sin(phi) };
-  }
-  const q3 = (p, a, b) => (p.x * p.x + p.z * p.z) / (a * a) + p.y * p.y / (b * b);
-  function randomInside() {
-    for (;;) {
-      const p = { x: (Math.random() * 2 - 1) * A, y: (Math.random() * 2 - 1) * B, z: (Math.random() * 2 - 1) * A };
-      if (q3(p, A * 0.85, B * 0.85) < 1) return p;
+}
+// When two balls touch, the older one pops and the younger keeps flying.
+function collideAll() {
+  for (const b of balls) b.touching = false;
+  const n = balls.length;
+  let any = false;
+  for (let i = 0; i < n; i++) {
+    const p = balls[i]; if (p.dead) continue;
+    const rp = radius(p);
+    for (let j = i + 1; j < n; j++) {
+      const o = balls[j]; if (o.dead) continue;
+      const rs = rp + radius(o);
+      const dx = o.x - p.x; if (dx > rs || dx < -rs) continue;
+      const dy = o.y - p.y; if (dy > rs || dy < -rs) continue;
+      const dz = o.z - p.z;
+      if (dx * dx + dy * dy + dz * dz >= rs * rs) continue;
+      p.touching = o.touching = true;
+      if (p.ghost || o.ghost) continue;
+      const older = p.age >= o.age ? p : o;
+      older.dead = true; any = true;
+      popped++;
+      spawnPop(older);
+      popSound(radius(older));
+      if (older === p) break;
     }
   }
-  function addBall(dir, from) {
-    if (balls.length >= MAX_BALLS) return;
-    const p = from || (mode === 'focus' ? { ...F_START } : randomInside());
-    const d = dir || randomDir();
-    balls.push({
-      x: p.x, y: p.y, z: p.z, vx: d.x, vy: d.y, vz: d.z,
-      age: 0, color: Math.floor(Math.random() * HUES),
-      pts: [{ x: p.x, y: p.y, z: p.z }],
-      nearTop: false, ghost: true, ghostT: GHOST_TIME, touching: false, dead: false,
-    });
+  if (any) {
+    balls = balls.filter(b => !b.dead);
+    $('nPopped').textContent = popped;
     $('nBalls').textContent = balls.length;
   }
+  for (const b of balls) if (b.ghost && (!b.touching || b.ghostT <= 0)) b.ghost = false;
+}
 
-  function segDist(p, a, b) {
-    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-    const L = dx * dx + dy * dy + dz * dz;
-    let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / L : 0;
-    t = Math.max(0, Math.min(1, t));
-    return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y, a.z + t * dz - p.z);
-  }
-  function checkFocus(b, a, e) {
-    const inTop = segDist(F_TARGET, a, e) < FOCUS_R;
-    if (inTop && !b.nearTop) { hits++; flashTop = 1; beep(); }
-    b.nearTop = inTop;
-    if (b.age > 0.2 && segDist(F_START, a, e) < FOCUS_R) flashBottom = 1;
-  }
+// ---------- renderer and scene ----------
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+} catch (e) {
+  $('hint').hidden = false;
+  $('hint').textContent = 'เครื่องนี้เปิด WebGL ไม่ได้ จึงแสดงภาพสามมิติไม่ได้';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // The ball's centre bounces off the shell shrunk by its radius, so a big ball touches the wall with its surface.
-  function stepBall(b, dist) {
-    const r = radius(b);
-    const a = Math.max(0.1, A - r), bb = Math.max(0.1, B - r);
-    const q0 = q3(b, a, bb);
-    if (q0 >= 0.999) { const k = Math.sqrt(0.998 / q0); b.x *= k; b.y *= k; b.z *= k; }
-    const ia = 1 / (a * a), ib = 1 / (bb * bb);
-    for (let iter = 0; iter < 4 && dist > 1e-9; iter++) {
-      const dx = b.vx * dist, dy = b.vy * dist, dz = b.vz * dist;
-      const n = { x: b.x + dx, y: b.y + dy, z: b.z + dz };
-      if (q3(n, a, bb) < 1) { checkFocus(b, b, n); b.x = n.x; b.y = n.y; b.z = n.z; return; }
-      const qa = (dx * dx + dz * dz) * ia + dy * dy * ib;
-      const qb = 2 * ((b.x * dx + b.z * dz) * ia + b.y * dy * ib);
-      const qc = q3(b, a, bb) - 1;
-      const t = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
-      const h = { x: b.x + dx * t, y: b.y + dy * t, z: b.z + dz * t };
-      checkFocus(b, b, h);
-      let gx = h.x * ia, gy = h.y * ib, gz = h.z * ia;
-      const gl = Math.hypot(gx, gy, gz); gx /= gl; gy /= gl; gz /= gl;
-      const dot = b.vx * gx + b.vy * gy + b.vz * gz;
-      b.vx -= 2 * dot * gx; b.vy -= 2 * dot * gy; b.vz -= 2 * dot * gz;
-      b.x = h.x * 0.999999; b.y = h.y * 0.999999; b.z = h.z * 0.999999;
-      b.pts.push({ x: b.x, y: b.y, z: b.z });
-      if (b.pts.length > TRAIL_POINTS) b.pts.shift();
-      dist *= (1 - t);
-    }
-  }
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0c10);
+scene.fog = new THREE.Fog(0x0b0c10, 6, 13);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
 
-  // When two balls touch, the older one pops and the younger keeps flying.
-  function collideAll() {
-    for (const b of balls) b.touching = false;
-    const n = balls.length;
-    let any = false;
-    for (let i = 0; i < n; i++) {
-      const p = balls[i]; if (p.dead) continue;
-      const rp = radius(p);
-      for (let j = i + 1; j < n; j++) {
-        const o = balls[j]; if (o.dead) continue;
-        const rs = rp + radius(o);
-        const dx = o.x - p.x; if (dx > rs || dx < -rs) continue;
-        const dy = o.y - p.y; if (dy > rs || dy < -rs) continue;
-        const dz = o.z - p.z;
-        if (dx * dx + dy * dy + dz * dz >= rs * rs) continue;
-        p.touching = o.touching = true;
-        if (p.ghost || o.ghost) continue;
-        const older = p.age >= o.age ? p : o;
-        older.dead = true; any = true;
-        popped++;
-        pops.push({ x: older.x, y: older.y, z: older.z, r: radius(older), t: 0, color: older.color });
-        popSound(radius(older));
-        if (older === p) break;
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 60);
+const controls = new OrbitControls(camera, cv);
+controls.target.set(0, -0.15, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.1;
+controls.maxPolarAngle = Math.PI * 0.62;
+controls.minPolarAngle = 0.05;
+
+// lights: a soft key light that casts shadows, a cool rim from behind
+scene.add(new THREE.HemisphereLight(0xbfd8ff, 0x1a1410, 0.35));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(3, 7, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -3; key.shadow.camera.right = 3;
+key.shadow.camera.top = 3; key.shadow.camera.bottom = -3;
+key.shadow.camera.near = 1; key.shadow.camera.far = 16;
+key.shadow.radius = 4;
+key.shadow.bias = -0.0005;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x7fe9ff, 0.8);
+rim.position.set(-4, 2, -5);
+scene.add(rim);
+
+// floor: dark satin surface that catches shadows and the glow
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(14, 64),
+  new THREE.MeshStandardMaterial({ color: 0x101217, roughness: 0.7, metalness: 0.05, envMapIntensity: 0.25 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = FLOOR_Y;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// pedestal ring the glass egg sits in
+const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f99, roughness: 0.28, metalness: 1 });
+const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.72, 0.12, 64), metal);
+base.position.y = FLOOR_Y + 0.06;
+base.castShadow = true; base.receiveShadow = true;
+scene.add(base);
+const collar = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.035, 16, 96), metal);
+collar.rotation.x = Math.PI / 2;
+collar.position.y = -B * Math.sqrt(1 - 0.25) + 0.0;
+collar.castShadow = true;
+scene.add(collar);
+const posts = new THREE.Group();
+for (let i = 0; i < 3; i++) {
+  const a = i / 3 * Math.PI * 2;
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, collar.position.y - (FLOOR_Y + 0.12), 12), metal);
+  post.position.set(Math.cos(a) * 0.5, (collar.position.y + FLOOR_Y + 0.12) / 2, Math.sin(a) * 0.5);
+  post.castShadow = true;
+  posts.add(post);
+}
+scene.add(posts);
+
+// glass shell: an outer refracting surface and a faint inner back face
+const shellGeo = new THREE.SphereGeometry(1, 128, 96);
+const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({
+  color: 0xffffff, metalness: 0, roughness: 0.03, transmission: 1, thickness: 0.06, ior: 1.47,
+  clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.2, attenuationColor: new THREE.Color(0xd9fbff), attenuationDistance: 3,
+}));
+shell.scale.set(A, B, A);
+scene.add(shell);
+const inner = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({
+  color: 0xc8f6ff, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.08, side: THREE.BackSide, depthWrite: false, envMapIntensity: 1.5,
+}));
+inner.scale.set(A * 0.995, B * 0.995, A * 0.995);
+scene.add(inner);
+
+// foci: tiny glowing beads with a light inside, so passing balls catch a warm highlight
+function glowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.2, 'rgba(255,214,140,0.85)');
+  grd.addColorStop(0.5, 'rgba(255,150,60,0.25)'); grd.addColorStop(1, 'rgba(255,120,40,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const GLOW = glowTexture();
+function makeFocus(p, color) {
+  const grp = new THREE.Group();
+  grp.position.set(p.x, p.y, p.z);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 12), new THREE.MeshBasicMaterial({ color }));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(0.25);
+  const light = new THREE.PointLight(color, 0.4, 2.2, 2);
+  grp.add(bead, halo, light);
+  scene.add(grp);
+  return { halo, light };
+}
+const focusTop = makeFocus(F_TARGET, 0xffa24a);
+const focusBottom = makeFocus(F_START, 0xffd27a);
+
+// balls: one instanced mesh of glossy coloured spheres
+const ballMat = new THREE.MeshPhysicalMaterial({ roughness: 0.18, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.1 });
+const ballMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 32, 20), ballMat, MAX_BALLS);
+ballMesh.castShadow = true; ballMesh.receiveShadow = true;
+ballMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+ballMesh.frustumCulled = false;
+const PALETTE = Array.from({ length: HUES }, (_, i) => new THREE.Color().setHSL(i / HUES, 0.85, 0.5));
+for (let i = 0; i < MAX_BALLS; i++) ballMesh.setColorAt(i, PALETTE[0]);
+ballMesh.count = 0;
+scene.add(ballMesh);
+const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3();
+
+// trails: faint coloured lines through the last bounce points
+const TRAIL_SEGS = MAX_BALLS * TRAIL_POINTS;
+const trailPos = new Float32Array(TRAIL_SEGS * 6), trailCol = new Float32Array(TRAIL_SEGS * 6);
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol, 3).setUsage(THREE.DynamicDrawUsage));
+const trails = new THREE.LineSegments(trailGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+trails.frustumCulled = false;
+scene.add(trails);
+
+// pops: a bright flash that swells and fades where an older ball vanished
+const pops = [];
+const popGeo = new THREE.SphereGeometry(1, 20, 14);
+function spawnPop(b) {
+  let p = pops.find(x => !x.mesh.visible);
+  if (!p) {
+    if (pops.length >= 40) return;
+    p = { mesh: new THREE.Mesh(popGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })), t: 0, r: 0 };
+    scene.add(p.mesh); pops.push(p);
+  }
+  p.mesh.material.color.copy(PALETTE[b.color]);
+  p.mesh.position.set(b.x, b.y, b.z);
+  p.r = radius(b); p.t = 0; p.mesh.visible = true;
+}
+
+// ---------- camera framing and views ----------
+const VIEWS = [
+  { polar: 1.22, az: 0.6 },          // tilted
+  { polar: Math.PI / 2 - 0.02, az: 0 }, // side, like the original video
+  { polar: 0.12, az: 0 },            // looking down the long axis
+];
+let viewIdx = 0;
+function fitDistance() {
+  const fov = camera.fov * Math.PI / 180;
+  const needH = 2 * B * 1.32, needW = 2 * A * 1.5;
+  const dH = needH / 2 / Math.tan(fov / 2);
+  const dW = needW / 2 / Math.tan(fov / 2) / camera.aspect;
+  return Math.max(dH, dW) + A;
+}
+function setView(i) {
+  const v = VIEWS[i], d = fitDistance();
+  camera.position.set(
+    controls.target.x + d * Math.sin(v.polar) * Math.sin(v.az),
+    controls.target.y + d * Math.cos(v.polar),
+    controls.target.z + d * Math.sin(v.polar) * Math.cos(v.az));
+  controls.update();
+}
+function resize() {
+  const r = stage.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / Math.max(1, r.height);
+  camera.updateProjectionMatrix();
+  controls.minDistance = fitDistance() * 0.45;
+  controls.maxDistance = fitDistance() * 2.2;
+}
+
+// ---------- per-frame scene update ----------
+function syncScene() {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i], r = radius(b);
+    v3.set(b.x, b.y, b.z); s3.setScalar(r);
+    m4.compose(v3, q, s3);
+    ballMesh.setMatrixAt(i, m4);
+    ballMesh.setColorAt(i, PALETTE[b.color]);
+  }
+  ballMesh.count = balls.length;
+  ballMesh.instanceMatrix.needsUpdate = true;
+  if (ballMesh.instanceColor) ballMesh.instanceColor.needsUpdate = true;
+
+  trails.visible = showTrails;
+  if (showTrails) {
+    let k = 0;
+    for (const b of balls) {
+      const c = PALETTE[b.color];
+      const pts = b.pts;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], e = i + 1 < pts.length ? pts[i + 1] : b;
+        trailPos[k] = a.x; trailPos[k + 1] = a.y; trailPos[k + 2] = a.z;
+        trailPos[k + 3] = e.x; trailPos[k + 4] = e.y; trailPos[k + 5] = e.z;
+        for (let j = 0; j < 6; j += 3) { trailCol[k + j] = c.r; trailCol[k + j + 1] = c.g; trailCol[k + j + 2] = c.b; }
+        k += 6;
       }
     }
-    if (any) {
-      balls = balls.filter(b => !b.dead);
-      $('nPopped').textContent = popped;
-      $('nBalls').textContent = balls.length;
-    }
-    for (const b of balls) if (b.ghost && (!b.touching || b.ghostT <= 0)) b.ghost = false;
+    trailGeo.setDrawRange(0, k / 3);
+    trailGeo.attributes.position.needsUpdate = true;
+    trailGeo.attributes.color.needsUpdate = true;
+    trails.material.opacity = balls.length > 120 ? 0.25 : 0.4;
   }
 
-  // ---------- camera ----------
-  function updateCam() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); }
-  const pa = { x: 0, y: 0, s: 0, z: 0 }, pb = { x: 0, y: 0, s: 0, z: 0 };
-  function project(p, o) {
-    const x1 = p.x * cY + p.z * sY;
-    const z0 = -p.x * sY + p.z * cY;
-    const y1 = p.y * cP - z0 * sP;
-    const z1 = p.y * sP + z0 * cP;
-    const s = CAM_D / (CAM_D - z1) * baseScale * zoom;
-    o.x = W / 2 + x1 * s; o.y = H / 2 - y1 * s; o.s = s; o.z = z1;
-    return o;
+  focusTop.light.intensity = 0.4 + flashTop * 3;
+  focusTop.halo.scale.setScalar(0.22 + flashTop * 0.35);
+  focusBottom.light.intensity = 0.4 + flashBottom * 2;
+  focusBottom.halo.scale.setScalar(0.22 + flashBottom * 0.3);
+}
+function updatePops(dt) {
+  for (const p of pops) {
+    if (!p.mesh.visible) continue;
+    p.t += dt;
+    const k = p.t / 0.45;
+    if (k >= 1) { p.mesh.visible = false; continue; }
+    p.mesh.scale.setScalar(p.r * (1 + k * 1.8));
+    p.mesh.material.opacity = 0.9 * (1 - k);
   }
-  // camera-space vector -> world
-  function camToWorld(vx, vy, vz) {
-    const y = vy * cP + vz * sP;
-    const z0 = -vy * sP + vz * cP;
-    return { x: vx * cY - z0 * sY, y, z: vx * sY + z0 * cY };
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (auto && balls.length < MAX_BALLS) {
+    spawnClock += dt;
+    if (spawnClock > 0.9) { spawnClock = 0; addBall(); }
   }
-
-  // ---------- drawing ----------
-  const sprites = [];
-  const SPR = 64, SPR_CORE = 18;  // sprite canvas size and the ball radius drawn in it
-  (function buildSprites() {
-    for (const color of COLORS) {
-      const c = document.createElement('canvas');
-      c.width = c.height = SPR;
-      const g = c.getContext('2d'), m = SPR / 2;
-      const glow = g.createRadialGradient(m, m, SPR_CORE * 0.6, m, m, m);
-      glow.addColorStop(0, color); glow.addColorStop(1, 'rgba(0,0,0,0)');
-      g.globalAlpha = 0.45; g.fillStyle = glow; g.beginPath(); g.arc(m, m, m, 0, Math.PI * 2); g.fill();
-      g.globalAlpha = 1;
-      const body = g.createRadialGradient(m - SPR_CORE * 0.35, m - SPR_CORE * 0.35, 1, m, m, SPR_CORE);
-      body.addColorStop(0, '#ffffff'); body.addColorStop(0.25, color); body.addColorStop(1, color);
-      g.fillStyle = body; g.beginPath(); g.arc(m, m, SPR_CORE, 0, Math.PI * 2); g.fill();
-      sprites.push(c);
-    }
-  })();
-
-  // Shell wireframe: rings of latitude and lines of longitude.
-  const WIRE = [];
-  (function buildWire() {
-    const N = 48;
-    for (const lat of [-60, -30, 0, 30, 60]) {
-      const ph = lat * Math.PI / 180, ring = [];
-      for (let i = 0; i <= N; i++) { const t = i / N * Math.PI * 2; ring.push({ x: A * Math.cos(ph) * Math.cos(t), y: B * Math.sin(ph), z: A * Math.cos(ph) * Math.sin(t) }); }
-      WIRE.push(ring);
-    }
-    for (let k = 0; k < 8; k++) {
-      const lon = k / 8 * Math.PI * 2, ring = [];
-      for (let i = 0; i <= N / 2; i++) { const ph = -Math.PI / 2 + i / (N / 2) * Math.PI; ring.push({ x: A * Math.cos(ph) * Math.cos(lon), y: B * Math.sin(ph), z: A * Math.cos(ph) * Math.sin(lon) }); }
-      WIRE.push(ring);
-    }
-  })();
-  function drawWire(front) {
-    ctx.beginPath();
-    for (const ring of WIRE) {
-      for (let i = 1; i < ring.length; i++) {
-        project(ring[i - 1], pa); project(ring[i], pb);
-        if ((pa.z + pb.z >= 0) !== front) continue;
-        ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
-      }
-    }
-    ctx.stroke();
+  for (const b of balls) { b.age += dt; if (b.ghost) b.ghostT -= dt; }
+  const dist = 0.9 * speedMul * dt;
+  if (collide) {
+    const n = Math.max(1, Math.min(6, Math.ceil(dist / R0)));
+    for (let i = 0; i < n; i++) { for (const b of balls) stepBall(b, dist / n); collideAll(); }
+  } else {
+    for (const b of balls) stepBall(b, dist);
   }
-  // Outline: the points of the shell whose normal is perpendicular to the view direction.
-  function drawRim() {
-    const v = camToWorld(0, 0, 1);
-    let w = { x: v.x / A, y: v.y / B, z: v.z / A };
-    const wl = Math.hypot(w.x, w.y, w.z); w = { x: w.x / wl, y: w.y / wl, z: w.z / wl };
-    const t = Math.abs(w.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-    let e1 = { x: w.y * t.z - w.z * t.y, y: w.z * t.x - w.x * t.z, z: w.x * t.y - w.y * t.x };
-    const l1 = Math.hypot(e1.x, e1.y, e1.z); e1 = { x: e1.x / l1, y: e1.y / l1, z: e1.z / l1 };
-    const e2 = { x: w.y * e1.z - w.z * e1.y, y: w.z * e1.x - w.x * e1.z, z: w.x * e1.y - w.y * e1.x };
-    ctx.beginPath();
-    for (let i = 0; i <= 96; i++) {
-      const a = i / 96 * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-      const u = { x: c * e1.x + s * e2.x, y: c * e1.y + s * e2.y, z: c * e1.z + s * e2.z };
-      project({ x: A * u.x, y: B * u.y, z: A * u.z }, pa);
-      if (i === 0) ctx.moveTo(pa.x, pa.y); else ctx.lineTo(pa.x, pa.y);
-    }
-    ctx.strokeStyle = 'rgba(95, 227, 232, 0.18)'; ctx.lineWidth = 10 * dpr; ctx.stroke();
-    ctx.strokeStyle = '#5fe3e8'; ctx.lineWidth = 3 * dpr; ctx.stroke();
-  }
-  function drawFocus(f, flash, color) {
-    project(f, pa);
-    const r = Math.max(6 * dpr, FOCUS_R * pa.s) * (1 + flash * 0.5);
-    ctx.strokeStyle = color; ctx.lineWidth = 2 * dpr;
-    ctx.globalAlpha = 0.6 + flash * 0.4;
-    ctx.beginPath(); ctx.arc(pa.x, pa.y, r, 0, Math.PI * 2); ctx.stroke();
-    if (flash > 0.05) { ctx.globalAlpha = flash * 0.5; ctx.lineWidth = 6 * dpr; ctx.stroke(); }
-    ctx.globalAlpha = 1;
-  }
-
-  function draw() {
-    ctx.fillStyle = '#0b0c10';
-    ctx.fillRect(0, 0, cv.width, cv.height);
-
-    ctx.lineWidth = 1 * dpr;
-    ctx.strokeStyle = 'rgba(95, 227, 232, 0.10)';
-    drawWire(false);
-    drawFocus(F_TARGET, flashTop, '#f5a54a');
-    drawFocus(F_START, flashBottom, '#f5c25b');
-
-    if (showTrails) {
-      ctx.lineWidth = 1 * dpr;
-      ctx.globalAlpha = balls.length > 120 ? 0.4 : 0.65;
-      for (let h = 0; h < HUES; h++) {
-        ctx.strokeStyle = COLORS[h];
-        ctx.beginPath();
-        for (const b of balls) {
-          if (b.color !== h) continue;
-          project(b.pts[0], pa); ctx.moveTo(pa.x, pa.y);
-          for (let i = 1; i < b.pts.length; i++) { project(b.pts[i], pa); ctx.lineTo(pa.x, pa.y); }
-          project(b, pa); ctx.lineTo(pa.x, pa.y);
-        }
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // balls, far to near; nearer balls are brighter
-    for (const b of balls) { project(b, pa); b.sx = pa.x; b.sy = pa.y; b.ss = pa.s; b.sz = pa.z; }
-    const order = balls.slice().sort((p, q) => p.sz - q.sz);
-    for (const b of order) {
-      const size = radius(b) * b.ss * SPR / SPR_CORE;
-      ctx.globalAlpha = (b.ghost ? 0.5 : 1) * (0.55 + 0.45 * Math.max(0, Math.min(1, (b.sz + B) / (2 * B))));
-      ctx.drawImage(sprites[b.color], b.sx - size / 2, b.sy - size / 2, size, size);
-    }
-    ctx.globalAlpha = 1;
-
-    // pops: an expanding ring where an older ball vanished
-    for (const p of pops) {
-      project(p, pa);
-      const k = p.t / 0.45;
-      ctx.globalAlpha = Math.max(0, 1 - k);
-      ctx.strokeStyle = COLORS[p.color]; ctx.lineWidth = 2 * dpr;
-      ctx.beginPath(); ctx.arc(pa.x, pa.y, p.r * pa.s * (1 + k * 1.5), 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    ctx.lineWidth = 1 * dpr;
-    ctx.strokeStyle = 'rgba(95, 227, 232, 0.22)';
-    drawWire(true);
-    drawRim();
-  }
-
-  function resize() {
-    const r = stage.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const hintH = $('hint').hidden || getComputedStyle($('hint')).display === 'none' ? 0 : 18;
-    cv.width = Math.round(r.width * dpr);
-    cv.height = Math.round(r.height * dpr);
-    W = cv.width; H = cv.height - hintH * dpr;
-    baseScale = Math.min(W / (2 * A * 1.25), H / (2 * B * 1.12));
-  }
-
-  // ---------- loop ----------
-  let last = performance.now();
-  function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
-    if (spin && now > spinPausedUntil) yaw += dt * 0.25;
-    updateCam();
-    if (auto && balls.length < MAX_BALLS) {
-      spawnClock += dt;
-      if (spawnClock > 0.9) { spawnClock = 0; addBall(); }
-    }
-    for (const b of balls) { b.age += dt; if (b.ghost) b.ghostT -= dt; }
-    const dist = 0.9 * speedMul * dt;
-    if (collide) {
-      // substeps no longer than a newborn's radius so small fast balls can't pass through each other
-      const n = Math.max(1, Math.min(6, Math.ceil(dist / R0)));
-      for (let i = 0; i < n; i++) { for (const b of balls) stepBall(b, dist / n); collideAll(); }
-    } else {
-      for (const b of balls) stepBall(b, dist);
-    }
-    for (const p of pops) p.t += dt;
-    pops = pops.filter(p => p.t < 0.45);
-    flashTop *= 0.9; flashBottom *= 0.9;
-    $('nHits').textContent = hits;
-    draw();
-    requestAnimationFrame(frame);
-  }
-
-  // ---------- controls ----------
-  function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
-  function reset() {
-    balls = []; pops = []; hits = 0; popped = 0; spawnClock = 0;
-    $('nBalls').textContent = 0; $('nPopped').textContent = 0;
-    for (let i = 0; i < 8; i++) addBall();
-  }
-  function unlockAudio() {
-    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } }
-    if (audio && audio.state === 'suspended') audio.resume();
-  }
-  $('modeFocus').onclick = () => { mode = 'focus'; setPressed($('modeFocus'), true); setPressed($('modeRandom'), false); reset(); };
-  $('modeRandom').onclick = () => { mode = 'random'; setPressed($('modeFocus'), false); setPressed($('modeRandom'), true); reset(); };
-  $('add1').onclick = () => addBall();
-  $('add10').onclick = () => { for (let i = 0; i < 10; i++) addBall(); };
-  $('auto').onclick = () => { auto = !auto; setPressed($('auto'), auto); };
-  $('trails').onclick = () => { showTrails = !showTrails; setPressed($('trails'), showTrails); };
-  $('reset').onclick = reset;
-  $('spin').onclick = () => { spin = !spin; setPressed($('spin'), spin); };
-  $('view').onclick = () => {
-    viewIdx = (viewIdx + 1) % DEFAULT_VIEWS.length;
-    yaw = DEFAULT_VIEWS[viewIdx].yaw; pitch = DEFAULT_VIEWS[viewIdx].pitch; zoom = 1;
-    spin = viewIdx === 0; setPressed($('spin'), spin);
-  };
-  $('collide').onclick = () => {
-    collide = !collide; setPressed($('collide'), collide);
-    for (const b of balls) { b.ghost = true; b.ghostT = GHOST_TIME; }
-  };
-  $('grow').onclick = () => { grow = !grow; setPressed($('grow'), grow); };
-  $('speed').oninput = e => { speedMul = parseFloat(e.target.value); };
-  $('growRate').oninput = e => { growRate = parseFloat(e.target.value); };
-  $('sound').onclick = () => {
-    soundOn = !soundOn;
-    if (soundOn) unlockAudio();
-    if (!audio) soundOn = false;
-    setPressed($('sound'), soundOn);
-  };
-
-  // ---------- drag to rotate, pinch / wheel to zoom, tap to launch ----------
-  const pointers = new Map();
-  let pinchDist = 0, gesture = null;
-  cv.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 1) gesture = { x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
-    if (pointers.size === 2) {
-      const [p, q] = [...pointers.values()];
-      pinchDist = Math.hypot(p.x - q.x, p.y - q.y);
-      if (gesture) gesture.moved = true;
-    }
-  });
-  cv.addEventListener('pointermove', e => {
-    const prev = pointers.get(e.pointerId);
-    if (!prev) return;
-    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
-    prev.x = e.clientX; prev.y = e.clientY;
-    if (pointers.size === 1) {
-      if (gesture && Math.hypot(e.clientX - gesture.x0, e.clientY - gesture.y0) > 6) gesture.moved = true;
-      if (gesture && gesture.moved) {
-        yaw += dx * 0.008;
-        pitch = Math.max(-1.52, Math.min(1.52, pitch + dy * 0.008));
-        spinPausedUntil = performance.now() + 2500;
-      }
-    } else if (pointers.size === 2) {
-      const [p, q] = [...pointers.values()];
-      const d = Math.hypot(p.x - q.x, p.y - q.y);
-      if (pinchDist > 0) zoom = Math.max(0.5, Math.min(3, zoom * d / pinchDist));
-      pinchDist = d;
-    }
-  });
-  function endPointer(e) {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
-    if (pointers.size === 0 && gesture && !gesture.moved && e.type === 'pointerup' && performance.now() - gesture.t0 < 400) launchAt(e);
-    if (pointers.size < 2) pinchDist = 0;
-    if (pointers.size === 0) gesture = null;
-  }
-  cv.addEventListener('pointerup', endPointer);
-  cv.addEventListener('pointercancel', endPointer);
-  cv.addEventListener('wheel', e => {
-    e.preventDefault();
-    zoom = Math.max(0.5, Math.min(3, zoom * Math.exp(-e.deltaY * 0.0015)));
-  }, { passive: false });
-
-  // A tap fires a ball from the launch point toward the tapped spot, in the plane facing you.
-  function launchAt(e) {
-    unlockAudio();
-    const r = cv.getBoundingClientRect();
-    const tx = (e.clientX - r.left) * dpr, ty = (e.clientY - r.top) * dpr;
-    const from = mode === 'focus' ? { ...F_START } : randomInside();
-    project(from, pa);
-    let dx = tx - pa.x, dy = ty - pa.y;
-    if (Math.hypot(dx, dy) < 1) dx = 1;
-    const right = camToWorld(1, 0, 0), up = camToWorld(0, 1, 0);
-    let d = { x: right.x * dx - up.x * dy, y: right.y * dx - up.y * dy, z: right.z * dx - up.z * dy };
-    const l = Math.hypot(d.x, d.y, d.z); d = { x: d.x / l, y: d.y / l, z: d.z / l };
-    addBall(d, from);
-    if (!$('hint').hidden) { $('hint').hidden = true; resize(); }
-  }
-
-  window.addEventListener('resize', resize);
-  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
-  resize();
-  updateCam();
-  reset();
+  updatePops(dt);
+  flashTop *= 0.9; flashBottom *= 0.9;
+  $('nHits').textContent = hits;
+  syncScene();
+  controls.update();
+  renderer.render(scene, camera);
   requestAnimationFrame(frame);
-  window.__ellipse = { get balls() { return balls; }, get popped() { return popped; }, setView(y, p) { yaw = y; pitch = p; spin = false; } };
-})();
+}
+
+// ---------- controls ----------
+function setPressed(el, on) { el.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+function reset() {
+  balls = []; hits = 0; popped = 0; spawnClock = 0;
+  $('nBalls').textContent = 0; $('nPopped').textContent = 0;
+  for (let i = 0; i < 8; i++) addBall();
+}
+$('modeFocus').onclick = () => { mode = 'focus'; setPressed($('modeFocus'), true); setPressed($('modeRandom'), false); reset(); };
+$('modeRandom').onclick = () => { mode = 'random'; setPressed($('modeFocus'), false); setPressed($('modeRandom'), true); reset(); };
+$('add1').onclick = () => addBall();
+$('add10').onclick = () => { for (let i = 0; i < 10; i++) addBall(); };
+$('auto').onclick = () => { auto = !auto; setPressed($('auto'), auto); };
+$('trails').onclick = () => { showTrails = !showTrails; setPressed($('trails'), showTrails); };
+$('reset').onclick = reset;
+$('spin').onclick = () => { controls.autoRotate = !controls.autoRotate; setPressed($('spin'), controls.autoRotate); };
+$('view').onclick = () => {
+  viewIdx = (viewIdx + 1) % VIEWS.length;
+  setView(viewIdx);
+  controls.autoRotate = viewIdx === 0; setPressed($('spin'), controls.autoRotate);
+};
+$('collide').onclick = () => {
+  collide = !collide; setPressed($('collide'), collide);
+  for (const b of balls) { b.ghost = true; b.ghostT = GHOST_TIME; }
+};
+$('grow').onclick = () => { grow = !grow; setPressed($('grow'), grow); };
+$('speed').oninput = e => { speedMul = parseFloat(e.target.value); };
+$('growRate').oninput = e => { growRate = parseFloat(e.target.value); };
+$('sound').onclick = () => {
+  soundOn = !soundOn;
+  if (soundOn) unlockAudio();
+  if (!audio) soundOn = false;
+  setPressed($('sound'), soundOn);
+};
+
+// Tap (no drag) fires a ball from the launch point toward the tapped spot, on the plane facing the camera.
+let tap = null, pointersDown = 0;
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(), hit = new THREE.Vector3();
+cv.addEventListener('pointerdown', e => {
+  pointersDown++;
+  tap = pointersDown === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+});
+cv.addEventListener('pointermove', e => {
+  if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 6) tap = null;
+});
+const endPointer = e => {
+  pointersDown = Math.max(0, pointersDown - 1);
+  if (e.type === 'pointerup' && tap && pointersDown === 0 && performance.now() - tap.t < 400) launchAt(e);
+  if (pointersDown === 0) tap = null;
+};
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+function launchAt(e) {
+  unlockAudio();
+  const r = cv.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const from = mode === 'focus' ? { ...F_START } : randomInside();
+  const fv = new THREE.Vector3(from.x, from.y, from.z);
+  const facing = camera.getWorldDirection(new THREE.Vector3());
+  plane.setFromNormalAndCoplanarPoint(facing, fv);
+  let d;
+  if (raycaster.ray.intersectPlane(plane, hit) && hit.distanceTo(fv) > 1e-3) d = hit.sub(fv).normalize();
+  else d = new THREE.Vector3(0, 1, 0);
+  addBall({ x: d.x, y: d.y, z: d.z }, from);
+  if (!$('hint').hidden) $('hint').hidden = true;
+}
+
+window.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+resize();
+setView(0);
+reset();
+requestAnimationFrame(frame);
+window.__ellipse = { get balls() { return balls; }, get popped() { return popped; }, renderer };
 </script>
 </body>
 </html>
