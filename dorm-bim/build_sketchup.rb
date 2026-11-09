@@ -247,7 +247,16 @@ module DormBIM
     model = Sketchup.active_model
     model.start_operation('สร้าง Scene 4D', true)
     tasks = schedule['tasks'].select { |t| t['start'] }
-    model.pages.to_a.each { |p| model.pages.erase(p) if p.name.start_with?('4D ') }
+    # ไม่ลบ scene เดิม (การลบ scene ทำให้ SketchUp บนเครื่องผู้ใช้ค้าง) ใช้วิธีอัปเดต scene ชื่อเดิม
+    upsert = lambda do |name|
+      pg = model.pages[name]
+      if pg
+        pg.update
+        pg
+      else
+        model.pages.add(name)
+      end
+    end
     layers_for = lambda do |date|
       vis = ['4D-DONE เสร็จก่อน 9 พ.ย. 2569']
       tasks.each { |t| vis << task_tag_name(t['id'], schedule['tasks'].map { |x| [x['id'], x] }.to_h) if Date.parse(t['start']) <= date }
@@ -260,7 +269,7 @@ module DormBIM
     pages = []
     # ฉากเริ่มต้น
     all4d.each { |l| l.visible = (l.name.start_with?('4D-DONE')) }
-    p = model.pages.add('4D 00 สภาพ ณ 9 พ.ย. 2569 (ก่อนเริ่มแผน)')
+    p = upsert.call('4D 00 สภาพ ณ 9 พ.ย. 2569 (ก่อนเริ่มแผน)')
     p.description = 'งานโครงสร้างที่เสร็จก่อนแผน R3'
     pages << p.name
     while d <= stop
@@ -269,7 +278,7 @@ module DormBIM
       vis = layers_for.call(we)
       all4d.each { |l| l.visible = vis.include?(l.name) }
       active = tasks.select { |t| Date.parse(t['start']) <= we && Date.parse(t['finish']) >= d }.map { |t| t['id'] }
-      p = model.pages.add(format('4D %02d สัปดาห์ %s', idx, d.strftime('%d/%m/%Y')))
+      p = upsert.call(format('4D %02d สัปดาห์ %s', idx, d.strftime('%d/%m/%Y')))
       p.description = "กำลังทำ: #{active.join(', ')}"
       pages << p.name
       d += 7
