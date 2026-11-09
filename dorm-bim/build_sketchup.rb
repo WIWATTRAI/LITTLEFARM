@@ -6,8 +6,8 @@ require 'date'
 module DormBIM
   DICT = 'BIM4D'.freeze
   CAT_COLORS = {
-    'คานคอดิน' => [150, 150, 150], 'เสา' => [190, 190, 185], 'คาน' => [170, 175, 180],
-    'พื้น' => [205, 205, 200], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [70, 110, 160],
+    'คานคอดิน' => [120, 120, 120], 'เสา' => [204, 89, 77], 'คาน' => [89, 140, 102],
+    'พื้น' => [205, 205, 200], 'พื้นสำเร็จรูป' => [140, 178, 217], 'พื้นทับหน้า' => [230, 217, 140], 'เสาเอ็นคานเอ็น' => [140, 140, 140], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [70, 110, 160],
     'หลังคา' => [120, 60, 45], 'ผนัง' => [204, 158, 128],
     'งานฉาบ' => [237, 235, 225], 'ประตูหน้าต่าง' => [115, 77, 51], 'กระเบื้อง' => [217, 204, 178], 'สุขภัณฑ์' => [248, 248, 248]
   }.freeze
@@ -85,24 +85,31 @@ module DormBIM
   end
 
   # elements: hash จาก elements.json, schedule: hash จาก schedule.json
-  def self.build(elements, schedule)
+  # filter: lambda รับ element hash คืน true เพื่อสร้างเฉพาะบางส่วน (ส่งทีละชุดเพื่อไม่ให้ SketchUp ค้าง)
+  def self.build(elements, schedule, filter = nil)
     model = Sketchup.active_model
-    model.start_operation('สร้างโมเดลหอพัก A BIM-4D', true)
+    model.start_operation('สร้างโมเดลหอพัก A BIM-4D', true, false, false)
     tasks = {}
     schedule['tasks'].each { |t| tasks[t['id']] = t }
     f_cat = folder(model, 'หมวดงาน')
     f_4d = folder(model, '4D กิจกรรม')
-    root = model.entities.add_group
-    root.name = 'หอพัก A'
+    root = model.entities.grep(Sketchup::Group).find { |g| g.name == 'หอพัก A' }
+    unless root
+      root = model.entities.add_group
+      root.name = 'หอพัก A'
+    end
     groups = {}
+    root.entities.grep(Sketchup::Group).each { |cg| groups[cg.get_attribute(DICT, 'key')] = cg }
     count = 0
     elements['elements'].each do |e|
+      next if filter && !filter.call(e)
       key = "#{e['category']}|#{e['floor']}"
       cg = groups[key]
       unless cg
         cg = root.entities.add_group
         cg.name = "#{e['category']} ชั้น #{e['floor']}"
         cg.layer = tag(model, "#{e['category']}", f_cat)
+        cg.set_attribute(DICT, 'key', key)
         groups[key] = cg
       end
       g = cg.entities.add_group
