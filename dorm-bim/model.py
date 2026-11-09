@@ -244,7 +244,9 @@ WP_Y = 0.10                              # แนวอะเสจากขอ�
 OV_SIDE, OV_END = 1.195, 1.33
 yc = GY['CX']
 # ระนาบหลังคา: ท้องจันทันวางบนอะเส (หลังอะเส = +16.30 + 0.125) และผิวบนที่สันหลังคา = +20.00
-slope = (RIDGE - (ROOF_BEAM + 0.125 + RAF_BOT)) / (yc - (GY['A'] + WP_Y))   # tan ≈ 24°
+BASE_PL_T = 0.012                        # เพลทหัวเสา PL12x200x200 (ผู้ใช้กำหนด)
+RB = ROOF_BEAM + BASE_PL_T               # ท้องโครงเหล็กหลังคา (บนเพลทหัวเสา)
+slope = (RIDGE - (RB + 0.125 + RAF_BOT)) / (yc - (GY['A'] + WP_Y))   # tan ≈ 24°
 half = yc - GY['A']
 run = half + OV_SIDE
 z_eave = RIDGE - run * slope
@@ -272,9 +274,9 @@ def steel(eid, p0, p1, sec, double, name, mark):
                  weight_kg=round(L * sp['kg'] * (2 if double else 1), 2)))
 
 
-ZB = ROOF_BEAM + 0.0625                       # แกนขื่อ/อะเส 2C125 วางบนหัวเสา/ผนัง +16.30
-ZB_TOP = ROOF_BEAM + 0.125
-ZA = ROOF_BEAM + 0.05                         # แกนขื่อทางยาว 2C100
+ZB = RB + 0.0625                             # แกนขื่อ/อะเส 2C125 วางบนเพลทหัวเสา
+ZB_TOP = RB + 0.125
+ZA = RB + 0.05                               # แกนขื่อทางยาว 2C100
 Y_MID_N, Y_MID_S = GY['B'] + 2.55, GY['E'] - 2.55       # เสารับจันทันกลางช่วง (S107)
 Y_HIP_N = yc - (rx0 - GX[1])                  # แนวสะพานช่วงตะเข้ (ตรงกับระยะ 550 ใน S106)
 Y_HIP_S = yc + (rx0 - GX[1])
@@ -302,6 +304,22 @@ for gi in range(1, 9):
 # A ขื่อทางยาว แนว B C D E
 for r in COL_ROWS:
     steel(f'RF-TL-{r}', (GX[0] + WP_Y, GY[r], ZA), (GX[-1] - WP_Y, GY[r], ZA), 'C100', True, f'ขื่อทางยาว แนว {r}', 'A')
+
+# เพลทหัวเสา PL12x200x200 + J-BOLT M12 บนหัวเสา คสล. ชั้น 5 (ผู้ใช้กำหนด)
+JB_N, JB_EMBED, JB_PROJ, JB_PITCH = 4, 0.30, 0.05, 0.14
+for i in range(10):
+    for r in COL_ROWS:
+        x, y = GX[i], GY[r]
+        add(f'RF-BP-{i+1}{r}', 'โครงหลังคาเหล็ก', 5, 'A03.2',
+            prism([(x - 0.10, y - 0.10), (x + 0.10, y - 0.10), (x + 0.10, y + 0.10), (x - 0.10, y + 0.10)], ROOF_BEAM, BASE_PL_T),
+            name=f'PL เพลทหัวเสา 12x200x200 มม. เสา {i+1}/{r}', qty=dict(count=1, mark='PL', weight_kg=round(0.2 * 0.2 * 0.012 * 7850, 2)))
+        for k, (dx, dy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+            bx, by = x + dx * JB_PITCH / 2, y + dy * JB_PITCH / 2
+            add(f'RF-JB-{i+1}{r}-{k+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2',
+                member((bx, by, ROOF_BEAM - JB_EMBED), (bx, by, RB + JB_PROJ), 0.012, 0.012),
+                name=f'J-BOLT M12 เสา {i+1}/{r}', assumed=True,
+                qty=dict(count=1, mark='JB', length=round(JB_EMBED + BASE_PL_T + JB_PROJ, 3)))
+ASSUMPTIONS.append('J-BOLT M12 ต่อเพลท 4 ตัว ระยะ 140 มม. ฝัง 0.30 ม. โผล่เหนือเพลท 0.05 ม. (รอผู้ใช้ยืนยัน); เพลทวางทุกหัวเสา แนว B–E กริด 1–10')
 
 # C สะพานรับจันทัน (แนว x) ใต้จันทันด้านยาว
 bridges = []                                  # (eid, y, x0, x1)
@@ -344,6 +362,7 @@ for gi in range(2, 8):
 
 # E คานรับเสาดั้ง + F เสารับอกไก่ + G อกไก่
 Z_E = ROOF_BEAM + 2.44
+
 xs_king = [rx0] + [GX[i] for i in range(3, 7)] + [rx1]
 for k, x in enumerate(xs_king, 1):
     steel(f'RF-KB{k}', (x, GY['C'], Z_E), (x, GY['D'], Z_E), 'C125', True, 'คานรับเสาดั้ง', 'E')
