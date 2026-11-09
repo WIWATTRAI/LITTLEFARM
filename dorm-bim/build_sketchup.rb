@@ -11,6 +11,40 @@ module DormBIM
     'หลังคา' => [120, 60, 45], 'ผนัง' => [204, 158, 128],
     'งานฉาบ' => [237, 235, 225], 'ประตูหน้าต่าง' => [115, 77, 51], 'กระเบื้อง' => [217, 204, 178], 'สุขภัณฑ์' => [248, 248, 248]
   }.freeze
+  # หมวดงานสำหรับกรอง Tag: ST = โครงสร้าง, AR = สถาปัตย์
+  STRUCT_CATS = ['คานคอดิน', 'เสา', 'คาน', 'พื้น', 'พื้นสำเร็จรูป', 'พื้นทับหน้า', 'บันได', 'โครงหลังคาเหล็ก'].freeze
+  # ชิ้นส่วนที่ขึ้นด้วย Profile Builder 3
+  PB_CATS = ['เสา', 'คาน', 'คานคอดิน'].freeze
+
+  def self.discipline(cat)
+    STRUCT_CATS.include?(cat) ? ['ST', 'งานโครงสร้าง'] : ['AR', 'งานสถาปัตย์']
+  end
+
+  def self.pb_api
+    defined?(DM::ProfileBuilder3::PBAPI) ? DM::ProfileBuilder3::PBAPI : nil
+  end
+
+  # สร้างชิ้นส่วนด้วย Profile Builder 3: เสา (prism สี่เหลี่ยม) และคาน (member) คืน instance ของ PB
+  def self.pb_member(ents, e, mat_name, cache)
+    api = pb_api
+    geo = e['geom']
+    if geo['type'] == 'prism'
+      xs = geo['poly'].map { |a| a[0] }; ys = geo['poly'].map { |a| a[1] }
+      w = xs.max - xs.min; d = ys.max - ys.min
+      cx = (xs.max + xs.min) / 2.0; cy = (ys.max + ys.min) / 2.0
+      p0 = [cx, cy, geo['z0']]; p1 = [cx, cy, geo['z0'] + geo['t']]
+    else
+      w = geo['w']; d = geo['d']; p0 = geo['p0']; p1 = geo['p1']
+    end
+    pname = format('%s %dx%d', e['category'], (w * 1000).round, (d * 1000).round)
+    prof = (cache[pname] ||= api::Profile.rectangle(w.m, d.m, pname))
+    chain = api::Chain.new([pt(p0), pt(p1)])
+    pm = api::ProfileMember.add(ents, chain)
+    pm.profile = prof
+    pm.material_name = mat_name
+    pm.draw
+    pm.instance
+  end
 
   def self.pt(a)
     Geom::Point3d.new(a[0].m, a[1].m, a[2].m)
@@ -92,6 +126,14 @@ module DormBIM
     tasks = {}
     schedule['tasks'].each { |t| tasks[t['id']] = t }
     f_cat = folder(model, 'หมวดงาน')
+    f_disc = {}
+    if f_cat
+      ['งานโครงสร้าง', 'งานสถาปัตย์'].each do |n|
+        f_disc[n] = f_cat.folders.find { |f| f.name == n } || f_cat.add_folder(n)
+      end
+    end
+    use_pb = !pb_api.nil?
+    pb_cache = {}
     f_4d = folder(model, '4D กิจกรรม')
     root = model.entities.grep(Sketchup::Group).find { |g| g.name == 'หอพัก A' }
     unless root
@@ -108,14 +150,17 @@ module DormBIM
       unless cg
         cg = root.entities.add_group
         cg.name = "#{e['category']} ชั้น #{e['floor']}"
-        cg.layer = tag(model, "#{e['category']}", f_cat)
+        code, dname = discipline(e['category'])
+        cg.layer = tag(model, "#{code}-#{e['category']}", f_disc[dname] || f_cat)
         cg.set_attribute(DICT, 'key', key)
         groups[key] = cg
       end
-      g = cg.entities.add_group
-      g.name = e['id']
       geo = e['geom']
-      case geo['type']
+      mat = material(model, e['category'])
+      by_pb = use_pb && PB_CATS.include?(e['category'])
+      g = by_pb ? pb_member(cg.entities, e, mat.name, pb_cache) : cg.entities.add_group
+      g.name = e['id']
+      case (by_pb ? nil : geo['type'])
       when 'member' then box_member(g.entities, geo)
       when 'prism' then prism(g.entities, geo)
       when 'plate' then plate(g.entities, geo)
@@ -129,12 +174,14 @@ module DormBIM
           end
         end
       end
-      g.material = material(model, e['category'])
+      g.material = mat
       g.layer = tag(model, task_tag_name(e['task'], tasks), f_4d)
       t = tasks[e['task']]
       g.set_attribute(DICT, 'id', e['id'])
       g.set_attribute(DICT, 'name', e['name'])
       g.set_attribute(DICT, 'category', e['category'])
+      g.set_attribute(DICT, 'discipline', discipline(e['category'])[1])
+      g.set_attribute(DICT, 'tool', by_pb ? 'Profile Builder 3' : 'Ruby')
       g.set_attribute(DICT, 'floor', e['floor'])
       g.set_attribute(DICT, 'task_id', e['task'])
       g.set_attribute(DICT, 'task_name', t ? t['name'] : 'งานโครงสร้างเสร็จก่อนแผน R3')
