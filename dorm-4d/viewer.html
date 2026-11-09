@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>หอพักอาคาร A 4D</title>
+<style>
+:root{
+  --bg:#f3f4f1; --panel:#ffffff; --ink:#15262b; --ink-2:#56666a; --rule:#d5dad6;
+  --accent:#d9861c; --scene:#e9ecea;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1517; --panel:#151d20; --ink:#e3e9e7; --ink-2:#9fb0b2; --rule:#2a373b;
+  --accent:#f0a33c; --scene:#1a2326; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1517; --panel:#151d20; --ink:#e3e9e7; --ink-2:#9fb0b2; --rule:#2a373b;
+  --accent:#f0a33c; --scene:#1a2326; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,"Noto Sans Thai",Tahoma,sans-serif;font-size:14px;
+  display:grid;grid-template-rows:auto 1fr auto;height:100dvh}
+header{padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--panel)}
+header h1{font-size:17px;margin:0}
+header p{margin:2px 0 0;color:var(--ink-2);font-size:12px}
+main{position:relative;min-height:0;background:var(--scene)}
+canvas{display:block;width:100%;height:100%}
+#tasks{position:absolute;top:10px;left:10px;max-width:min(380px,calc(100% - 20px));max-height:calc(100% - 20px);overflow:auto;
+  background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;font-size:12px}
+#tasks h2{font-size:12px;margin:0 0 4px;color:var(--ink-2);font-weight:600}
+#tasks ul{margin:0;padding:0;list-style:none}
+#tasks li{padding:3px 0;border-top:1px solid var(--rule)}
+#tasks li:first-child{border-top:0}
+#tasks .id{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600;margin-right:4px}
+#tasks .d{color:var(--ink-2)}
+#tasks .none{color:var(--ink-2);font-style:italic}
+footer{display:grid;grid-template-columns:auto auto 1fr;gap:10px 14px;align-items:center;padding:10px 16px;background:var(--panel);border-top:1px solid var(--rule)}
+button{font:inherit;padding:6px 12px;border:1px solid var(--rule);border-radius:4px;background:var(--bg);color:var(--ink);cursor:pointer}
+#date{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;min-width:150px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.legend{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--ink-2);font-size:12px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+@media (max-width:600px){footer{grid-template-columns:auto 1fr}#range{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="sub"></p>
+</header>
+<main>
+  <canvas id="cv"></canvas>
+  <div id="tasks"><h2>กิจกรรมที่ทำในวันที่เลือก</h2><ul id="act"></ul></div>
+</main>
+<footer>
+  <button id="play" aria-pressed="false">▶ เล่น</button>
+  <div id="date"></div>
+  <div id="range"><input type="range" id="tl" min="0" max="0" value="0" aria-label="วันที่ในแผนงาน"></div>
+  <div class="legend" id="legend"></div>
+</footer>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+ "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const M = /*__ELEMENTS__*/null;
+const S = /*__SCHEDULE__*/null;
+
+/* ---------- dates ---------- */
+const DAY = 864e5;
+const P = s => new Date(s + "T00:00:00");
+const TH_M = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const thDate = d => `${d.getDate()} ${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+const tasks = S.tasks.filter(t => t.start && t.finish).map(t => ({...t, s: P(t.start), f: P(t.finish)}));
+const taskById = Object.fromEntries(tasks.map(t => [t.id, t]));
+const t0 = P(S.plan_start);
+const t1 = new Date(Math.max(...tasks.map(t => t.f.getTime())));
+const span = Math.round((t1 - t0) / DAY);
+const dayOf = i => new Date(t0.getTime() + i * DAY);
+
+document.getElementById("title").textContent = M.project;
+document.getElementById("sub").textContent =
+  `${M.elements.length.toLocaleString()} ชิ้นส่วน · ${tasks.length} กิจกรรม · ${thDate(t0)} – ${thDate(t1)} · ${S.source}`;
+
+/* ---------- scene (data axes: x = grid 1→10, y = grid A→F, z = up) ---------- */
+const cv = document.getElementById("cv");
+const renderer = new THREE.WebGLRenderer({canvas: cv, antialias: true, alpha: true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+cam.up.set(0, 0, 1);
+const ctl = new OrbitControls(cam, cv);
+ctl.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f86, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(-30, -40, 60);
+scene.add(sun);
+
+const xs = Object.values(M.grid.x), ys = Object.values(M.grid.y);
+const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 60),
+  new THREE.MeshLambertMaterial({color: 0xb9c0b4, transparent: true, opacity: 0.5}));
+ground.position.set(cx, cy, -0.6);
+scene.add(ground);
+
+const CAT_COL = {
+  "คานคอดิน":0x8d9496, "เสา":0x9aa6a8, "คาน":0xb3bcbd, "พื้น":0xc9cdc6, "บันได":0xa79f92,
+  "โครงหลังคาเหล็ก":0x3f6e86, "หลังคา":0x9a4b3a
+};
+const matDone = {};
+for (const c of new Set(M.elements.map(e => e.category)))
+  matDone[c] = new THREE.MeshLambertMaterial({color: CAT_COL[c] ?? 0xaaaaaa, side: THREE.DoubleSide});
+const matActive = new THREE.MeshLambertMaterial({color: 0xe08a1e, side: THREE.DoubleSide});
+
+const V = a => new THREE.Vector3(a[0], a[1], a[2]);
+function memberGeo(g) {
+  const p0 = V(g.p0), p1 = V(g.p1), dir = p1.clone().sub(p0), len = dir.length();
+  dir.normalize();
+  let side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 0, 1));
+  if (side.lengthSq() < 1e-6) side.set(1, 0, 0); else side.normalize();
+  const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+  const geo = new THREE.BoxGeometry(len, g.w, g.d);
+  const m = new THREE.Matrix4().makeBasis(dir, side, up);
+  m.setPosition(p0.clone().add(p1).multiplyScalar(0.5));
+  return geo.applyMatrix4(m);
+}
+function prismGeo(g) {
+  const sh = new THREE.Shape(g.poly.map(p => new THREE.Vector2(p[0], p[1])));
+  const geo = new THREE.ExtrudeGeometry(sh, {depth: g.t, bevelEnabled: false});
+  return geo.translate(0, 0, g.z0);
+}
+function plateGeo(g) {
+  // top face = given points, slab thickness t below it along the face normal
+  const top = g.pts.map(V), n = top.length;
+  const nrm = new THREE.Vector3().crossVectors(top[1].clone().sub(top[0]), top[2].clone().sub(top[0])).normalize();
+  if (nrm.z < 0) nrm.negate();
+  const bot = top.map(p => p.clone().addScaledVector(nrm, -g.t));
+  const pos = [], tri = (a, b, c) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  for (let i = 1; i < n - 1; i++) { tri(top[0], top[i], top[i + 1]); tri(bot[0], bot[i + 1], bot[i]); }
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; tri(top[i], bot[i], bot[j]); tri(top[i], bot[j], top[j]); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+const BUILD = {member: memberGeo, prism: prismGeo, plate: plateGeo};
+
+const items = [];
+for (const e of M.elements) {
+  const f = BUILD[e.geom.type];
+  if (!f) { console.warn("unknown geom", e.id, e.geom.type); continue; }
+  const mesh = new THREE.Mesh(f(e.geom), matDone[e.category]);
+  scene.add(mesh);
+  items.push({e, mesh, t: taskById[e.task] || null});
+}
+
+/* camera framing */
+const box = new THREE.Box3();
+items.forEach(i => box.expandByObject(i.mesh));
+const ctr = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3()).length();
+ctl.target.copy(ctr);
+cam.position.copy(ctr).add(new THREE.Vector3(-0.55, -0.85, 0.45).multiplyScalar(sz * 1.05));
+ctl.update();
+
+/* legend */
+document.getElementById("legend").innerHTML =
+  Object.keys(matDone).map(c => `<span><i style="background:#${matDone[c].color.getHexString()}"></i>${esc(c)}</span>`).join("") +
+  `<span><i style="background:#${matActive.color.getHexString()}"></i>กำลังทำในวันที่เลือก</span>`;
+
+/* ---------- 4D state ---------- */
+const tl = document.getElementById("tl");
+tl.max = span;
+let cur = 0;
+function refresh() {
+  const d = dayOf(cur);
+  let shown = 0;
+  for (const it of items) {
+    // elements with task "DONE" (or not in the plan) were finished before the plan start
+    if (!it.t) { it.mesh.visible = true; it.mesh.material = matDone[it.e.category]; shown++; continue; }
+    const vis = it.t.s <= d;
+    it.mesh.visible = vis;
+    if (vis) { shown++; it.mesh.material = d <= it.t.f ? matActive : matDone[it.e.category]; }
+  }
+  document.getElementById("date").textContent = thDate(d);
+  const act = tasks.filter(t => t.s <= d && d <= t.f);
+  const nEl = id => items.filter(i => i.e.task === id).length;
+  document.getElementById("act").innerHTML = act.length
+    ? act.map(t => { const n = nEl(t.id);
+        return `<li><span class="id">${esc(t.id)}</span>${esc(t.name)}<br><span class="d">${thDate(t.s)} – ${thDate(t.f)} · ${n ? n + " ชิ้นในโมเดล" : "ยังไม่มีชิ้นส่วนในโมเดล"}</span></li>`; }).join("")
+    : `<li class="none">ไม่มีกิจกรรมในวันนี้</li>`;
+  document.getElementById("act").insertAdjacentHTML("beforeend",
+    `<li class="d">แสดง ${shown.toLocaleString()} / ${items.length.toLocaleString()} ชิ้น</li>`);
+}
+tl.addEventListener("input", () => { cur = +tl.value; refresh(); });
+
+const playBtn = document.getElementById("play");
+let timer = null;
+function stop() { clearInterval(timer); timer = null; playBtn.textContent = "▶ เล่น"; playBtn.setAttribute("aria-pressed", "false"); }
+playBtn.addEventListener("click", () => {
+  if (timer) { stop(); return; }
+  if (cur >= span) cur = 0;
+  playBtn.textContent = "❚❚ หยุด"; playBtn.setAttribute("aria-pressed", "true");
+  timer = setInterval(() => { cur++; tl.value = cur; refresh(); if (cur >= span) stop(); }, 80);
+});
+
+/* ---------- render ---------- */
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  cam.aspect = r.width / Math.max(1, r.height);
+  cam.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+resize();
+refresh();
+(function loop() { requestAnimationFrame(loop); ctl.update(); renderer.render(scene, cam); })();
+</script>
+</body>
+</html>
