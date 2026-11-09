@@ -8,7 +8,8 @@ module DormBIM
   CAT_COLORS = {
     'คานคอดิน' => [150, 150, 150], 'เสา' => [190, 190, 185], 'คาน' => [170, 175, 180],
     'พื้น' => [205, 205, 200], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [70, 110, 160],
-    'หลังคา' => [120, 60, 45], 'ผนัง' => [225, 215, 195]
+    'หลังคา' => [120, 60, 45], 'ผนัง' => [204, 158, 128],
+    'งานฉาบ' => [237, 235, 225], 'ประตูหน้าต่าง' => [115, 77, 51], 'กระเบื้อง' => [217, 204, 178], 'สุขภัณฑ์' => [248, 248, 248]
   }.freeze
 
   def self.pt(a)
@@ -111,6 +112,15 @@ module DormBIM
       when 'member' then box_member(g.entities, geo)
       when 'prism' then prism(g.entities, geo)
       when 'plate' then plate(g.entities, geo)
+      when 'multi'
+        geo['parts'].each do |pp|
+          sg = g.entities.add_group
+          case pp['type']
+          when 'member' then box_member(sg.entities, pp)
+          when 'prism' then prism(sg.entities, pp)
+          when 'plate' then plate(sg.entities, pp)
+          end
+        end
       end
       g.material = material(model, e['category'])
       g.layer = tag(model, task_tag_name(e['task'], tasks), f_4d)
