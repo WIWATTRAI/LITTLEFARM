@@ -794,9 +794,32 @@ def summary():
     return Counter((e['category'], e['task']) for e in elements)
 
 
+def mirror_y(g):
+    """กลับแกน y (y' = F − y) ให้มุมมองด้านบนใน SketchUp ตรงกับแปลน (กริด 1 ซ้าย, กริด A ด้านบน)"""
+    Y = GY['F']
+    t = g['type']
+    if t == 'multi':
+        for q in g['parts']:
+            mirror_y(q)
+    elif t == 'member':
+        for k in ('p0', 'p1'):
+            g[k][1] = round(Y - g[k][1], 4)
+    elif t == 'prism':
+        g['poly'] = [[x, round(Y - y, 4)] for x, y in g['poly']][::-1]
+        if g.get('holes'):
+            g['holes'] = [[[x, round(Y - y, 4)] for x, y in h][::-1] for h in g['holes']]
+    elif t == 'plate':
+        g['pts'] = [[x, round(Y - y, 4), z] for x, y, z in g['pts']][::-1]
+
+
+ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
+
 if __name__ == '__main__':
-    model = dict(project='หอพักคนงาน 5 ชั้น อาคาร A (ชัยเสรี หนองแค)', units='m', axes='x=กริด1→10, y=กริดA→F, z=ระดับ',
-                 grid=dict(x={str(i + 1): v for i, v in enumerate(GX)}, y=GY), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
+    for e in elements:
+        mirror_y(e['geom'])
+    GYM = {k: round(GY['F'] - v, 4) for k, v in GY.items()}
+    model = dict(project='หอพักคนงาน 5 ชั้น อาคาร A (ชัยเสรี หนองแค)', units='m', axes='x=กริด1→10, y=กริดF(0)→A(15.5), z=ระดับ',
+                 grid=dict(x={str(i + 1): v for i, v in enumerate(GX)}, y=GYM), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
                  assumptions=ASSUMPTIONS, elements=elements)
     json.dump(model, open('elements.json', 'w'), ensure_ascii=False)
     for k, v in sorted(summary().items()):
