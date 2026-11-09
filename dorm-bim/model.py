@@ -21,17 +21,23 @@ COL_SEC = {0: (0.35, 0.50), 1: (0.35, 0.50), 2: (0.35, 0.50), 3: (0.30, 0.50), 4
 COL_ROWS = ['B', 'C', 'D', 'E']
 
 # คานซอย B5 (S102) ตำแหน่ง x
-B5_X = [1.5, 5.5, 8.5, 12.25, 16.0, 19.0, 23.0, 26.0, 30.0]
-STAIR_BAY = (3, 4)      # ช่วงกริด 4–5 (index 3..4) ระหว่าง B–C
+B5_X = [1.5, 5.5, 8.5, 12.5, 15.5, 19.5, 22.5, 26.5, 30.0]   # ตามระยะ 1.50/2.00 ในแปลน A-02 และผังคาน S-04
+STAIR_BAY = (3, 4)      # ช่วงกริด 4–5 (index 3..4)
+# บันไดหลัก (A-05): ชานพักในแถบยื่นด้านหน้า กว้าง 1.50, ช่วงบันไดละ 9 ลูกนอน x 0.30 = 2.70 จากแนว B, ลูกตั้ง 0.16 x 20
+ST_RUN_Y1 = 1.65 + 2.70                        # ปลายช่วงบันไดฝั่งห้อง (ขอบช่องเปิด)
 
 ASSUMPTIONS = [
     'แนวด้านยาวของเสา C1 (0.50) วางตามแกน y (ด้านสั้นอาคาร)',
     'หลังคาน = ระดับพื้นสำเร็จ − 0.10 ม. (ใต้พื้นสำเร็จรูป+topping)',
     'คานหลังคา +16.30 วางตามผังคานชั้น 2–5 (ไม่รวม B5) เพราะไม่มีผังคานหลังคา',
     'คานหลังคา +16.30 ผูกกับกิจกรรม A01 (เสาชั้น 5) เพราะแผนไม่มีรายการคานหลังคาแยก',
-    'หลังคาปั้นหยา: ระนาบผ่าน +16.30 ที่แนว A/F และสันที่ +20.00 แนว CX, ชายคายื่นด้านยาว 1.195 ม. ด้านสกัด 1.33 ม.',
-    'โครงถักหลังคาที่กริด 3–8, จันทัน C100x50 ระยะ 0.875 ม., หน้าตัดเหล็ก 2C แทนด้วยกล่องขนาดภายนอก',
-    'บันไดภายในช่วงกริด 4–5 ระหว่าง B–C สองช่วงต่อชั้น แทนด้วยแผ่นพื้นลาดหนา 0.15 ม.',
+    'หลังคาปั้นหยา: ผิวบนที่สัน +20.00 แนว CX, ท้องจันทันวางบนอะเส 2C125 (หลังอะเส +16.425) ได้ความลาด ≈24° ตาม S107, ชายคายื่นด้านยาว 1.195 ม. ด้านสกัด 1.33 ม.',
+    'โครงหลังคาตาม S106/S107: ขื่อ/อะเส/สะพาน/ตะเข้/อกไก่/คานรับเสาดั้ง 2C125x50x20x3.2, เสารับจันทัน/เสารับอกไก่/ขื่อทางยาว 2C100x50x20x3.2, จันทัน/เหล็กทะแยง C100x50x20x3.2 ระยะจันทัน 0.875 ม.',
+    '2C ขึ้นแบบประกบปากชนกันเป็นกล่อง (รอผู้ใช้ยืนยันว่าไม่ใช่ประกบหลัง); ไม่ได้ขึ้นแปสำเร็จรูปและเพลทรอยต่อ; น้ำหนักเหล็ก C125 6.13 กก./ม., C100 5.50 กก./ม.',
+    'ขื่อด้านสั้นวางทุกกริด 2–9 บนคานหลังคา, เสารับจันทันที่แนว B, กลางช่วง B–C (2.55 ม.), C, D และฝั่ง E; คานรับเสาดั้งที่ +18.74 (2.44 ม. จาก +16.30)',
+    'บันไดหลักตาม A-05: ช่วงกริด 4–5 ช่วงบันไดกว้าง 1.50 ช่องกลาง 0.40 ลูกนอน 0.30 x 9 ลูกตั้ง 0.16 x 20 ชานพักกว้าง 1.50 ในแถบยื่นด้านหน้า ที่ระดับพื้น +1.60; ท้องบันไดและชานพักหนา 0.12 ม. (สมมติ)',
+    'คานบันได BST1/BST2/BST3 200x400 ตาม S-04: BST1 ขอบช่องเปิดระดับพื้น, BST2 (กริด 4,5) และ BST3 (ขอบนอก) ระดับชานพัก',
+    'ระยะคานซอย B5 และผนังห้องน้ำปรับตามแปลน A-02/ผังคาน S-04 (เดิมใช้ S102)',
     'คานคอดิน: หลังคาน = +0.20 (ใต้พื้น GS 0.10 ม.)',
     'งานโครงสร้างทุกชิ้นที่ไม่มีในแผน R3 ถือว่าเสร็จก่อนวันเริ่มแผน 9 พ.ย. 2569 (กิจกรรม DONE)',
 ]
@@ -145,6 +151,9 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False):
 
 for f in (2, 3, 4, 5):
     beams_level(f, FL[f] - SLAB_T, 'DONE', f)
+# ช่วงชานพักบันได (กริด 4–5 แถบยื่นด้านหน้า) ไม่มีคานขอบ B4 และคานซอย B5 ระดับพื้น
+_drop = {f'B4-A4-5-L{f}' for f in (2, 3, 4, 5)} | {f'B5-4-AB-L{f}' for f in (2, 3, 4, 5)}
+elements[:] = [e for e in elements if e['id'] not in _drop]
 beams_level('R', ROOF_BEAM, 'A01', 5, with_b5=False, assumed=True)
 
 # ---------- พื้น ----------
@@ -152,50 +161,97 @@ x_min, x_max = GX[0] - 0.175, GX[-1] + 0.175
 add('GS-F1', 'พื้น', 1, 'DONE', prism([(x_min, GY['B']), (x_max, GY['B']), (x_max, GY['E']), (x_min, GY['E'])],
                                        FL[1] - GS_T, GS_T),
     name='พื้นชั้น 1 (GS)', qty=dict(area=round((x_max - x_min) * (GY['E'] - GY['B']), 3)))
-sx0, sx1 = GX[STAIR_BAY[0]] + 0.125, GX[STAIR_BAY[1]] - 0.125
-sy0, sy1 = GY['B'] + 0.125, GY['C'] - 0.125
+sx0, sx1 = GX[STAIR_BAY[0]] + 0.125, GX[STAIR_BAY[1]] - 0.125   # ผิวคาน B1 กริด 4/5
+sy0, sy1 = GY['B'] + 0.125, ST_RUN_Y1                            # ช่องเปิดบันได
+STRIP_Y1 = GY['B'] - 0.125                                       # แถบยื่นช่วงชานพัก (ไม่มีพื้นระดับชั้น)
+
+
+def slab_pieces():
+    """พื้นชั้น 2–5 เป็นสี่เหลี่ยมย่อย เว้นช่องบันไดและช่วงชานพัก"""
+    return [(x_min, sx0, GY['A'], GY['F']), (sx1, x_max, GY['A'], GY['F']),
+            (sx0, sx1, STRIP_Y1, sy0), (sx0, sx1, sy1, GY['F'])]
+
+
+def pieces_geom(z0, t):
+    return dict(type='multi', parts=[prism([(a, c), (b, c), (b, d), (a, d)], z0, t) for a, b, c, d in slab_pieces()])
+
+
+SLAB_AREA = round(sum((b - a) * (d - c) for a, b, c, d in slab_pieces()), 3)
 for f in (2, 3, 4, 5):
-    poly = [(x_min, GY['A']), (x_max, GY['A']), (x_max, GY['F']), (x_min, GY['F']), (x_min, GY['A'])]
-    # รูเปิดบันได: แบ่งพื้นเป็นสองแผ่นรอบช่องบันได
-    outer = [(x_min, GY['A']), (x_max, GY['A']), (x_max, GY['F']), (x_min, GY['F'])]
-    area = (x_max - x_min) * (GY['F'] - GY['A']) - (sx1 - sx0) * (sy1 - sy0)
-    hole = [[[sx0, sy0], [sx1, sy0], [sx1, sy1], [sx0, sy1]]]
-    add(f'PS-F{f}', 'พื้นสำเร็จรูป', f, 'DONE',
-        dict(type='prism', poly=[[round(a, 4), round(b, 4)] for a, b in outer], z0=FL[f] - SLAB_T, t=0.05, holes=hole),
-        name=f'แผ่นพื้นสำเร็จรูปชั้น {f} หนา 0.05 (PS)', qty=dict(area=round(area, 3)))
-    add(f'TP-F{f}', 'พื้นทับหน้า', f, 'DONE',
-        dict(type='prism', poly=[[round(a, 4), round(b, 4)] for a, b in outer], z0=FL[f] - 0.05, t=0.05, holes=hole),
-        name=f'คอนกรีตทับหน้า (Topping) ชั้น {f} หนา 0.05', qty=dict(area=round(area, 3), concrete=round(area * 0.05, 3)))
+    add(f'PS-F{f}', 'พื้นสำเร็จรูป', f, 'DONE', pieces_geom(FL[f] - SLAB_T, 0.05),
+        name=f'แผ่นพื้นสำเร็จรูปชั้น {f} หนา 0.05 (PS)', qty=dict(area=SLAB_AREA))
+    add(f'TP-F{f}', 'พื้นทับหน้า', f, 'DONE', pieces_geom(FL[f] - 0.05, 0.05),
+        name=f'คอนกรีตทับหน้า (Topping) ชั้น {f} หนา 0.05', qty=dict(area=SLAB_AREA, concrete=round(SLAB_AREA * 0.05, 3)))
 
-# ---------- บันได (2 ช่วงต่อชั้น) ----------
+# ---------- บันไดหลัก (A-05) ----------
+ST_T = 0.12
+RISER, TREAD, NSTEP = 0.16, 0.30, 9
+FX0, FX1 = GX[3] + 0.05, GX[3] + 0.05 + 1.50       # ช่วงที่ 1 (ฝั่งกริด 4) ขึ้นไปทางด้านหน้า
+GX0, GX1 = FX1 + 0.40, FX1 + 0.40 + 1.50           # ช่วงที่ 2 (ฝั่งกริด 5) กลับเข้าด้านใน
+LY0, LY1 = GY['A'] + 0.15, GY['B']                 # ชานพัก
+ASSUMPTIONS.append('บันไดหลักชั้น 4→5 ใช้รูปแบบเดียวกับชั้น 1→2 (A-05 แสดงชั้น 1–2)')
+
+
+def flight(x0, x1, y_start, direction, z_start):
+    """ช่วงบันได: ขั้นบันได (prism) + ท้องบันได (plate)"""
+    parts = []
+    for k in range(NSTEP):
+        ya = y_start + direction * k * TREAD
+        yb = ya + direction * TREAD
+        top = z_start + (k + 1) * RISER
+        parts.append(prism([(x0, min(ya, yb)), (x1, min(ya, yb)), (x1, max(ya, yb)), (x0, max(ya, yb))], top - RISER, RISER))
+    y_end = y_start + direction * NSTEP * TREAD
+    z_end = z_start + (NSTEP + 1) * RISER
+    parts.append(plate([(x0, y_start, z_start), (x1, y_start, z_start), (x1, y_end, z_end - RISER), (x0, y_end, z_end - RISER)], ST_T))
+    run_len = math.hypot(NSTEP * TREAD, NSTEP * RISER)
+    conc = (x1 - x0) * (run_len * ST_T + NSTEP * 0.5 * TREAD * RISER)
+    return dict(type='multi', parts=parts), round(conc, 3)
+
+
 for f in (1, 2, 3, 4):
-    z0, z1 = FL[f], FL[f + 1]
-    zm = (z0 + z1) / 2
-    xw = (sx1 - sx0) / 2
-    land_y = sy0 + 1.30          # ชานพักฝั่ง B
-    run_y0, run_y1 = land_y, sy1 - 0.0
-    t = 0.15
-    # ช่วงที่ 1: ขึ้นจากฝั่ง C ไปฝั่ง B (ซีกซ้าย)
-    add(f'ST-F{f}-1', 'บันได', f, 'DONE',
-        plate([(sx0, run_y1, z0), (sx0 + xw, run_y1, z0), (sx0 + xw, run_y0, zm), (sx0, run_y0, zm)], t),
-        assumed=True, name=f'บันไดชั้น {f}→{f+1} ช่วง 1')
-    add(f'ST-F{f}-L', 'บันได', f, 'DONE',
-        prism([(sx0, sy0), (sx1, sy0), (sx1, land_y), (sx0, land_y)], zm - t, t),
-        assumed=True, name=f'ชานพักชั้น {f}')
-    add(f'ST-F{f}-2', 'บันได', f, 'DONE',
-        plate([(sx0 + xw, run_y0, zm), (sx1, run_y0, zm), (sx1, run_y1, z1), (sx0 + xw, run_y1, z1)], t),
-        assumed=True, name=f'บันไดชั้น {f}→{f+1} ช่วง 2')
+    z0 = FL[f]
+    zm = z0 + 10 * RISER
+    g, c = flight(FX0, FX1, ST_RUN_Y1, -1, z0)
+    add(f'ST-F{f}-1', 'บันได', f, 'DONE', g, name=f'บันไดหลักชั้น {f}→{f+1} ช่วง 1 (ลูกตั้ง 1–10)',
+        qty=dict(width=1.50, risers=10, treads=NSTEP, concrete=c))
+    add(f'ST-F{f}-L', 'บันได', f, 'DONE', prism([(FX0, LY0), (GX1, LY0), (GX1, LY1), (FX0, LY1)], zm - ST_T, ST_T),
+        name=f'ชานพักบันไดชั้น {f} (S2) ระดับ +{zm:.2f}', assumed=True,
+        qty=dict(area=round((GX1 - FX0) * (LY1 - LY0), 3), concrete=round((GX1 - FX0) * (LY1 - LY0) * ST_T, 3)))
+    g, c = flight(GX0, GX1, LY1, +1, zm)
+    add(f'ST-F{f}-2', 'บันได', f, 'DONE', g, name=f'บันไดหลักชั้น {f}→{f+1} ช่วง 2 (ลูกตั้ง 11–20)',
+        qty=dict(width=1.50, risers=10, treads=NSTEP, concrete=c))
+    # คานชานพัก BST3 (ขอบนอก) และ BST2 (กริด 4, 5) ระดับชานพัก
+    zc = zm - 0.20
+    add(f'BST3-M{f}', 'คาน', f, 'DONE', member((GX[3] + 0.125, GY['A'] + 0.10, zc), (GX[4] - 0.125, GY['A'] + 0.10, zc), 0.20, 0.40),
+        name=f'BST3 คานชานพักชั้น {f}', qty=dict(length=3.25, concrete=round(3.25 * 0.2 * 0.4, 4)))
+    for k in (3, 4):
+        add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'] + 0.20, zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),
+            name=f'BST2 คานชานพักกริด {k+1} ชั้น {f}', qty=dict(length=1.20, concrete=round(1.2 * 0.2 * 0.4, 4)))
+for f in (2, 3, 4, 5):                             # BST1 ขอบช่องเปิดบันไดระดับพื้น
+    c = FL[f] - SLAB_T - 0.20
+    add(f'BST1-L{f}', 'คาน', f, 'DONE', member((sx0, ST_RUN_Y1 + 0.10, c), (sx1, ST_RUN_Y1 + 0.10, c), 0.20, 0.40),
+        name=f'BST1 คานขอบช่องบันไดชั้น {f}', qty=dict(length=round(sx1 - sx0, 3), concrete=round((sx1 - sx0) * 0.08, 4)))
 
-# ---------- หลังคา ----------
+# ---------- หลังคา (S106 ผังโครงหลังคา, S107 รูปตัดด้านสั้น) ----------
+# หน้าตัดเหล็ก (มอก. เหล็กรูปพรรณขึ้นรูปเย็น) h, b, c, t (ม.) และน้ำหนัก กก./ม. ต่อตัว
+STEEL = {'C125': dict(h=0.125, b=0.05, c=0.02, t=0.0032, kg=6.13),
+         'C100': dict(h=0.100, b=0.05, c=0.02, t=0.0032, kg=5.50)}
+# ชั้นวัสดุใต้ผิวหลังคา (วัดจากผิวบนหลังคา zroof ลงมา)
+SKIN_T, PURLIN_T = 0.03, 0.04            # แผ่นหลังคา, แปสำเร็จรูป (ไม่ได้ขึ้นแป)
+RAF_TOP = SKIN_T + PURLIN_T              # หลังจันทัน
+RAF_C = RAF_TOP + 0.05                   # แกนจันทัน C100
+RAF_BOT = RAF_TOP + 0.10                 # ท้องจันทัน = หลังสะพานรับจันทัน / หลังตะเข้สัน
+WP_Y = 0.10                              # แนวอะเสจากขอบคาน
 OV_SIDE, OV_END = 1.195, 1.33
 yc = GY['CX']
+# ระนาบหลังคา: ท้องจันทันวางบนอะเส (หลังอะเส = +16.30 + 0.125) และผิวบนที่สันหลังคา = +20.00
+slope = (RIDGE - (ROOF_BEAM + 0.125 + RAF_BOT)) / (yc - (GY['A'] + WP_Y))   # tan ≈ 24°
 half = yc - GY['A']
-slope = (RIDGE - ROOF_BEAM) / half            # tan
 run = half + OV_SIDE
 z_eave = RIDGE - run * slope
 ex0, ex1 = GX[0] - OV_END, GX[-1] + OV_END
 ey0, ey1 = GY['A'] - OV_SIDE, GY['F'] + OV_SIDE
-rx0, rx1 = ex0 + run, ex1 - run               # ปลายสันหลังคา
+rx0, rx1 = ex0 + run, ex1 - run               # ปลายสันหลังคา (ตะเข้สัน 45° ในแปลน)
 
 
 def zroof(x, y):
@@ -204,50 +260,109 @@ def zroof(x, y):
     return RIDGE - max(dy, dx) * slope
 
 
-# โครงถักที่กริด 3..8 (index 2..7)
-TR_TOP = (0.125, 0.10)   # 2C125x50 (กว้าง 0.10 ลึก 0.125)
+def steel(eid, p0, p1, sec, double, name, mark):
+    """ชิ้นส่วนเหล็กรูปตัวซี: double=True คือ 2C ประกบปากชนกันเป็นกล่อง"""
+    sp = STEEL[sec]
+    g = member(p0, p1, 2 * sp['b'] if double else sp['b'], sp['h'])
+    g['shape'] = '2C' if double else 'C'
+    g['sec'] = {k: sp[k] for k in ('h', 'b', 'c', 't')}
+    L = mlen(p0, p1)
+    secname = f"{'2' if double else ''}{sec}x50x20x3.2"
+    add(eid, 'โครงหลังคาเหล็ก', 5, 'A03.2', g, name=f'{mark} {name} {secname}',
+        qty=dict(length=round(L, 3), section=secname, mark=mark,
+                 weight_kg=round(L * sp['kg'] * (2 if double else 1), 2)))
+
+
+ZB = ROOF_BEAM + 0.0625                       # แกนขื่อ/อะเส 2C125 วางบนคานหลังคา
+ZB_TOP = ROOF_BEAM + 0.125
+ZA = ROOF_BEAM + 0.05                         # แกนขื่อทางยาว 2C100
+Y_MID_N, Y_MID_S = GY['B'] + 2.55, GY['E'] - 2.55       # เสารับจันทันกลางช่วง (S107)
+Y_HIP_N = yc - (rx0 - GX[1])                  # แนวสะพานช่วงตะเข้ (ตรงกับระยะ 550 ใน S106)
+Y_HIP_S = yc + (rx0 - GX[1])
+X_E0, X_E1 = GX[1], GX[8]                     # สะพานรับจันทันพรางด้านสกัด กริด 2 และ 9
+
+
+def z_bridge(x, y):
+    return zroof(x, y) - RAF_BOT - 0.0625     # แกนสะพาน 2C125 ใต้ท้องจันทัน
+
+
+def bridge_bot(x, y):
+    return zroof(x, y) - RAF_BOT - 0.125
+
+
+# B อะเส รอบอาคาร
+for k, (q0, q1) in enumerate((((GX[0], GY['A'] + WP_Y), (GX[-1], GY['A'] + WP_Y)),
+                               ((GX[0], GY['F'] - WP_Y), (GX[-1], GY['F'] - WP_Y)),
+                               ((GX[0] + WP_Y, GY['A'] + WP_Y), (GX[0] + WP_Y, GY['F'] - WP_Y)),
+                               ((GX[-1] - WP_Y, GY['A'] + WP_Y), (GX[-1] - WP_Y, GY['F'] - WP_Y)))):
+    steel(f'RF-WP{k+1}', (*q0, ZB), (*q1, ZB), 'C125', True, 'อะเส', 'B')
+# B ขื่อด้านสั้น ทุกกริด 2–9 (วางบนคานหลังคาแนว y)
+for gi in range(1, 9):
+    x = GX[gi]
+    steel(f'RF-TS{gi+1}', (x, GY['A'] + WP_Y, ZB), (x, GY['F'] - WP_Y, ZB), 'C125', True, f'ขื่อด้านสั้น กริด {gi+1}', 'B')
+# A ขื่อทางยาว แนว B C D E
+for r in COL_ROWS:
+    steel(f'RF-TL-{r}', (GX[0] + WP_Y, GY[r], ZA), (GX[-1] - WP_Y, GY[r], ZA), 'C100', True, f'ขื่อทางยาว แนว {r}', 'A')
+
+# C สะพานรับจันทัน (แนว x) ใต้จันทันด้านยาว
+bridges = []                                  # (eid, y, x0, x1)
+for r in ('B', 'C', 'D', 'E'):
+    dy = abs(GY[r] - yc)
+    bridges.append((f'RF-BR-{r}', GY[r], rx0 - dy, rx1 + dy))
+bridges += [('RF-BR-MN', Y_MID_N, GX[2], GX[7]), ('RF-BR-MS', Y_MID_S, GX[2], GX[7]),
+            ('RF-BR-HN1', Y_HIP_N, X_E0, GX[2]), ('RF-BR-HN2', Y_HIP_N, GX[7], X_E1),
+            ('RF-BR-HS1', Y_HIP_S, X_E0, GX[2]), ('RF-BR-HS2', Y_HIP_S, GX[7], X_E1)]
+for eid, y, x0, x1 in bridges:
+    z = z_bridge((x0 + x1) / 2, y)
+    steel(eid, (x0, y, z), (x1, y, z), 'C125', True, f'สะพานรับจันทัน y={y:.2f}', 'C')
+# C สะพานรับจันทันพรางด้านสกัด (แนว y) กริด 2 และ 9
+for k, x in enumerate((X_E0, X_E1)):
+    z = z_bridge(x, yc)
+    steel(f'RF-BR-END{k+1}', (x, Y_HIP_N, z), (x, Y_HIP_S, z), 'C125', True, f'สะพานรับจันทันพราง กริด {2 if k == 0 else 9}', 'C')
+
+# D เสารับจันทัน 2C100 บนขื่อด้านสั้น
+posts = []                                    # (x, y)
+for gi in range(2, 8):
+    for y in (GY['B'], Y_MID_N, GY['C'], GY['D'], Y_MID_S, GY['E']):
+        posts.append((GX[gi], y))
+for x in (X_E0, X_E1):
+    for y in (GY['B'], Y_HIP_N, GY['C'], GY['D'], Y_HIP_S, GY['E']):
+        posts.append((x, y))
+for x in (GX[2], GX[7]):                      # ปลายสะพานช่วงตะเข้
+    for y in (Y_HIP_N, Y_HIP_S):
+        posts.append((x, y))
+for n, (x, y) in enumerate(posts, 1):
+    zt = bridge_bot(x, y)
+    steel(f'RF-P{n:02d}', (x, y, ZB_TOP), (x, y, zt), 'C100', True, 'เสารับจันทัน', 'D')
+
+# I เหล็กทะแยง C100 (S107): หัวเสาแนว B → โคนเสากลาง, หัวเสากลาง → โคนเสาแนว C (และฝั่ง E/D)
+n = 0
 for gi in range(2, 8):
     x = GX[gi]
-    zb = ROOF_BEAM + 0.0625
-    yb0, ye0 = GY['B'], GY['E']
-    pts = []
-    add(f'TR{gi+1}-BC', 'โครงหลังคาเหล็ก', 5, 'A03.2', member((x, yb0, zb), (x, ye0, zb), 0.10, 0.125),
-        name=f'โครงถักกริด {gi+1} ขื่อ', assumed=True, qty=dict(length=round(ye0 - yb0, 3), section='2C125x50x20x3.2'))
-    for side, (ya, yb) in enumerate(((GY['B'], yc), (GY['E'], yc))):
-        za = zroof(x, ya) - 0.10
-        zt = RIDGE - 0.10
-        add(f'TR{gi+1}-TC{side+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member((x, ya, za), (x, yb, zt), 0.10, 0.125),
-            name=f'โครงถักกริด {gi+1} จันทันเอก', assumed=True,
-            qty=dict(length=round(mlen((x, ya, za), (x, yb, zt)), 3), section='2C125x50x20x3.2'))
-    for k, y in enumerate((GY['B'] + 2.55, GY['C'], yc, GY['D'], GY['E'] - 2.55)):
-        zt = zroof(x, y) - 0.15
-        add(f'TR{gi+1}-V{k+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member((x, y, zb + 0.06), (x, y, zt), 0.10, 0.10),
-            name=f'โครงถักกริด {gi+1} เสาตั้ง', assumed=True,
-            qty=dict(length=round(zt - zb, 3), section='2C100x50x20x3.2'))
-    for k, (ya, yb) in enumerate(((GY['B'] + 2.55, GY['C']), (GY['E'] - 2.55, GY['D']))):
-        p0 = (x, ya, zb + 0.06)
-        p1 = (x, yb, zroof(x, yb) - 0.15)
-        add(f'TR{gi+1}-D{k+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member(p0, p1, 0.10, 0.10),
-            name=f'โครงถักกริด {gi+1} ค้ำยัน', assumed=True, qty=dict(length=round(mlen(p0, p1), 3), section='2C100x50x20x3.2'))
+    for ya, yb in ((GY['B'], Y_MID_N), (Y_MID_N, GY['C']), (GY['E'], Y_MID_S), (Y_MID_S, GY['D'])):
+        n += 1
+        steel(f'RF-DG{n:02d}', (x, ya, bridge_bot(x, ya) - 0.05), (x, yb, ZB_TOP + 0.05), 'C100', False, 'เหล็กทะแยง', 'I')
 
-# อกไก่ ตะเฆ่สัน อะเส
-zr = RIDGE - 0.10
-add('RF-RIDGE', 'โครงหลังคาเหล็ก', 5, 'A03.2', member((rx0, yc, zr), (rx1, yc, zr), 0.10, 0.125),
-    name='อกไก่', assumed=True, qty=dict(length=round(rx1 - rx0, 3), section='2C125x50x20x3.2'))
+# E คานรับเสาดั้ง + F เสารับอกไก่ + G อกไก่
+Z_E = ROOF_BEAM + 2.44
+xs_king = [rx0] + [GX[i] for i in range(3, 7)] + [rx1]
+for k, x in enumerate(xs_king, 1):
+    steel(f'RF-KB{k}', (x, GY['C'], Z_E), (x, GY['D'], Z_E), 'C125', True, 'คานรับเสาดั้ง', 'E')
+    steel(f'RF-KP{k}', (x, yc, Z_E + 0.0625), (x, yc, bridge_bot(x, yc)), 'C100', True, 'เสารับอกไก่', 'F')
+    if x in (rx0, rx1):                       # เสารับคานรับเสาดั้งที่ปลายสัน ยืนบนขื่อทางยาว C/D
+        for r in ('C', 'D'):
+            steel(f'RF-KC{k}{r}', (x, GY[r], ZA + 0.05), (x, GY[r], Z_E - 0.0625), 'C100', True, 'เสารับคานรับเสาดั้ง', 'D')
+zr = z_bridge(rx0, yc)
+steel('RF-RIDGE', (rx0, yc, zr), (rx1, yc, zr), 'C125', True, 'อกไก่', 'G')
+
+# C ตะเข้สัน: หลังตะเข้เสมอหลังจันทัน
 for k, (cx, cy) in enumerate(((ex0, ey0), (ex1, ey0), (ex1, ey1), (ex0, ey1))):
     rx = rx0 if cx == ex0 else rx1
-    p0, p1 = (cx, cy, z_eave - 0.10), (rx, yc, zr)
-    add(f'RF-HIP{k+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member(p0, p1, 0.10, 0.125),
-        name='ตะเฆ่สัน', assumed=True, qty=dict(length=round(mlen(p0, p1), 3), section='2C125x50x20x3.2'))
-za = ROOF_BEAM + 0.0625
-for k, (p0, p1) in enumerate((((GX[0], GY['A'] + 0.1), (GX[-1], GY['A'] + 0.1)),
-                               ((GX[0], GY['F'] - 0.1), (GX[-1], GY['F'] - 0.1)),
-                               ((GX[0], GY['A'] + 0.1), (GX[0], GY['F'] - 0.1)),
-                               ((GX[-1], GY['A'] + 0.1), (GX[-1], GY['F'] - 0.1)))):
-    add(f'RF-WP{k+1}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member((*p0, za), (*p1, za), 0.10, 0.125),
-        name='อะเส', assumed=True, qty=dict(length=round(math.dist(p0, p1), 3), section='2C125x50x20x3.2'))
+    q0 = (cx, cy, z_eave - RAF_TOP - 0.0625)
+    q1 = (rx, yc, RIDGE - RAF_TOP - 0.0625)
+    steel(f'RF-HIP{k+1}', q0, q1, 'C125', True, 'ตะเข้สัน', 'C')
 
-# จันทัน C100x50 @0.875 บนระนาบด้านยาว (แนว y) และด้านสกัด (แนว x)
+# H จันทัน C100 @0.875 ด้านยาว (แนว y) และจันทันพรางด้านสกัด (แนว x)
 xs = []
 x = ex0 + 0.477
 while x < ex1 - 0.2:
@@ -256,7 +371,6 @@ n = 0
 for x in xs:
     for side in (0, 1):
         y_e = ey0 if side == 0 else ey1
-        # จุดบน: ชนสันหรือชนตะเฆ่
         if rx0 <= x <= rx1:
             y_t = yc
         else:
@@ -264,11 +378,8 @@ for x in xs:
             y_t = yc - d if side == 0 else yc + d
             if (side == 0 and y_t <= y_e) or (side == 1 and y_t >= y_e):
                 continue
-        p0 = (x, y_e, zroof(x, y_e) - 0.10)
-        p1 = (x, y_t, zroof(x, y_t) - 0.10)
         n += 1
-        add(f'RF-RAF{n:03d}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member(p0, p1, 0.05, 0.10),
-            name='จันทัน C100x50', assumed=True, qty=dict(length=round(mlen(p0, p1), 3), section='C100x50x20x3.2'))
+        steel(f'RF-RAF{n:03d}', (x, y_e, zroof(x, y_e) - RAF_C), (x, y_t, zroof(x, y_t) - RAF_C), 'C100', False, 'จันทัน', 'H')
 ys = []
 y = ey0 + 0.477
 while y < ey1 - 0.2:
@@ -277,16 +388,11 @@ for y in ys:
     for side in (0, 1):
         x_e = ex0 if side == 0 else ex1
         d = abs(y - yc)
-        x_t = (rx0 - (run - d) + 0) if False else None
-        # ตะเฆ่: |y-yc| = dx  -> x = rx0 - (yc_dist) ... จุดชนตะเฆ่ที่ dx == dy
         x_t = rx0 - d if side == 0 else rx1 + d
         if (side == 0 and x_t <= x_e + 0.05) or (side == 1 and x_t >= x_e - 0.05):
             continue
-        p0 = (x_e, y, zroof(x_e, y) - 0.10)
-        p1 = (x_t, y, zroof(x_t, y) - 0.10)
         n += 1
-        add(f'RF-RAF{n:03d}', 'โครงหลังคาเหล็ก', 5, 'A03.2', member(p0, p1, 0.05, 0.10),
-            name='จันทัน C100x50 (ด้านสกัด)', assumed=True, qty=dict(length=round(mlen(p0, p1), 3), section='C100x50x20x3.2'))
+        steel(f'RF-RAF{n:03d}', (x_e, y, zroof(x_e, y) - RAF_C), (x_t, y, zroof(x_t, y) - RAF_C), 'C100', False, 'จันทันพราง', 'H')
 
 # ผิวหลังคา + เชิงชาย (A03.3)
 E = lambda x, y: (x, y, z_eave)
@@ -610,7 +716,10 @@ for e in [e for e in elements if e['category'] == 'คาน']:
     g = e['geom']
     p0, p1 = g['p0'], g['p1']
     lv = e['id'].rsplit('-', 1)[1]          # L2..L5 / LR
-    f = 5 if lv == 'LR' else int(lv[1:]) - 1   # ชั้นที่คานเป็นเพดาน
+    if lv.startswith('M'):                  # คานชานพักบันได
+        f = int(lv[1:])
+    else:
+        f = 5 if lv == 'LR' else int(lv[1:]) - 1   # ชั้นที่คานเป็นเพดาน
     w, d = g['w'], g['d']
     horiz_x = abs(p1[0] - p0[0]) > abs(p1[1] - p0[1])
     parts = []
@@ -627,9 +736,8 @@ for e in [e for e in elements if e['category'] == 'คาน']:
         qty=dict(area=round(L * (w + 2 * d), 3), thickness=PL_BEAM))
 for f, task in ((2, 'A12'), (3, 'A15'), (4, 'A15'), (5, 'A15')):
     add(f'PL-CEIL-F{f}', 'งานฉาบ', f - 1, task,
-        prism([(x_min, GY['A']), (x_max, GY['A']), (x_max, GY['F']), (x_min, GY['F'])], FL[f] - SLAB_T - PL_T, PL_T),
-        name=f'ฉาบใต้ท้องพื้นชั้น {f} (เพดานชั้น {f-1})', assumed=True,
-        qty=dict(area=round((x_max - x_min) * (GY['F'] - GY['A']) - (sx1 - sx0) * (sy1 - sy0), 3)))
+        pieces_geom(FL[f] - SLAB_T - PL_T, PL_T),
+        name=f'ฉาบใต้ท้องพื้นชั้น {f} (เพดานชั้น {f-1})', assumed=True, qty=dict(area=SLAB_AREA))
 TILE_ROOM = dict(size='60x60 ซม.', w=0.60, model='ระบุภายหลัง')
 TILE_WC = dict(size='16x16 นิ้ว', w=0.4064, model='ระบุภายหลัง')
 ASSUMPTIONS.append('กระเบื้องห้องพัก โถงทางเดิน ระเบียง และโถงบันได 60x60 ซม., ห้องน้ำ 16x16 นิ้ว (ผู้ใช้กำหนด รุ่นระบุภายหลัง); ระเบียงใช้ 60x60 รอผู้ใช้ยืนยัน; จำนวนแผ่นคิดสุทธิไม่รวมเผื่อเสีย')

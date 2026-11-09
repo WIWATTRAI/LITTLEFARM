@@ -50,7 +50,53 @@ module DormBIM
     Geom::Point3d.new(a[0].m, a[1].m, a[2].m)
   end
 
+  # รูปตัด C ขอบพับ (lipped channel) ในพิกัดหน้าตัด (a ตามความกว้าง, b ตามความลึก) เปิดปากไปทาง +a
+  def self.c_section(sec, shift, mirror)
+    h = sec['h']; b = sec['b']; c = sec['c']; t = sec['t']
+    pts = [[0, -h / 2], [b, -h / 2], [b, -h / 2 + c], [b - t, -h / 2 + c], [b - t, -h / 2 + t], [t, -h / 2 + t],
+           [t, h / 2 - t], [b - t, h / 2 - t], [b - t, h / 2 - c], [b, h / 2 - c], [b, h / 2], [0, h / 2]]
+    pts.map { |a, bb| [(mirror ? -a : a) + shift, bb] }
+  end
+
+  # C เดี่ยว: แกนกลางหน้าตัดอยู่บนเส้น, 2C: ประกบปากชนกันเป็นกล่อง กว้าง 2b
+  def self.c_loops(g)
+    sec = g['sec']; b = sec['b']
+    if g['shape'] == '2C'
+      [c_section(sec, -b, false), c_section(sec, b, true)]
+    else
+      [c_section(sec, -b / 2.0, false)]
+    end
+  end
+
+  def self.member_frame(g)
+    p0 = pt(g['p0']); p1 = pt(g['p1'])
+    u = p1 - p0
+    return nil if u.length < 0.001
+    len = u.length
+    u.normalize!
+    z = Geom::Vector3d.new(0, 0, 1)
+    s = u.parallel?(z) ? Geom::Vector3d.new(1, 0, 0) : u * z
+    s.normalize!
+    t = s * u
+    t.normalize!
+    [p0, u, s, t, len]
+  end
+
+  def self.shape_member(ents, g)
+    fr = member_frame(g)
+    return unless fr
+    p0, u, s, t, len = fr
+    c_loops(g).each do |loop|
+      sg = ents.add_group
+      pts = loop.map { |a, bb| p0.offset(s, a.m).offset(t, bb.m) }
+      f = sg.entities.add_face(pts)
+      f.reverse! if f.normal.dot(u) < 0
+      f.pushpull(len)
+    end
+  end
+
   def self.box_member(ents, g)
+    return shape_member(ents, g) if g['shape']
     p0 = pt(g['p0']); p1 = pt(g['p1'])
     u = p1 - p0
     len = u.length

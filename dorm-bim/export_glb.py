@@ -36,6 +36,68 @@ def poly_prism(base, off):
     return v, tris
 
 
+def ear_clip(pts2):
+    """แบ่งรูปหลายเหลี่ยม 2 มิติ (เว้าได้) เป็นสามเหลี่ยม คืนดัชนี (ทวนเข็ม)"""
+    P = [tuple(p) for p in pts2]
+    area = sum(P[i][0] * P[(i + 1) % len(P)][1] - P[(i + 1) % len(P)][0] * P[i][1] for i in range(len(P)))
+    idx = list(range(len(P))) if area > 0 else list(range(len(P)))[::-1]
+    cross = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    def inside(p, a, b, c):
+        return cross(a, b, p) >= 0 and cross(b, c, p) >= 0 and cross(c, a, p) >= 0
+    tris = []
+    guard = 0
+    while len(idx) > 3 and guard < 1000:
+        guard += 1
+        for k in range(len(idx)):
+            i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % len(idx)]
+            a, b, c = P[i0], P[i1], P[i2]
+            if cross(a, b, c) <= 1e-12:
+                continue
+            if any(inside(P[j], a, b, c) for j in idx if j not in (i0, i1, i2)):
+                continue
+            tris.append((i0, i1, i2))
+            idx.pop(k)
+            break
+    tris.append(tuple(idx))
+    return tris
+
+
+def c_section(sec, shift, mirror):
+    h, b, c, t = sec['h'], sec['b'], sec['c'], sec['t']
+    pts = [(0, -h / 2), (b, -h / 2), (b, -h / 2 + c), (b - t, -h / 2 + c), (b - t, -h / 2 + t), (t, -h / 2 + t),
+           (t, h / 2 - t), (b - t, h / 2 - t), (b - t, h / 2 - c), (b, h / 2 - c), (b, h / 2), (0, h / 2)]
+    return [((-a if mirror else a) + shift, bb) for a, bb in pts]
+
+
+def shape_member(g):
+    p0, p1 = np.array(g['p0'], float), np.array(g['p1'], float)
+    u = p1 - p0
+    L = np.linalg.norm(u)
+    u = u / L
+    z = np.array([0, 0, 1.0])
+    s = np.array([1.0, 0, 0]) if abs(u @ z) > 0.999 else np.cross(u, z)
+    s /= np.linalg.norm(s)
+    t = np.cross(s, u)
+    sec, b = g['sec'], g['sec']['b']
+    loops = [c_section(sec, -b, False), c_section(sec, b, True)[::-1]] if g['shape'] == '2C' else [c_section(sec, -b / 2, False)]
+    V, T, base = [], [], 0
+    for lp in loops:
+        n = len(lp)
+        bot = np.array([p0 + s * a + t * bb for a, bb in lp])
+        top = bot + u * L
+        cap = ear_clip(lp)
+        # ด้านปลาย: สลับลำดับให้หันออก (ไม่สำคัญต่อการแสดงผลเพราะ flat normal ทั้งสองด้าน)
+        tris = [(a, c, b2) for a, b2, c in cap] + [(n + a, n + b2, n + c) for a, b2, c in cap]
+        for i in range(n):
+            j = (i + 1) % n
+            tris += [(i, j, n + j), (i, n + j, n + i)]
+        V.append(np.vstack([bot, top]))
+        T += [(a + base, b2 + base, c + base) for a, b2, c in tris]
+        base += 2 * n
+    return np.vstack(V), T
+
+
 def mesh(g):
     if g['type'] == 'multi':
         V, T, base = [], [], 0
@@ -45,6 +107,8 @@ def mesh(g):
             V.append(np.asarray(v, float))
             base += len(v)
         return np.vstack(V), T
+    if g['type'] == 'member' and g.get('shape'):
+        return shape_member(g)
     if g['type'] == 'member':
         p0, p1 = np.array(g['p0']), np.array(g['p1'])
         u = p1 - p0
@@ -107,7 +171,7 @@ def export(model, schedule, path):
     mats, mat_idx = [], {}
     for cat, c in COLORS.items():
         mat_idx[cat] = len(mats)
-        mats.append(dict(name=cat, pbrMetallicRoughness=dict(baseColorFactor=[*c, 1.0], metallicFactor=0.0, roughnessFactor=0.9)))
+        mats.append(dict(name=cat, doubleSided=(cat == 'โครงหลังคาเหล็ก'), pbrMetallicRoughness=dict(baseColorFactor=[*c, 1.0], metallicFactor=0.0, roughnessFactor=0.9)))
 
     def add_view(data, target):
         while len(buf) % 4:
