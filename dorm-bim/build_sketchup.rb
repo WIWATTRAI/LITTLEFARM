@@ -233,6 +233,16 @@ module DormBIM
             cg.entities.add_group
           end
       g.name = e['id']
+      # บานประตู: ใช้คอมโพเนนต์ที่ผู้ใช้ใส่ในโมเดล (เช่น door2.dxf) ถ้ามี แทนแผ่นตัวแทน
+      cdef = e['component'] && model.definitions[e['component']]
+      if cdef && geo['type'] == 'prism'
+        xs = geo['poly'].map { |p| p[0] }
+        ys = geo['poly'].map { |p| p[1] }
+        db = cdef.bounds
+        yc = (ys.min + ys.max) / 2.0
+        g.entities.add_instance(cdef, Geom::Transformation.translation([xs.min.m, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m]))
+        geo = { 'type' => 'component' }
+      end
       case (by_pb || by_comp ? nil : geo['type'])
       when 'member' then box_member(g.entities, geo)
       when 'prism' then prism(g.entities, geo)
@@ -254,7 +264,7 @@ module DormBIM
       g.set_attribute(DICT, 'name', e['name'])
       g.set_attribute(DICT, 'category', e['category'])
       g.set_attribute(DICT, 'discipline', discipline(e['category'])[1])
-      g.set_attribute(DICT, 'tool', by_pb ? 'Profile Builder 3' : (by_comp ? 'Component' : 'Ruby'))
+      g.set_attribute(DICT, 'tool', by_pb ? 'Profile Builder 3' : (by_comp ? 'Component' : (cdef ? e['component'] : 'Ruby')))
       g.set_attribute(DICT, 'floor', e['floor'])
       g.set_attribute(DICT, 'task_id', e['task'])
       g.set_attribute(DICT, 'task_name', t ? t['name'] : 'งานโครงสร้างเสร็จก่อนแผน R3')

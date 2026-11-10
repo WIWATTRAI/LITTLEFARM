@@ -15,6 +15,9 @@ RIDGE = 20.00
 FOOT_TOP = -0.30
 SLAB_T = 0.10           # พื้นสำเร็จรูป 0.05 + topping 0.05 (S911 แบบ PS)
 GS_T = 0.10             # พื้นชั้น 1 (GS)
+DROP = 0.075            # พื้นระเบียงหลังห้อง+ห้องน้ำ (แถบยื่น A–B, E–F) ต่ำกว่าห้องพัก/ทางเดิน (ผู้ใช้กำหนด 10 พ.ย. 2569)
+S1_T = 0.10             # พื้นหล่อในที่ S1 ห้องน้ำ (S911 แบบขยายพื้น S1 หนา 100)
+PLANK_W = 0.35          # แผ่นพื้นสำเร็จรูป 350x50 (S911)
 
 # เสา C1 (S910): ชั้น 1–2 0.35x0.50, ชั้น 3 0.30x0.50, ชั้น 4–5 0.30x0.40
 COL_SEC = {0: (0.35, 0.50), 1: (0.35, 0.50), 2: (0.35, 0.50), 3: (0.30, 0.50), 4: (0.30, 0.40), 5: (0.30, 0.40)}
@@ -104,7 +107,8 @@ for k in range(6):                      # k=0 ตอม่อ, 1..5 เสาช
 
 
 # ---------- คานชั้น 2–5 และคานหลังคา ----------
-def beams_level(lv, top, task, floor, with_b5=True, assumed=False):
+def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
+    """drop: ลดระดับหลังคานในแถบยื่น (B3, B4, B5) ใต้พื้นระเบียง/ห้องน้ำ"""
     sfx = f'L{lv}'
     for r in COL_ROWS:                  # B2 แนวยาว
         for i in range(9):
@@ -125,14 +129,14 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False):
             ya, yb = sorted((GY[a], GY[b]))
             y0 = ya + (0.10 if a == 'A' else 0.25)
             y1 = yb - (0.25 if a == 'A' else 0.10)
-            c = top - 0.25
+            c = top - drop - 0.25
             add(f'B3-{i+1}-{a}{b}-{sfx}', 'คาน', floor, task,
                 member((GX[i], y0, c), (GX[i], y1, c), 0.25, 0.50), assumed=assumed,
                 qty=dict(length=round(y1 - y0, 3), concrete=round((y1 - y0) * 0.25 * 0.5, 4)))
     for r in ('A', 'F'):                # B4 ขอบ
         y = GY[r] + (0.10 if r == 'A' else -0.10)
         for i in range(9):
-            c = top - 0.20
+            c = top - drop - 0.20
             L = 3.5 - 0.25
             add(f'B4-{r}{i+1}-{i+2}-{sfx}', 'คาน', floor, task,
                 member((GX[i] + 0.125, y, c), (GX[i + 1] - 0.125, y, c), 0.20, 0.40), assumed=assumed,
@@ -144,14 +148,14 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False):
                 y0, y1 = ya + 0.20, yb - 0.125
                 if a == 'E':
                     y0, y1 = ya + 0.125, yb - 0.20
-                c = top - 0.20
+                c = top - drop - 0.20
                 add(f'B5-{j+1}-{a}{b}-{sfx}', 'คาน', floor, task,
                     member((x, y0, c), (x, y1, c), 0.15, 0.40), assumed=assumed,
                     qty=dict(length=round(y1 - y0, 3), concrete=round((y1 - y0) * 0.15 * 0.4, 4)))
 
 
 for f in (2, 3, 4, 5):
-    beams_level(f, FL[f] - SLAB_T, 'DONE', f)
+    beams_level(f, FL[f] - SLAB_T, 'DONE', f, drop=DROP)
 # ช่วงชานพักบันได (กริด 4–5 แถบยื่นด้านหน้า) ไม่มีคานขอบ B4 และคานซอย B5 ระดับพื้น
 # และไม่มีคาน B2 แนว B ช่วงกริด 4–5 ระดับพื้น (ขวางทางเดินบนชานพัก) ใช้ BST1 ระดับชานพักแทน
 _drop = {f'B4-A4-5-L{f}' for f in (2, 3, 4, 5)} | {f'B5-4-AB-L{f}' for f in (2, 3, 4, 5)} | {f'B2-B4-5-L{f}' for f in (2, 3, 4, 5)}
@@ -168,22 +172,94 @@ sy0, sy1 = GY['B'] + 0.125, ST_RUN_Y1                            # ช่อง�
 STRIP_Y1 = GY['B'] - 0.125                                       # แถบยื่นช่วงชานพัก (ไม่มีพื้นระดับชั้น)
 
 
-def slab_pieces():
-    """พื้นชั้น 2–5 เป็นสี่เหลี่ยมย่อย เว้นช่องบันไดและช่วงชานพัก"""
-    return [(x_min, sx0, GY['A'], GY['F']), (sx1, x_max, GY['A'], GY['F']),
-            (sx0, sx1, STRIP_Y1, sy0), (sx0, sx1, sy1, GY['F'])]
+RM_EDGE = 0.05                                                   # ครึ่งผนัง 0.035 + ฉาบ 0.015
+STRIP_N = GY['B'] - 0.125                                        # ขอบแถบยื่นด้านหน้า = ผิวคาน B2 แนว B
+STRIP_S = GY['E'] + 0.125                                        # ขอบแถบยื่นด้านหลัง = ผิวคาน B2 แนว E
 
 
-def pieces_geom(z0, t):
-    return dict(type='multi', parts=[prism([(a, c), (b, c), (b, d), (a, d)], z0, t) for a, b, c, d in slab_pieces()])
+def _bx(i):
+    """ขอบ x ของช่วงเสา i (ช่วงริมยื่นถึงขอบพื้น)"""
+    return (x_min if i == 0 else GX[i]), (x_max if i == 8 else GX[i + 1])
 
 
-SLAB_AREA = round(sum((b - a) * (d - c) for a, b, c, d in slab_pieces()), 3)
+def bay_split(i):
+    """คืน (toilet_x0, toilet_x1, balcony_x0, balcony_x1) ของช่วงเสา i"""
+    b5 = B5_X[i]
+    if abs(b5 - GX[i] - 1.5) < 1e-6:
+        return b5, GX[i + 1], GX[i], b5
+    return GX[i], b5, b5, GX[i + 1]
+
+
+def slab_zones(f):
+    """พื้นชั้น f แยกตามช่วงเสา: [(id_suffix, kind, rects, top)]
+    kind: RM ห้องพัก/โถงบันได, COR ทางเดิน (แผ่นพื้น+ทับหน้า ผิวบน FL),
+          BL ระเบียง (แผ่นพื้น+ทับหน้า), WC ห้องน้ำ (S1 หล่อในที่) ผิวบน FL - DROP"""
+    z = []
+    for i in range(9):
+        xa, xb = _bx(i)
+        tx0, tx1, bx0, bx1 = bay_split(i)
+        clamp = lambda a, b: ((xa if a == GX[i] else a), (xb if b == GX[i + 1] else b))   # ช่วงริมยื่นถึงขอบพื้น
+        for side in ('N', 'S'):
+            # พื้นห้องพักวางทับหลังคาน B2 ถึงผิวผนังกั้นห้องน้ำ/ระเบียง (ขั้นลด 0.075 อยู่ที่แนวผนัง)
+            ry = (GY['B'] - RM_EDGE, GY['C']) if side == 'N' else (GY['D'], GY['E'] + RM_EDGE)
+            sy = (GY['A'], STRIP_N) if side == 'N' else (STRIP_S, GY['F'])
+            if side == 'N' and i == STAIR_BAY[0]:     # โถงบันได: เว้นช่องบันได ไม่มีพื้นในแถบชานพัก
+                r0 = STRIP_N                          # คงขอบเดิมของโถงบันได
+                rects = [(xa, sx0, r0, ry[1]), (sx1, xb, r0, ry[1]),
+                         (sx0, sx1, r0, sy0), (sx0, sx1, sy1, ry[1])]
+                z.append((f'{side}{i+1}-RM', 'RM', rects, FL[f]))
+                continue
+            z.append((f'{side}{i+1}-RM', 'RM', [(xa, xb, ry[0], ry[1])], FL[f]))
+            t0, t1 = clamp(tx0, tx1)
+            b0, b1 = clamp(bx0, bx1)
+            z.append((f'{side}{i+1}-WC', 'WC', [(t0, t1, sy[0], sy[1])], FL[f] - DROP))
+            z.append((f'{side}{i+1}-BL', 'BL', [(b0, b1, sy[0], sy[1])], FL[f] - DROP))
+        z.append((f'COR{i+1}', 'COR', [(xa, xb, GY['C'], GY['D'])], FL[f]))
+    return z
+
+
+def rect_area(rects):
+    return sum((b - a) * (d - c) for a, b, c, d in rects)
+
+
+def rects_geom(rects, z0, t):
+    parts = [prism([(a, c), (b, c), (b, d), (a, d)], z0, t) for a, b, c, d in rects if b - a > 1e-6 and d - c > 1e-6]
+    return parts[0] if len(parts) == 1 else dict(type='multi', parts=parts)
+
+
+def plank_qty(rects):
+    """แผ่นพื้น 350 มม. พาดช่วงสั้นระหว่างคาน (ค่าสมมติ: แบบไม่ระบุทิศ): จำนวนแผ่น/ความยาว ต่อสี่เหลี่ยมย่อย"""
+    n, runs = 0, []
+    for a, b, c, d in rects:
+        lx, ly = b - a, d - c
+        span, width, dirn = (lx, ly, 'x') if lx <= ly else (ly, lx, 'y')
+        k = math.ceil(round(width / PLANK_W, 6))
+        n += k
+        runs.append(f'{k} แผ่น ยาว {span:.2f} ม. พาดแนว {dirn}')
+    return n, '; '.join(runs)
+
+
+ASSUMPTIONS.append('แผ่นพื้นสำเร็จรูป PS 350x50 พาดช่วงสั้นระหว่างคาน (แบบไม่ระบุทิศทาง) จำนวนแผ่นคิดจากความกว้างช่วง/0.35 ปัดขึ้น ความยาวคิดระยะศูนย์คาน')
+ASSUMPTIONS.append('พื้นระเบียงหลังห้องและห้องน้ำชั้น 2–5 ต่ำกว่าห้องพัก/ทางเดิน 0.075 ม.: หลังคาน B3/B4/B5 ในแถบยื่นลดลง 0.075 ม.; คาน B2 แนว B/E คงระดับเดิม พื้นห้องพักวางทับเต็มหลังคาน')
+
+SLAB_ZONES = {f: slab_zones(f) for f in (2, 3, 4, 5)}
 for f in (2, 3, 4, 5):
-    add(f'PS-F{f}', 'พื้นสำเร็จรูป', f, 'DONE', pieces_geom(FL[f] - SLAB_T, 0.05),
-        name=f'แผ่นพื้นสำเร็จรูปชั้น {f} หนา 0.05 (PS)', qty=dict(area=SLAB_AREA))
-    add(f'TP-F{f}', 'พื้นทับหน้า', f, 'DONE', pieces_geom(FL[f] - 0.05, 0.05),
-        name=f'คอนกรีตทับหน้า (Topping) ชั้น {f} หนา 0.05', qty=dict(area=SLAB_AREA, concrete=round(SLAB_AREA * 0.05, 3)))
+    for sfx, kind, rects, top in SLAB_ZONES[f]:
+        A = round(rect_area(rects), 3)
+        where = {'RM': 'ห้องพัก' if not sfx.startswith('N4') else 'โถงบันได', 'COR': 'ทางเดิน', 'BL': 'ระเบียง', 'WC': 'ห้องน้ำ'}[kind]
+        if kind == 'WC':
+            add(f'S1-F{f}-{sfx}', 'พื้น', f, 'DONE', rects_geom(rects, top - S1_T, S1_T),
+                name=f'พื้นหล่อในที่ S1 หนา 0.10 {where} ชั้น {f} {sfx[:-3]} (ต่ำกว่าพื้นห้อง 0.075)',
+                qty=dict(area=A, concrete=round(A * S1_T, 4), thickness=S1_T, top_level=round(top, 3)))
+            continue
+        n, runs = plank_qty(rects)
+        lvl = '' if kind in ('RM', 'COR') else ' (ต่ำกว่าพื้นห้อง 0.075)'
+        add(f'PS-F{f}-{sfx}', 'พื้นสำเร็จรูป', f, 'DONE', rects_geom(rects, top - SLAB_T, 0.05),
+            name=f'แผ่นพื้นสำเร็จรูป PS {where} ชั้น {f} {sfx}{lvl}', assumed=True,
+            qty=dict(area=A, planks=n, plank_layout=runs, top_level=round(top - 0.05, 3)))
+        add(f'TP-F{f}-{sfx}', 'พื้นทับหน้า', f, 'DONE', rects_geom(rects, top - 0.05, 0.05),
+            name=f'คอนกรีตทับหน้า {where} ชั้น {f} {sfx} หนา 0.05{lvl}',
+            qty=dict(area=A, concrete=round(A * 0.05, 4), top_level=round(top, 3)))
 
 # ---------- บันไดหลัก (A-05) ----------
 ST_T = 0.12
@@ -476,11 +552,12 @@ ASSUMPTIONS += [
 ]
 
 
-def beam_soffit(f, kind):
-    """ระดับท้องคานเหนือผนังของชั้น f; kind 'main' (คานลึก 0.50) / 'edge' (0.40)"""
+def beam_soffit(f, kind, strip=False):
+    """ระดับท้องคานเหนือผนังของชั้น f; kind 'main' (คานลึก 0.50) / 'edge' (0.40)
+    strip=True: ผนังในแถบยื่น (ระเบียง/ห้องน้ำ) ใต้คาน B3/B4/B5 ที่ลดระดับ DROP"""
     if f == 5:                      # ไม่มีคานหลังคา: ผนังชั้น 5 ก่อถึงใต้โครงเหล็กหลังคา +16.30
         return ROOF_BEAM
-    top = FL[f + 1] - SLAB_T
+    top = FL[f + 1] - SLAB_T - (DROP if strip else 0.0)
     return top - (0.50 if kind == 'main' else 0.40)
 
 
@@ -511,6 +588,7 @@ def rect_prism(axis, fixed, a0, a1, z0, z1, off, t):
 
 TIE = 0.10               # เสาเอ็น/คานเอ็น กว้าง 0.10 x หนาเท่าผนัง
 TIE_MAX = 3.50           # ผนังทึบยาวเกินนี้ใส่เสาเอ็นกลางผนัง
+SMALL_WIN = 1.00         # หน้าต่างกว้างไม่เกินนี้: เสาเอ็นข้างช่องเริ่มจากคานใต้วงกบ
 LINTEL_EXT = 0.20        # ทับหลัง/คานใต้วงกบยื่นเลยขอบช่องเปิดข้างละ
 
 
@@ -518,19 +596,31 @@ def tie_layout(a0, a1, z0, z1, openings):
     """คืน posts [(p0,p1)], beams [(x0,x1,zb0,zb1,kind)] ตามหลักผนังก่อ:
     เสาเอ็นข้างวงกบทุกช่อง, เสาเอ็นกลางช่วงผนังทึบที่ยาวเกิน 3.50 ม., คานเอ็นกลางความสูงผนัง,
     คานทับหลังเหนือช่องเปิด และคานใต้วงกบหน้าต่าง ยื่นเลยขอบข้างละ 0.20 ม."""
-    posts = []
+    posts = []          # (p0, p1, zb, zt)
+    full = []           # เสาเอ็นเต็มความสูง ใช้แบ่งช่วงผนังทึบ
     for c, w, sill, h in openings:
-        posts += [(c - w / 2 - TIE, c - w / 2), (c + w / 2, c + w / 2 + TIE)]
-    # ช่วงผนังทึบระหว่างปลายผนัง/เสาเอ็น
-    edges = sorted([(a0, a0)] + posts + [(a1, a1)])
+        pp = [(c - w / 2 - TIE, c - w / 2), (c + w / 2, c + w / 2 + TIE)]
+        if sill > 0 and w <= SMALL_WIN + 1e-9:
+            # หน้าต่าง/บานกระทุ้งกว้างไม่เกิน 1 ม.: เสาเอ็นข้างช่องตั้งบนคานใต้วงกบ ขึ้นถึงใต้คาน (ผู้ใช้กำหนด 10 พ.ย. 2569)
+            posts += [(p0, p1, z0 + sill, z1) for p0, p1 in pp]
+        else:
+            posts += [(p0, p1, z0, z1) for p0, p1 in pp]
+            full += pp
+    # ช่วงผนังทึบระหว่างปลายผนัง/เสาเอ็นเต็มความสูง
+    edges = sorted([(a0, a0)] + full + [(a1, a1)])
     for (_, e0), (s1, _) in zip(edges, edges[1:]):
         L = s1 - e0
         if L > TIE_MAX:
             n = int(L // TIE_MAX)
             for k in range(1, n + 1):
                 m = e0 + L * k / (n + 1)
-                posts.append((m - TIE / 2, m + TIE / 2))
-    posts = sorted((max(a0, p0), min(a1, p1)) for p0, p1 in posts)
+                zt = z1
+                for c, w, sill, h in openings:      # เสาเอ็นกลางที่ตรงใต้ช่องเปิด สิ้นสุดใต้คานใต้วงกบ
+                    if abs(m - c) < w / 2 + TIE / 2:
+                        zt = min(zt, z0 + sill - TIE)
+                if zt - z0 > 0.05:
+                    posts.append((m - TIE / 2, m + TIE / 2, z0, zt))
+    posts = sorted((max(a0, p0), min(a1, p1), zb, zt) for p0, p1, zb, zt in posts)
     beams = []
     zm = z0 + (z1 - z0) / 2
     beams.append((a0, a1, zm - TIE / 2, zm + TIE / 2, 'คานเอ็นกลางผนัง'))
@@ -546,9 +636,9 @@ def tie_layout(a0, a1, z0, z1, openings):
 
 def wall_cells(a0, a1, z0, z1, openings, posts, beams):
     xs = sorted({a0, a1} | {v for c, w, s, h in openings for v in (c - w / 2, c + w / 2)} |
-                {v for p in posts for v in p} | {v for b in beams for v in b[:2]})
+                {v for p in posts for v in p[:2]} | {v for b in beams for v in b[:2]})
     zs = sorted({z0, z1} | {z0 + s for c, w, s, h in openings} | {z0 + s + h for c, w, s, h in openings} |
-                {v for b in beams for v in b[2:4]})
+                {v for b in beams for v in b[2:4]} | {v for p in posts for v in p[2:4]})
     xs = [x for x in xs if a0 - 1e-9 <= x <= a1 + 1e-9]
     zs = [z for z in zs if z0 - 1e-9 <= z <= z1 + 1e-9]
     cells = {'mas': [], 'beam': {}}
@@ -556,14 +646,14 @@ def wall_cells(a0, a1, z0, z1, openings, posts, beams):
         if xb - xa < 1e-4:
             continue
         xm = (xa + xb) / 2
-        if any(p0 <= xm <= p1 for p0, p1 in posts):
-            continue
         run = None
         for za, zb in zip(zs, zs[1:]):
             if zb - za < 1e-4:
                 continue
             zm = (za + zb) / 2
-            if any(abs(xm - c) < w / 2 and z0 + s < zm < z0 + s + h for c, w, s, h in openings):
+            if any(p0 <= xm <= p1 and pb <= zm <= pt for p0, p1, pb, pt in posts):
+                kind = None
+            elif any(abs(xm - c) < w / 2 and z0 + s < zm < z0 + s + h for c, w, s, h in openings):
                 kind = None
             else:
                 kind = next((k for k, b in enumerate(beams) if b[0] <= xm <= b[1] and b[2] <= zm <= b[3]), 'm')
@@ -592,9 +682,9 @@ def add_wall(eid, floor, axis, fixed, a0, a1, z0, z1, task_wall, task_plaster, o
             dict(type='multi', parts=[rect_prism(axis, fixed, a, b, c, d, 0, WALL_T) for a, b, c, d in cells['mas']]),
             name=name or f'ผนังก่อ {eid}', assumed=True,
             qty=dict(area=round(area, 3), length=round(a1 - a0, 3), blocks=round(area * BLOCK_PER_M2), material='บล็อก 3 รู 7x10x20'))
-    for k, (p0, p1) in enumerate(posts):
-        h = z1 - z0
-        add(f'{eid}-TC{k+1}', 'เสาเอ็นคานเอ็น', floor, task_wall, rect_prism(axis, fixed, p0, p1, z0, z1, 0, WALL_T),
+    for k, (p0, p1, pb, pt) in enumerate(posts):
+        h = pt - pb
+        add(f'{eid}-TC{k+1}', 'เสาเอ็นคานเอ็น', floor, task_wall, rect_prism(axis, fixed, p0, p1, pb, pt, 0, WALL_T),
             name=f'เสาเอ็น {eid}', assumed=True,
             qty=dict(height=round(h, 3), concrete=round((p1 - p0) * WALL_T * h, 4), section='0.10x0.07'))
     for k, b in enumerate(beams):
@@ -628,20 +718,13 @@ def col_w(f):
     return COL_SEC[f][0] / 2
 
 
-def bay_split(i):
-    """คืน (toilet_x0, toilet_x1, balcony_x0, balcony_x1) ของช่วงเสา i"""
-    b5 = B5_X[i]
-    if abs(b5 - GX[i] - 1.5) < 1e-6:
-        return b5, GX[i + 1], GX[i], b5
-    return GX[i], b5, b5, GX[i + 1]
-
-
 plaster_task = {1: None, 2: 'A09', 3: 'A09', 4: 'A10', 5: 'A11'}
 wall_task = {1: 'A04', 2: 'A04', 3: 'A04', 4: 'A05', 5: 'A06'}
 yB, yC, yD, yE, yF = GY['B'], GY['C'], GY['D'], GY['E'], GY['F']
 
 for f in (2, 3, 4, 5):
     z0 = FL[f]
+    zs = FL[f] - DROP                  # พื้นระเบียง/ห้องน้ำ (แถบยื่น)
     tw, tp = wall_task[f], plaster_task[f]
     cd, cw = col_d(f), col_w(f)
     for side in ('N', 'S'):           # N = ฝั่งกริด A–C (ด้านหน้า), S = ฝั่งกริด D–F
@@ -666,25 +749,26 @@ for f in (2, 3, 4, 5):
                 # ผนังข้างห้องน้ำ (แนว B5) ประตูห้องน้ำ
                 ya, yb = lo(y_out, y_rm)
                 # ผนังกั้นห้องน้ำกับระเบียง (แนว B5) ผนังทึบ: เข้าห้องน้ำจากในห้องพัก (ผู้ใช้แจ้ง 10 พ.ย. 2569)
-                add_wall(f'W-{tag}-WC', f, 'y', B5_X[i], ya + 0.10, yb - 0.125, z0, beam_soffit(f, 'edge'), tw, tp,
+                wa, wb = (ya + 0.10, yb - 0.125) if side == 'N' else (ya + 0.125, yb - 0.10)
+                add_wall(f'W-{tag}-WC', f, 'y', B5_X[i], wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
                          name=f'ผนังห้องน้ำด้านระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ผนังนอกห้องน้ำ (ช่องลม) และผนังนอกระเบียง (ช่องระแนง)
                 add_wall(f'W-{tag}-OWC', f, 'x', y_out + (0.10 if side == 'N' else -0.10),
-                         tx0 + (WALL_T / 2), tx1 - (WALL_T / 2), z0, beam_soffit(f, 'edge'), tw, tp,
+                         tx0 + (WALL_T / 2), tx1 - (WALL_T / 2), zs, beam_soffit(f, 'edge', True), tw, tp,
                          [((tx0 + tx1) / 2, 0.40, 1.80, 0.40)], name=f'ผนังนอกห้องน้ำ ชั้น {f} ห้อง {side}{i+1}')
                 add_wall(f'W-{tag}-OBL', f, 'x', y_out + (0.10 if side == 'N' else -0.10),
-                         bx0 + (WALL_T / 2), bx1 - (WALL_T / 2), z0, beam_soffit(f, 'edge'), tw, tp,
+                         bx0 + (WALL_T / 2), bx1 - (WALL_T / 2), zs, beam_soffit(f, 'edge', True), tw, tp,
                          [((bx0 + bx1) / 2, 1.20, 0.90, 1.20)], name=f'ผนังนอกระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # สุขภัณฑ์
                 wy = (y_out + y_rm) / 2
                 add(f'FX-{tag}-WC', 'สุขภัณฑ์', f, 'A21',
                     prism([((tx0 + tx1) / 2 - 0.2, wy - 0.35), ((tx0 + tx1) / 2 + 0.2, wy - 0.35),
-                           ((tx0 + tx1) / 2 + 0.2, wy + 0.35), ((tx0 + tx1) / 2 - 0.2, wy + 0.35)], z0, 0.40),
+                           ((tx0 + tx1) / 2 + 0.2, wy + 0.35), ((tx0 + tx1) / 2 - 0.2, wy + 0.35)], zs, 0.40),
                     name=f'โถส้วม ชั้น {f} ห้อง {side}{i+1}', assumed=True, qty=dict(count=1))
                 bxs = tx0 + 0.35 if tx0 < bx0 else tx1 - 0.35
                 add(f'FX-{tag}-LAV', 'สุขภัณฑ์', f, 'A21',
                     prism([(bxs - 0.25, wy - 0.20), (bxs + 0.25, wy - 0.20), (bxs + 0.25, wy + 0.20), (bxs - 0.25, wy + 0.20)],
-                          z0 + 0.65, 0.20), name=f'อ่างล้างหน้า ชั้น {f} ห้อง {side}{i+1}', assumed=True, qty=dict(count=1))
+                          zs + 0.65, 0.20), name=f'อ่างล้างหน้า ชั้น {f} ห้อง {side}{i+1}', assumed=True, qty=dict(count=1))
             # โถงบันได: ผนังนอกแนว A สร้างแยกตามช่วงชานพัก (ด้านล่าง)
         # ผนังกั้นห้องตามกริด 1–10 (ช่วงห้อง + ช่วงระเบียง)
         for k in range(10):
@@ -694,7 +778,7 @@ for f in (2, 3, 4, 5):
             add_wall(f'W-F{f}-{side}G{k+1}-RM', f, 'y', GX[k], ya + cd, yb - cd, z0, beam_soffit(f, 'main'), tw, tp, win,
                      name=f'ผนังกั้นห้องกริด {k+1} ชั้น {f} ฝั่ง {side}' + (' (ผนังริม มีหน้าต่าง)' if win else ''))
             ya, yb = lo(y_out, y_rm)
-            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ya + 0.10, yb - cd, z0, beam_soffit(f, 'main'), tw, tp,
+            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ya + 0.10, yb - cd, zs, beam_soffit(f, 'main', True), tw, tp,
                      name=f'ผนังกั้นระเบียงกริด {k+1} ชั้น {f} ฝั่ง {side}')
 
 # ---------- ชั้น 1 ----------
@@ -702,7 +786,7 @@ z0 = FL[1]
 cd, cw = col_d(1), col_w(1)
 # โถงบันได (กริด 4–5) จากขอบนอกถึงแนว C
 for k in (3, 4):
-    add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], 0.10, yB - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
+    add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], 0.10, yB - cd, z0, beam_soffit(1, 'main', True), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
     add_wall(f'W-F1-ST-G{k+1}B', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1}')
 # ผนังนอกโถงบันไดแนว A (หลังชานพัก): ก่อระหว่างคาน BST3 ของชานพักแต่ละชั้น
 # หน้าต่างบานกระทุ้ง 1.20x0.60 ขอบล่างสูง 1.50 จากพื้นชานพัก (ผู้ใช้กำหนด 10 พ.ย. 2569)
@@ -782,9 +866,12 @@ for e in [e for e in elements if e['category'] == 'คาน']:
         name=f'ฉาบท้องคานและข้างคาน {e["id"]} หนา 0.5 ซม.', assumed=True,
         qty=dict(area=round(L * (w + 2 * d), 3), thickness=PL_BEAM))
 for f, task in ((2, 'A12'), (3, 'A15'), (4, 'A15'), (5, 'A15')):
-    add(f'PL-CEIL-F{f}', 'งานฉาบ', f - 1, task,
-        pieces_geom(FL[f] - SLAB_T - PL_T, PL_T),
-        name=f'ฉาบใต้ท้องพื้นชั้น {f} (เพดานชั้น {f-1})', assumed=True, qty=dict(area=SLAB_AREA))
+    _cz = SLAB_ZONES[f]
+    _parts = [rects_geom([r], top - (S1_T if k == 'WC' else SLAB_T) - PL_T, PL_T) for _, k, rs, top in _cz for r in rs
+              if r[1] - r[0] > 1e-6 and r[3] - r[2] > 1e-6]
+    add(f'PL-CEIL-F{f}', 'งานฉาบ', f - 1, task, dict(type='multi', parts=_parts),
+        name=f'ฉาบใต้ท้องพื้นชั้น {f} (เพดานชั้น {f-1})', assumed=True,
+        qty=dict(area=round(sum(rect_area(rs) for _, _, rs, _ in _cz), 3)))
 TILE_ROOM = dict(size='60x60 ซม.', w=0.60, model='ระบุภายหลัง')
 TILE_WC = dict(size='16x16 นิ้ว', w=0.4064, model='ระบุภายหลัง')
 ASSUMPTIONS.append('กระเบื้องห้องพัก โถงทางเดิน ระเบียง และโถงบันได 60x60 ซม., ห้องน้ำ 16x16 นิ้ว (ผู้ใช้กำหนด รุ่นระบุภายหลัง); ระเบียงใช้ 60x60 รอผู้ใช้ยืนยัน; จำนวนแผ่นคิดสุทธิไม่รวมเผื่อเสีย')
@@ -812,9 +899,14 @@ for f in (2, 3, 4, 5):
             ry0, ry1 = (y_rm + h, y_cor - h) if side == 'N' else (y_rm - h, y_cor + h)
             add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_ROOM, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1}')
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
-            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}')
-            add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_ROOM, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1}')
+            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
+            add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_ROOM, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
     add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + h, yD - h, TILE_ROOM, f'กระเบื้องโถงทางเดิน ชั้น {f}')
+# บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
+for e in elements:
+    if e['id'].startswith('W-F') and e['id'].endswith('-COR-O1'):
+        e['component'] = 'door2.dxf'
+
 
 def summary():
     from collections import Counter
