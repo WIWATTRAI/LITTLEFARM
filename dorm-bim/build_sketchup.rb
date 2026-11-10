@@ -7,7 +7,7 @@ module DormBIM
   DICT = 'BIM4D'.freeze
   CAT_COLORS = {
     'คานคอดิน' => [120, 120, 120], 'เสา' => [204, 89, 77], 'คาน' => [89, 140, 102],
-    'พื้น' => [205, 205, 200], 'พื้นสำเร็จรูป' => [140, 178, 217], 'พื้นทับหน้า' => [230, 217, 140], 'เสาเอ็นคานเอ็น' => [140, 140, 140], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [70, 110, 160],
+    'พื้น' => [205, 205, 200], 'พื้นสำเร็จรูป' => [140, 178, 217], 'พื้นทับหน้า' => [230, 217, 140], 'เสาเอ็นคานเอ็น' => [140, 140, 140], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [150, 48, 36],
     'หลังคา' => [120, 60, 45], 'ราวบันได' => [25, 25, 25], 'ไฟฟ้า' => [245, 245, 240], 'ผนัง' => [204, 158, 128],
     'งานฉาบ' => [237, 235, 225], 'ประตูหน้าต่าง' => [115, 77, 51], 'กระเบื้อง' => [217, 204, 178], 'สุขภัณฑ์' => [248, 248, 248]
   }.freeze
@@ -216,6 +216,12 @@ module DormBIM
     end
   end
 
+  # วัสดุเฉพาะชิ้น (e['material']) เช่น แปกัลวาไนซ์; ถ้ายังไม่มีในโมเดลสร้างเป็นสีล้วน (texture ใส่ในโมเดลภายหลัง)
+  NAMED_COLORS = { 'BIM-แปกัลวาไนซ์' => [178, 182, 186] }.freeze
+  def self.named_material(model, name)
+    model.materials[name] || model.materials.add(name).tap { |m| m.color = Sketchup::Color.new(*(NAMED_COLORS[name] || [200, 200, 200])) }
+  end
+
   def self.material(model, cat)
     name = "BIM-#{cat}"
     m = model.materials[name]
@@ -284,7 +290,7 @@ module DormBIM
         groups[key] = cg
       end
       geo = e['geom']
-      mat = material(model, e['category'])
+      mat = e['material'] ? named_material(model, e['material']) : material(model, e['category'])
       by_pb = use_pb && PB_CATS.include?(e['category'])
       by_comp = geo['type'] == 'xprofile'
       g = if by_pb
