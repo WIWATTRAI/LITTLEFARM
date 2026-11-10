@@ -1214,6 +1214,8 @@ for e in elements:
 for e in elements:
     if e['category'] == 'สุขภัณฑ์' and e['name'].startswith('โถส้วม'):
         e['qty']['model'] = 'กะรัต K2760 หรือเทียบเท่า'
+    elif e['category'] == 'สุขภัณฑ์' and e['name'].startswith('อ่างล้างหน้า'):
+        e['qty']['model'] = 'กะรัต K1225'
 
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
