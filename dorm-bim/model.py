@@ -767,6 +767,13 @@ def col_w(f):
 
 
 plaster_task = {1: None, 2: 'A09', 3: 'A09', 4: 'A10', 5: 'A11'}
+
+
+def cor_wall_y(side, f):
+    """แนวกึ่งกลางผนังทางเดิน: ผิวบล็อกด้านทางเดินเสมอผิวเสาด้านทางเดิน"""
+    if side == 'N':
+        return GY['C'] + col_d(f) - WALL_T / 2
+    return GY['D'] - col_d(f) + WALL_T / 2
 wall_task = {1: 'A04', 2: 'A04', 3: 'A04', 4: 'A05', 5: 'A06'}
 yB, yC, yD, yE, yF = GY['B'], GY['C'], GY['D'], GY['E'], GY['F']
 
@@ -788,7 +795,8 @@ for f in (2, 3, 4, 5):
             tag = f'F{f}-{side}{i+1}'
             # ผนังทางเดิน (ประตูห้อง)
             if not stair:
-                add_wall(f'W-{tag}-COR', f, 'x', y_cor, x0, x1, z0, beam_soffit(f, 'main'), tw, tp,
+                # ผิวก่อด้านทางเดินเสมอขอบเสา (ผู้ใช้แจ้ง 10 พ.ย. 2569): ผนังพ้นแนวคาน B2 จึงก่อถึงใต้ท้องพื้น
+                add_wall(f'W-{tag}-COR', f, 'x', cor_wall_y(side, f), x0, x1, z0, (FL[f + 1] - SLAB_T) if f < 5 else ROOF_BEAM, tw, tp,
                          [(GX[i] + 0.75, 0.90, 0.0, 2.00)], name=f'ผนังทางเดิน ชั้น {f} ห้อง {side}{i+1}')
                 # ผนังห้อง–ระเบียง (ประตูระเบียง)
                 add_wall(f'W-{tag}-BAL', f, 'x', y_rm, x0, x1, z0, beam_soffit(f, 'main'), tw, tp,
@@ -946,12 +954,13 @@ for f in (2, 3, 4, 5):
             x0, x1 = GX[i] + h, GX[i + 1] - h
             if side == 'N' and i == STAIR_BAY[0]:
                 continue
-            ry0, ry1 = (y_rm + h, y_cor - h) if side == 'N' else (y_rm - h, y_cor + h)
+            yw = cor_wall_y(side, f)
+            ry0, ry1 = (y_rm + h, yw - h) if side == 'N' else (y_rm - h, yw + h)
             add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_ROOM, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1}')
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
             add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
             add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_ROOM, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
-    add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + h, yD - h, TILE_ROOM, f'กระเบื้องโถงทางเดิน ชั้น {f}')
+    add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_ROOM, f'กระเบื้องโถงทางเดิน ชั้น {f}')
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
 # ระเบียงหลังห้อง: ผนังนอกเป็นช่องเปิดโล่ง ไม่มีบานหน้าต่าง; ประตูห้องพัก→ระเบียงเป็นบานเลื่อน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
 elements[:] = [e for e in elements if not re.match(r'^W-F[2-5]-[NS]\d-OBL-O1$', e['id'])]
