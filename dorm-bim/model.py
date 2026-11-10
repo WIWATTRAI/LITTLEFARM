@@ -931,7 +931,8 @@ for f, task in ((2, 'A12'), (3, 'A15'), (4, 'A15'), (5, 'A15')):
         name=f'ฉาบใต้ท้องพื้นชั้น {f} (เพดานชั้น {f-1})', assumed=True,
         qty=dict(area=round(sum(rect_area(rs) for _, _, rs, _ in _cz), 3)))
 TILE_ROOM = dict(size='60x60 ซม.', w=0.60, model='ระบุภายหลัง')
-TILE_WC = dict(size='16x16 นิ้ว', w=0.4064, model='ระบุภายหลัง')
+# ห้องน้ำ: กระเบื้องลายเทา 16x16 นิ้ว ยาแนว 3 มม. (ผู้ใช้กำหนด 10 พ.ย. 2569, รุ่นตามรูปที่ผู้ใช้ส่ง)
+TILE_WC = dict(size='16x16 นิ้ว', w=0.4064, model='ลายเทา 16x16 นิ้ว (ตามรูปผู้ใช้)', joint=0.003, material='กระเบื้องห้องน้ำ ลายเทา 16x16 ยาแนว 3 มม.')
 ASSUMPTIONS.append('กระเบื้องห้องพัก โถงทางเดิน ระเบียง และโถงบันได 60x60 ซม., ห้องน้ำ 16x16 นิ้ว (ผู้ใช้กำหนด รุ่นระบุภายหลัง); จำนวนแผ่นคิดสุทธิไม่รวมเผื่อเสีย')
 
 
@@ -983,18 +984,34 @@ for f in (2, 3, 4, 5):
             tx0, tx1, bx0, bx1 = bay_split(i)
             x0, x1 = GX[i] + h, GX[i + 1] - h
             if side == 'N' and i == STAIR_BAY[0]:
+                # โถงหน้าบันไดปูเจด้าไวท์เหมือนโถงทางเดิน (ผู้ใช้แจ้ง 10 พ.ย. 2569) แนวร่องต่อเนื่องกับทางเดิน
+                add_tile(f'TL-F{f}-ST-HALL', f, x0, x1, sy1, yC + col_d(f) + PL_T, TILE_TARA, f'กระเบื้องโถงหน้าบันได ชั้น {f} Tara เจด้าไวท์ 60x60',
+                         origin=((GX[0] + GX[-1]) / 2, GY['CX']))
                 continue
             yw = cor_wall_y(side, f)
             ry0, ry1 = (y_rm + h, yw - h) if side == 'N' else (y_rm - h, yw + h)
             add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_TARA_WOOD, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
                      origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
-            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
+            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ลายเทา 16x16 นิ้ว', z=FL[f] - DROP,
+                     origin=((max(tx0 + h, x0) + min(tx1 - h, x1)) / 2, (wy0 + wy1) / 2))
             # เจเลนวูดปูตั้งแต่แนวประตูหน้าห้องถึงแนวหลังระเบียง (ผู้ใช้กำหนด 10 พ.ย. 2569) แนวร่องต่อเนื่องจากห้องพัก
             add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_TARA_WOOD, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60', z=FL[f] - DROP,
                      origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
+            # ใต้ช่องประตู (ความหนาผนัง+ฉาบ 0.10): เดิมกระเบื้องหยุดที่ผิวฉาบ เห็นผิวพื้นทับหน้าโผล่ (ผู้ใช้แจ้ง 10 พ.ย. 2569)
+            # ปูเจเลนวูดต่อจากห้องพักผ่านช่องประตู ที่ระดับพื้นห้อง FL (ฝั่งระเบียง/ห้องน้ำลดระดับที่ผิวผนัง)
+            for k, (cx, w, yy) in enumerate((((GX[i] + 0.75), 0.90, yw), ((bx0 + bx1) / 2, 0.80, y_rm), ((tx0 + tx1) / 2, 0.70, y_rm))):
+                add_tile(f'TL-F{f}-{side}{i+1}-TH{k+1}', f, cx - w / 2, cx + w / 2, yy - h, yy + h, TILE_TARA_WOOD,
+                         f'กระเบื้องใต้ช่อง{("ประตูหน้าห้อง", "ประตูระเบียง", "ประตูห้องน้ำ")[k]} ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
+                         origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
     add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
              origin=((GX[0] + GX[-1]) / 2, GY['CX']))
+# ห้องน้ำรวมชั้น 1: กระเบื้องลายเทา 16x16 นิ้ว ยาแนว 3 มม. (แทนรายการเดิมที่ยังไม่ระบุรุ่น)
+_cw1, _cd1 = col_w(1), col_d(1)
+elements[:] = [e for e in elements if e['id'] != 'TL-F1-WC']
+_wx0, _wx1, _wy0, _wy1 = GX[7] + _cw1, GX[9] - _cw1, yB + _cd1, yC - _cd1
+add_tile('TL-F1-WC', 1, _wx0, _wx1, _wy0, _wy1, TILE_WC, 'กระเบื้องพื้นห้องน้ำชั้น 1 ลายเทา 16x16 นิ้ว', origin=((_wx0 + _wx1) / 2, (_wy0 + _wy1) / 2))
+elements[-1]['task'] = 'A14'
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
 # ระเบียงหลังห้อง: ผนังนอกเป็นช่องเปิดโล่ง ไม่มีบานหน้าต่าง; ประตูห้องพัก→ระเบียงเป็นบานเลื่อน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
 elements[:] = [e for e in elements if not re.match(r'^W-F[2-5]-[NS]\d-OBL-O1$', e['id'])]
