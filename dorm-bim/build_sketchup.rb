@@ -240,7 +240,19 @@ module DormBIM
         ys = geo['poly'].map { |p| p[1] }
         db = cdef.bounds
         yc = (ys.min + ys.max) / 2.0
-        g.entities.add_instance(cdef, Geom::Transformation.translation([xs.min.m, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m]))
+        t = if e['component_fit'] == 'opening'
+              # ย่อ/ขยายให้พอดีช่องเปิด (กว้าง x สูง) วางกึ่งกลางความหนาผนัง
+              sx = (xs.max - xs.min).m / db.width
+              sz = geo['t'].m / db.depth
+              Geom::Transformation.translation([xs.min.m - db.min.x * sx, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m - db.min.z * sz]) *
+                Geom::Transformation.scaling(ORIGIN, sx, 1, sz)
+            elsif (mt = e['component_mount'])
+              # ประตูม้วน: กึ่งกลางช่อง, หลังกล่องที่ back_y (กล่องอยู่ฝั่ง y น้อย = ด้านใน), ขอบล่างที่พื้น
+              Geom::Transformation.translation([(xs.min + xs.max).m / 2.0 - (db.min.x + db.max.x) / 2.0, mt['back_y'].m - db.max.y, geo['z0'].m])
+            else
+              Geom::Transformation.translation([xs.min.m, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m])
+            end
+        g.entities.add_instance(cdef, t)
         geo = { 'type' => 'component' }
       end
       case (by_pb || by_comp ? nil : geo['type'])

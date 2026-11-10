@@ -4,7 +4,7 @@
 แหล่งแบบ: FOR CON (S101, S102, S910, S911), S001, S106, S107, A201, A203
 ค่าที่ไม่มีในแบบใส่ไว้ใน ASSUMPTIONS และติด flag "assumed" ที่ชิ้นส่วน
 """
-import json, math
+import json, math, re
 
 # ---------- กริดและระดับ ----------
 GX = [i * 3.5 for i in range(10)]                     # กริด 1..10
@@ -906,6 +906,14 @@ for f in (2, 3, 4, 5):
 for e in elements:
     if e['id'].startswith('W-F') and e['id'].endswith('-COR-O1'):
         e['component'] = 'door2.dxf'
+    # ประตูห้องน้ำ: ตัวอย่างชั่วคราวของผู้ใช้ ย่อ/ขยายให้พอดีช่อง 0.70x1.80 (จะเปลี่ยนเป็นรุ่นจริงภายหลัง)
+    if re.match(r'^W-F[2-5]-[NS]\d-BAL-O2$', e['id']):
+        e['component'] = 'ประตูห้องน้ำ 0.70x1.80 (ตัวอย่างชั่วคราว)'
+        e['component_fit'] = 'opening'
+    # ประตูม้วนร้านค้า: ระยะระหว่างราง 3.00, กล่องม้วนสูง 0.75 ชนท้องพื้นชั้น 2 ติดตั้งด้านในร้าน หลังกล่องชิดผิวในคาน B2
+    if re.match(r'^W-F1-SH\d-FR-O1$', e['id']):
+        e['component'] = 'ประตูม้วน 3.00x2.60'
+        e['component_mount'] = dict(back_y=round(GY['B'] + 0.125, 4), box_top=round(FL[2] - SLAB_T, 3))
 
 
 def summary():
@@ -938,6 +946,8 @@ ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y 
 if __name__ == '__main__':
     for e in elements:
         mirror_y(e['geom'])
+        if 'component_mount' in e:
+            e['component_mount']['back_y'] = round(GY['F'] - e['component_mount']['back_y'], 4)
     GYM = {k: round(GY['F'] - v, 4) for k, v in GY.items()}
     model = dict(project='หอพักคนงาน 5 ชั้น อาคาร A (ชัยเสรี หนองแค)', units='m', axes='x=กริด1→10, y=กริดF(0)→A(15.5), z=ระดับ',
                  grid=dict(x={str(i + 1): v for i, v in enumerate(GX)}, y=GYM), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
