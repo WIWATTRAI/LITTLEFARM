@@ -1012,6 +1012,83 @@ elements[:] = [e for e in elements if e['id'] != 'TL-F1-WC']
 _wx0, _wx1, _wy0, _wy1 = GX[7] + _cw1, GX[9] - _cw1, yB + _cd1, yC - _cd1
 add_tile('TL-F1-WC', 1, _wx0, _wx1, _wy0, _wy1, TILE_WC, 'กระเบื้องพื้นห้องน้ำชั้น 1 ลายเทา 16x16 นิ้ว', origin=((_wx0 + _wx1) / 2, (_wy0 + _wy1) / 2))
 elements[-1]['task'] = 'A14'
+# ---------- งานไฟฟ้าแสงสว่างในห้องพัก (ผู้ใช้กำหนด 10 พ.ย. 2569) ----------
+# ส่วนที่ไม่ผูกกับผังห้องน้ำ: ตู้คอนซูมเมอร์เหนือประตูเข้า, สวิตช์+เต้ารับข้างประตูเข้า (ฝั่งมือจับ ห่างวงกบ 0.15),
+# โคมรางตัวยู T8 1x18 กลางห้อง และท่อ PVC ขาว Ø1/2" เดินลอยบนผนังชิดใต้คาน มี junction box ทุกจุดแยกท่อ
+# (สวิตช์ 2 ทางหน้าห้องน้ำ เต้ารับคู่มุมห้อง หลอดห้องน้ำ/ระเบียง รอผังห้องน้ำล่าสุดจากผู้ใช้)
+EL_PIPE = 0.018                  # ท่อ PVC 1/2" ขนาดโตนอก 18 มม.
+EL_BOX = (0.12, 0.075, 0.045)    # บล็อกลอย 2x4 นิ้ว วางนอน (กว้าง, สูง, ลึก)
+EL_CU = (0.25, 0.22, 0.10)       # ตู้คอนซูมเมอร์ RACER เมน+4 ช่อง (ขนาดประมาณจากรูป)
+EL_JB = (0.08, 0.04)             # junction box กลม Ø0.08 ลึก 0.04 (ค่าสมมติ)
+EL_LAMP = (0.63, 0.07, 0.05)     # โคมรางตัวยู T8 1x18 (ยาว, กว้าง, สูง)
+EL_SW_Z, EL_CU_Z = 1.20, 2.10    # ความสูงสวิตช์ / ขอบล่างตู้ จากพื้น (ผู้ใช้กำหนด)
+CEIL5 = 2.60                     # ฝ้าชั้น 5 สูงจากพื้น (ผู้ใช้กำหนด)
+ASSUMPTIONS.append('งานไฟฟ้าห้องพัก: ท่อ PVC Ø1/2" เดินลอยบนผนังที่ระดับใต้ท้องคาน 0.03 ม. (ชั้น 5 เหนือฝ้า +0.05), ลอดใต้คานแล้วขึ้นข้างคานไปตามท้องพื้นถึงโคมกลางห้อง; ขนาดบล็อก 2x4 นิ้ว ตู้ 0.25x0.22x0.10 และ junction box Ø0.08 เป็นค่าสมมติ; ฝั่งมือจับประตูตรวจจากบานประตูในโมเดล (ฝั่ง +x ของช่องประตูทุกห้อง)')
+
+
+def el_pipe(p0, p1):
+    return dict(type='member', p0=[round(v, 4) for v in p0], p1=[round(v, 4) for v in p1], w=EL_PIPE, d=EL_PIPE,
+                shape='O', sec=dict(d=EL_PIPE))
+
+
+def el_box_on_x_wall(xc, yface, dn, zc, w, h, dpt):
+    """กล่องติดผนังแนวแกน x (ผิวผนังที่ y = yface) ยื่นเข้าห้องทิศ dn"""
+    y0, y1 = sorted((yface, yface + dn * dpt))
+    return prism([(xc - w / 2, y0), (xc + w / 2, y0), (xc + w / 2, y1), (xc - w / 2, y1)], zc - h / 2, h)
+
+
+def el_add(eid, f, geom, name, qty):
+    add(eid, 'ไฟฟ้า', f, 'A21', geom, name=name, assumed=True, qty=qty)
+
+
+for f in (2, 3, 4, 5):
+    for side in ('N', 'S'):
+        dn = -1 if side == 'N' else 1                       # ทิศจากผนังทางเดินเข้าห้อง
+        for i in range(9):
+            if side == 'N' and i == STAIR_BAY[0]:
+                continue
+            tag = f'F{f}-{side}{i+1}'
+            room = f'ชั้น {f} ห้อง {side}{i+1}'
+            yface = cor_wall_y(side, f) + dn * (WALL_T / 2 + PL_T)       # ผิวฉาบผนังทางเดินด้านในห้อง
+            yp = yface + dn * (EL_PIPE / 2 + 0.003)                      # แนวศูนย์ท่อบนผนัง
+            fl = FL[f]
+            if f < 5:
+                zr = beam_soffit(f, 'main') - 0.03                       # ชิดใต้ท้องคาน
+                ceil = FL[f + 1] - SLAB_T - PL_T                         # ผิวฉาบใต้ท้องพื้น
+            else:
+                ceil = fl + CEIL5
+                zr = ceil + 0.05                                         # ชั้น 5 เดินเหนือฝ้าทีบาร์
+            x_cu = GX[i] + 0.75                                          # กึ่งกลางประตูเข้า
+            x_sw = GX[i] + 1.20 + 0.15 + EL_BOX[0] / 2                   # ฝั่งมือจับ (+x) ห่างวงกบ 0.15
+            x_l = (GX[i] + GX[i + 1]) / 2
+            y_rmface = (yB if side == 'N' else yE) - dn * (WALL_T / 2 + PL_T)
+            y_l = (y_rmface + yface) / 2
+            cu_top = fl + EL_CU_Z + EL_CU[1]
+            el_add(f'EL-{tag}-CU', f, el_box_on_x_wall(x_cu, yface, dn, fl + EL_CU_Z + EL_CU[1] / 2, *EL_CU),
+                   f'ตู้คอนซูมเมอร์ 4 วงจร เหนือประตูเข้า {room}', dict(count=1, model='RACER เมน+4 ช่อง', bottom=EL_CU_Z))
+            el_add(f'EL-{tag}-SW1', f, el_box_on_x_wall(x_sw, yface, dn, fl + EL_SW_Z, *EL_BOX),
+                   f'สวิตช์ไฟ+เต้ารับ ข้างประตูเข้า {room}', dict(count=1, box='บล็อกลอย 2x4 นิ้ว', height=EL_SW_Z))
+            ly0, ly1 = y_l - EL_LAMP[1] / 2, y_l + EL_LAMP[1] / 2
+            el_add(f'EL-{tag}-LP1', f, prism([(x_l - EL_LAMP[0] / 2, ly0), (x_l + EL_LAMP[0] / 2, ly0), (x_l + EL_LAMP[0] / 2, ly1), (x_l - EL_LAMP[0] / 2, ly1)],
+                                             ceil - EL_LAMP[2], EL_LAMP[2]),
+                   f'โคมรางตัวยู T8 1x18W กลางห้อง {room}', dict(count=1, model='T8 1x18 หลอดเดี่ยว'))
+            for k, xj in ((1, x_cu), (2, x_sw)):
+                el_add(f'EL-{tag}-JB{k}', f, el_pipe((xj, yface, zr), (xj, yface + dn * EL_JB[1], zr)) | dict(w=EL_JB[0], d=EL_JB[0], sec=dict(d=EL_JB[0])),
+                       f'Junction box {k} {room}', dict(count=1, size='Ø0.08'))
+            # ท่อ: ตู้→JB1 (ขึ้น), JB1→JB2 (ตามผนัง), JB2→สวิตช์ (ลง), JB2→โคมกลางห้อง
+            yb = (yC - 0.125 - 0.03) if side == 'N' else (yD + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
+            runs = [((x_cu, yp, cu_top), (x_cu, yp, zr)), ((x_cu, yp, zr), (x_sw, yp, zr)),
+                    ((x_sw, yp, zr), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zr), (x_l, yp, zr))]
+            ye = y_l - dn * EL_LAMP[1] / 2
+            if f < 5:
+                zc = ceil - EL_PIPE / 2
+                runs += [((x_l, yp, zr), (x_l, yb, zr)), ((x_l, yb, zr), (x_l, yb, zc)), ((x_l, yb, zc), (x_l, ye, zc))]
+            else:
+                runs += [((x_l, yp, zr), (x_l, y_l, zr)), ((x_l, y_l, zr), (x_l, y_l, ceil))]
+            L = sum(math.dist(a, b) for a, b in runs)
+            el_add(f'EL-{tag}-CD1', f, dict(type='multi', parts=[el_pipe(a, b) for a, b in runs]),
+                   f'ท่อร้อยสาย PVC ขาว Ø1/2" ตู้–สวิตช์–โคมกลางห้อง {room}', dict(length=round(L, 3), size='PVC 1/2"'))
+
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
 # ระเบียงหลังห้อง: ผนังนอกเป็นช่องเปิดโล่ง ไม่มีบานหน้าต่าง; ประตูห้องพัก→ระเบียงเป็นบานเลื่อน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
 elements[:] = [e for e in elements if not re.match(r'^W-F[2-5]-[NS]\d-OBL-O1$', e['id'])]
