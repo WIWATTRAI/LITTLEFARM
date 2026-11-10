@@ -585,10 +585,11 @@ def add_wall(eid, floor, axis, fixed, a0, a1, z0, z1, task_wall, task_plaster, o
     posts, beams = tie_layout(a0, a1, z0, z1, openings)
     cells = wall_cells(a0, a1, z0, z1, openings, posts, beams)
     area = sum((b - a) * (d - c) for a, b, c, d in cells['mas'])
-    add(eid, 'ผนัง', floor, task_wall,
-        dict(type='multi', parts=[rect_prism(axis, fixed, a, b, c, d, 0, WALL_T) for a, b, c, d in cells['mas']]),
-        name=name or f'ผนังก่อ {eid}', assumed=True,
-        qty=dict(area=round(area, 3), length=round(a1 - a0, 3), blocks=round(area * BLOCK_PER_M2), material='บล็อก 3 รู 7x10x20'))
+    if cells['mas']:                   # ผนังที่เหลือแต่เสาเอ็นข้างช่องเปิด (เช่น หน้าร้าน) ไม่มีงานก่อ
+        add(eid, 'ผนัง', floor, task_wall,
+            dict(type='multi', parts=[rect_prism(axis, fixed, a, b, c, d, 0, WALL_T) for a, b, c, d in cells['mas']]),
+            name=name or f'ผนังก่อ {eid}', assumed=True,
+            qty=dict(area=round(area, 3), length=round(a1 - a0, 3), blocks=round(area * BLOCK_PER_M2), material='บล็อก 3 รู 7x10x20'))
     for k, (p0, p1) in enumerate(posts):
         h = z1 - z0
         add(f'{eid}-TC{k+1}', 'เสาเอ็นคานเอ็น', floor, task_wall, rect_prism(axis, fixed, p0, p1, z0, z1, 0, WALL_T),
@@ -705,7 +706,7 @@ add_wall('W-F1-ST-OUT', 1, 'x', 0.10, GX[3] + cw, GX[4] - cw, z0, beam_soffit(1,
 # ร้านค้า 3 ห้อง (กริด 5–8) หน้าร้านแนว B ด้านหลังแนว C
 for i in (4, 5, 6):
     add_wall(f'W-F1-SH{i-3}-FR', 1, 'x', yB, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
-             [((GX[i] + GX[i + 1]) / 2, 2.80, 0.0, 2.60)], name=f'ผนังหน้าร้าน {i-3}')
+             [((GX[i] + GX[i + 1]) / 2, 3.00, 0.0, beam_soffit(1, 'main') - z0)], name=f'ผนังหน้าร้าน {i-3} ช่องประตูม้วน 3.00 ม. สูงถึงใต้คาน')
     add_wall(f'W-F1-SH{i-3}-BK', 1, 'x', yC, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
              [(GX[i] + 0.75, 0.90, 0.0, 2.00)], name=f'ผนังหลังร้าน {i-3}')
 for k in (5, 6, 7):
