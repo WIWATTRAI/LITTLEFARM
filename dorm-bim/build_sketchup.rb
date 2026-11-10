@@ -159,6 +159,22 @@ module DormBIM
     ents.add_instance(defn, Geom::Transformation.new(Geom::Point3d.new(geo['x0'].m, y0.m, z0.m)))
   end
 
+  # ผิวกระเบื้องที่มี texture (เช่น Tara เจด้าไวท์ 60x60 ยาแนว 3 มม.): จัดร่องยาแนวให้ตรง origin ทุก pitch บนหน้าบน
+  # ต้องมี material ชื่อนี้ในโมเดลก่อน (ภาพ texture ขนาด 1 ช่อง = pitch); ถ้าไม่มีจะข้าม
+  def self.apply_finish(model, g, fin)
+    m = model.materials[fin['material']]
+    return unless m && m.texture
+    ox, oy = fin['origin']; p = fin['pitch']
+    g.entities.grep(Sketchup::Face).each do |f|
+      next unless f.normal.z > 0.99
+      z = f.vertices.first.position.z
+      pts = [Geom::Point3d.new(ox.m, oy.m, z), Geom::Point3d.new(0, 0, 0),
+             Geom::Point3d.new((ox + p).m, oy.m, z), Geom::Point3d.new(1, 0, 0),
+             Geom::Point3d.new(ox.m, (oy + p).m, z), Geom::Point3d.new(0, 1, 0)]
+      f.position_material(m, pts, true)
+    end
+  end
+
   def self.material(model, cat)
     name = "BIM-#{cat}"
     m = model.materials[name]
@@ -281,6 +297,7 @@ module DormBIM
         end
       end
       g.material = mat
+      apply_finish(model, g, e['finish']) if e['finish']
       g.layer = tag(model, task_tag_name(e['task'], tasks), f_4d)
       t = tasks[e['task']]
       g.set_attribute(DICT, 'id', e['id'])

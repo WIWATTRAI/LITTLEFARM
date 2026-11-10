@@ -935,13 +935,41 @@ TILE_WC = dict(size='16x16 นิ้ว', w=0.4064, model='ระบุภาย
 ASSUMPTIONS.append('กระเบื้องห้องพัก โถงทางเดิน ระเบียง และโถงบันได 60x60 ซม., ห้องน้ำ 16x16 นิ้ว (ผู้ใช้กำหนด รุ่นระบุภายหลัง); ระเบียงใช้ 60x60 รอผู้ใช้ยืนยัน; จำนวนแผ่นคิดสุทธิไม่รวมเผื่อเสีย')
 
 
-def add_tile(eid, f, x0, x1, y0, y1, spec, name, z=None):
+# กระเบื้องห้องพักและโถงทางเดิน: Tara รุ่นเจด้าไวท์ 60x60 ซม. ยาแนว 3 มม. (ผู้ใช้กำหนด 10 พ.ย. 2569)
+TILE_TARA = dict(size='60x60 ซม.', w=0.60, model='Tara เจด้าไวท์ 60x60 ซม.', joint=0.003)
+TILE_MAT = 'Tara เจด้าไวท์ 60x60 ยาแนว 3 มม.'
+ASSUMPTIONS.append('แนวกระเบื้อง Tara เจด้าไวท์: แนวยาวขวางอาคาร (y) เริ่มจากร่องยาแนวที่กึ่งกลางทางเดิน (แนว CX) ออกไปหาหลังห้องตามที่ผู้ใช้กำหนด; แนวตามยาวอาคาร (x) ผมกำหนดให้ร่องยาแนวอยู่กึ่งกลางห้อง และกึ่งกลางอาคารสำหรับทางเดิน (ค่าสมมติ)')
+
+
+def tile_layout(x0, x1, y0, y1, ox, oy, pitch):
+    """นับแผ่นเต็ม/แผ่นตัด เมื่อร่องยาแนวอยู่ที่ ox + k*pitch, oy + k*pitch"""
+    def cells(a0, a1, o):
+        k0, k1 = math.floor((a0 - o) / pitch + 1e-9), math.ceil((a1 - o) / pitch - 1e-9)
+        out = []
+        for k in range(k0, k1):
+            c0, c1 = o + k * pitch, o + (k + 1) * pitch
+            out.append(c0 >= a0 - 1e-6 and c1 <= a1 + 1e-6)
+        return out
+    cx, cy = cells(x0, x1, ox), cells(y0, y1, oy)
+    full = sum(1 for a in cx for b in cy if a and b)
+    return full, len(cx) * len(cy) - full
+
+
+def add_tile(eid, f, x0, x1, y0, y1, spec, name, z=None, origin=None):
     x0, x1, y0, y1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
     area = (x1 - x0) * (y1 - y0)
+    qty = dict(area=round(area, 3), tile_size=spec['size'], tile_model=spec['model'],
+               tiles=math.ceil(area / (spec['w'] ** 2)))
+    extra = {}
+    if origin is not None:
+        pitch = spec['w'] + spec['joint']
+        full, cut = tile_layout(x0, x1, y0, y1, origin[0], origin[1], pitch)
+        qty.update(tiles=full + cut, tiles_full=full, tiles_cut=cut, joint_mm=round(spec['joint'] * 1000, 1))
+        extra = dict(material=TILE_MAT, pitch=round(pitch, 4), origin=[round(origin[0], 4), round(origin[1], 4)])
     add(eid, 'กระเบื้อง', f, 'A16' if f < 5 else 'A17',
-        prism([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], FL[f] if z is None else z, 0.02), name=name, assumed=True,
-        qty=dict(area=round(area, 3), tile_size=spec['size'], tile_model=spec['model'],
-                 tiles=math.ceil(area / (spec['w'] ** 2))))
+        prism([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], FL[f] if z is None else z, 0.02), name=name, assumed=True, qty=qty)
+    if extra:
+        elements[-1]['finish'] = extra
 
 
 h = WALL_T / 2 + PL_T
@@ -956,11 +984,13 @@ for f in (2, 3, 4, 5):
                 continue
             yw = cor_wall_y(side, f)
             ry0, ry1 = (y_rm + h, yw - h) if side == 'N' else (y_rm - h, yw + h)
-            add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_ROOM, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1}')
+            add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_TARA, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1} Tara เจด้าไวท์ 60x60',
+                     origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
             add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
             add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_ROOM, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
-    add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_ROOM, f'กระเบื้องโถงทางเดิน ชั้น {f}')
+    add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
+             origin=((GX[0] + GX[-1]) / 2, GY['CX']))
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
 # ระเบียงหลังห้อง: ผนังนอกเป็นช่องเปิดโล่ง ไม่มีบานหน้าต่าง; ประตูห้องพัก→ระเบียงเป็นบานเลื่อน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
 elements[:] = [e for e in elements if not re.match(r'^W-F[2-5]-[NS]\d-OBL-O1$', e['id'])]
@@ -1014,6 +1044,8 @@ ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y 
 if __name__ == '__main__':
     for e in elements:
         mirror_y(e['geom'])
+        if 'finish' in e:
+            e['finish']['origin'][1] = round(GY['F'] - e['finish']['origin'][1], 4)
         if 'component_mount' in e:
             e['component_mount']['back_y'] = round(GY['F'] - e['component_mount']['back_y'], 4)
             e['component_mount']['box_dir'] = -e['component_mount'].get('box_dir', 1)
