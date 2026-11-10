@@ -25,6 +25,18 @@ COL_ROWS = ['B', 'C', 'D', 'E']
 
 # คานซอย B5 (S102) ตำแหน่ง x
 B5_X = [1.5, 5.5, 8.5, 12.5, 15.5, 19.5, 22.5, 26.5, 30.0]   # ตามระยะ 1.50/2.00 ในแปลน A-02 และผังคาน S-04
+# ห้องแถวติดบันได (ฝั่ง N) กริด 5–9 (ห้อง N5–N8): สลับห้องน้ำ–ระเบียงในช่วงเสา ห้องน้ำ N5 ชิดบันได (ผู้ใช้สั่ง 10 พ.ย. 2569)
+# แนวผนัง/คานซอย B5 ย้ายตามเป็นภาพกลับของเดิมในช่วงเสา (b5' = GX[i] + GX[i+1] - b5) ห้องริม N9 และฝั่ง S คงเดิม
+B5_SWAP_N = (4, 5, 6, 7)
+
+
+def b5x(i, side):
+    """แนวผนัง/คานซอย B5 ของช่วงเสา i ฝั่ง side ('N' / 'S')"""
+    if side == 'N' and i in B5_SWAP_N:
+        return GX[i] + GX[i + 1] - B5_X[i]
+    return B5_X[i]
+
+
 STAIR_BAY = (3, 4)      # ช่วงกริด 4–5 (index 3..4)
 # บันไดหลัก (A-05): ชานพักในแถบยื่นด้านหน้า กว้าง 1.50, ช่วงบันไดละ 9 ลูกนอน x 0.30 = 2.70 จากแนว B, ลูกตั้ง 0.16 x 20
 ST_RUN_Y1 = 1.65 + 2.70                        # ปลายช่วงบันไดฝั่งห้อง (ขอบช่องเปิด)
@@ -142,8 +154,9 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
                 member((GX[i] + 0.125, y, c), (GX[i + 1] - 0.125, y, c), 0.20, 0.40), assumed=assumed,
                 qty=dict(length=L, concrete=round(L * 0.2 * 0.4, 4)))
     if with_b5:
-        for j, x in enumerate(B5_X):    # B5 ยื่นซอย
+        for j in range(len(B5_X)):    # B5 ยื่นซอย
             for a, b in (('A', 'B'), ('E', 'F')):
+                x = b5x(j, 'N' if a == 'A' else 'S')
                 ya, yb = sorted((GY[a], GY[b]))
                 y0, y1 = ya + 0.20, yb - 0.125
                 if a == 'E':
@@ -182,9 +195,9 @@ def _bx(i):
     return (x_min if i == 0 else GX[i]), (x_max if i == 8 else GX[i + 1])
 
 
-def bay_split(i):
-    """คืน (toilet_x0, toilet_x1, balcony_x0, balcony_x1) ของช่วงเสา i"""
-    b5 = B5_X[i]
+def bay_split(i, side):
+    """คืน (toilet_x0, toilet_x1, balcony_x0, balcony_x1) ของช่วงเสา i ฝั่ง side"""
+    b5 = b5x(i, side)
     if abs(b5 - GX[i] - 1.5) < 1e-6:
         return b5, GX[i + 1], GX[i], b5
     return GX[i], b5, b5, GX[i + 1]
@@ -197,9 +210,9 @@ def slab_zones(f):
     z = []
     for i in range(9):
         xa, xb = _bx(i)
-        tx0, tx1, bx0, bx1 = bay_split(i)
         clamp = lambda a, b: ((xa if a == GX[i] else a), (xb if b == GX[i + 1] else b))   # ช่วงริมยื่นถึงขอบพื้น
         for side in ('N', 'S'):
+            tx0, tx1, bx0, bx1 = bay_split(i, side)
             # พื้นห้องพักวางทับหลังคาน B2 ถึงผิวผนังกั้นห้องน้ำ/ระเบียง (ขั้นลด 0.075 อยู่ที่แนวผนัง)
             ry = (GY['B'] - RM_EDGE, GY['C']) if side == 'N' else (GY['D'], GY['E'] + RM_EDGE)
             sy = (GY['A'], STRIP_N) if side == 'N' else (STRIP_S, GY['F'])
@@ -817,8 +830,8 @@ W1_MODEL = 'KPA หน้าต่างบานกระจกซ้อน อ
 def wc_geo(i, side, f):
     """ตำแหน่งอ้างอิงห้องน้ำห้องพักตาม A106: xc แนวกริดฝั่งเสา, dr ทิศเข้าห้องน้ำ, xg ผิวผนังกริด,
     s ทิศจากผนังนอกเข้าห้อง (แกน y), yo ผิวในผนังนอก, yr ผิวผนังห้อง, d2/d3 ศูนย์กลางประตู"""
-    tx0, tx1, bx0, bx1 = bay_split(i)
-    b5 = B5_X[i]
+    tx0, tx1, bx0, bx1 = bay_split(i, side)
+    b5 = b5x(i, side)
     xc, dr = (tx1, -1) if abs(tx0 - b5) < 1e-6 else (tx0, 1)
     s = 1 if side == 'N' else -1
     y_out, y_rm = (0.0, GY['B']) if side == 'N' else (GY['F'], GY['E'])
@@ -845,7 +858,7 @@ for f in (2, 3, 4, 5):
         for i in range(9):
             stair = side == 'N' and i == STAIR_BAY[0]
             x0, x1 = GX[i] + cw, GX[i + 1] - cw
-            tx0, tx1, bx0, bx1 = bay_split(i)
+            tx0, tx1, bx0, bx1 = bay_split(i, side)
             tag = f'F{f}-{side}{i+1}'
             # ผนังทางเดิน (ประตูห้อง)
             if not stair:
@@ -864,7 +877,7 @@ for f in (2, 3, 4, 5):
                 ya, yb = lo(y_out, y_rm)
                 # ผนังกั้นห้องน้ำกับระเบียง (แนว B5) ผนังทึบ: เข้าห้องน้ำจากในห้องพัก (ผู้ใช้แจ้ง 10 พ.ย. 2569)
                 wa, wb = (ya + 0.10, yb - 0.125) if side == 'N' else (ya + 0.125, yb - 0.10)
-                add_wall(f'W-{tag}-WC', f, 'y', B5_X[i], wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
+                add_wall(f'W-{tag}-WC', f, 'y', b5x(i, side), wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
                          name=f'ผนังห้องน้ำด้านระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ผนังนอกห้องน้ำ: หน้าต่าง W1 KPA 0.60x0.40 ขอบล่าง 1.80 ชิดเสา (ศูนย์กลางห่างกริด 0.47 ตาม A106)
                 add_wall(f'W-{tag}-OWC', f, 'x', y_out + (0.10 if side == 'N' else -0.10),
@@ -1174,7 +1187,7 @@ for f in (2, 3, 4, 5):
         y_out, y_rm, y_cor = (0.0, yB, yC) if side == 'N' else (yF, yE, yD)
         o = 0.10 + h if side == 'N' else -(0.10 + h)
         for i in range(9):
-            tx0, tx1, bx0, bx1 = bay_split(i)
+            tx0, tx1, bx0, bx1 = bay_split(i, side)
             x0, x1 = GX[i] + h, GX[i + 1] - h
             if side == 'N' and i == STAIR_BAY[0]:
                 # โถงหน้าบันไดปูเจด้าไวท์เหมือนโถงทางเดิน (ผู้ใช้แจ้ง 10 พ.ย. 2569) แนวร่องต่อเนื่องกับทางเดิน
@@ -1301,7 +1314,7 @@ for f in (2, 3, 4, 5):
             # เต้ารับคู่ 1 กล่อง มุมห้องก่อนออกระเบียง (ผนังกั้นห้องฝั่ง D2 ถัดจากเสา) สูง 0.30
             # โคมห้องน้ำ: ผนังกั้นห้องน้ำ–ระเบียง (B5) ฝั่งห้องน้ำ สูง 2.40 / โคมหลังห้อง: ผนังเดียวกัน ฝั่งระเบียง สูง 2.50
             g = wc_geo(i, side, f)
-            sr, dr, b5, xb = g['s'], g['dr'], B5_X[i], (GX[i] if g['xc'] == GX[i + 1] else GX[i + 1])
+            sr, dr, b5, xb = g['s'], g['dr'], b5x(i, side), (GX[i] if g['xc'] == GX[i + 1] else GX[i + 1])
             y_bal = yB if side == 'N' else yE                                   # แนวผนังห้อง–ระเบียง/ห้องน้ำ
             off = EL_PIPE / 2 + 0.003
             wf = WALL_T / 2 + PL_T
