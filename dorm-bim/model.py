@@ -834,7 +834,9 @@ for f in (2, 3, 4, 5):
             add_wall(f'W-F{f}-{side}G{k+1}-RM', f, 'y', GX[k], ya + cd, yb - cd, z0, beam_soffit(f, 'main'), tw, tp, win,
                      name=f'ผนังกั้นห้องกริด {k+1} ชั้น {f} ฝั่ง {side}' + (' (ผนังริม มีหน้าต่าง)' if win else ''))
             ya, yb = lo(y_out, y_rm)
-            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ya + 0.10, yb - cd, zs, beam_soffit(f, 'main', True), tw, tp,
+            # ฝั่ง N เสาอยู่ที่ yb (แนว B), ฝั่ง S เสาอยู่ที่ ya (แนว E): เว้นระยะเสาด้านที่ชนเสา (เดิมฝั่ง S ล้ำเข้าเนื้อเสา, ผู้ใช้แจ้ง 10 พ.ย. 2569)
+            ba, bb = (ya + 0.10, yb - cd) if side == 'N' else (ya + cd, yb - 0.10)
+            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ba, bb, zs, beam_soffit(f, 'main', True), tw, tp,
                      name=f'ผนังกั้นระเบียงกริด {k+1} ชั้น {f} ฝั่ง {side}')
 
 # ---------- ชั้น 1 ----------
@@ -1135,6 +1137,68 @@ def mirror_y(g):
         g['pts'] = [[x, round(Y - y, 4), z] for x, y, z in g['pts']][::-1]
     elif t == 'xprofile':
         g['poly'] = [[round(Y - y, 4), z] for y, z in g['poly']][::-1]
+
+
+# ---------- ตัดงานก่อ/เอ็น/ฉาบผนัง ที่ล้ำเข้าเนื้อเสา (ผู้ใช้แจ้ง 10 พ.ย. 2569) ----------
+# เช่น ผนังแถบระเบียงชั้น 4 ฐานผนังอยู่ต่ำกว่า FL4 0.075 (พื้นลดระดับ) ชนหัวเสาชั้น 3 ที่ใหญ่กว่าเสาชั้น 4
+def _box(g):
+    xs = [q[0] for q in g['poly']]; ys = [q[1] for q in g['poly']]
+    return [min(xs), max(xs), min(ys), max(ys), g['z0'], g['z0'] + g['t']]
+
+
+def _vol(b):
+    return (b[1] - b[0]) * (b[3] - b[2]) * (b[5] - b[4])
+
+
+def _sub_box(r, c):
+    """r - c (กล่องแนวแกน) คืนรายการกล่องที่เหลือ"""
+    if not all(min(r[2 * k + 1], c[2 * k + 1]) - max(r[2 * k], c[2 * k]) > 1e-6 for k in range(3)):
+        return [r]
+    out, cur = [], list(r)
+    for k in range(3):
+        a, b = 2 * k, 2 * k + 1
+        if cur[a] < c[a] - 1e-6:
+            piece = list(cur); piece[b] = c[a]; out.append(piece); cur[a] = c[a]
+        if cur[b] > c[b] + 1e-6:
+            piece = list(cur); piece[a] = c[b]; out.append(piece); cur[b] = c[b]
+    return out
+
+
+def _clip_geom(g, cols):
+    parts = g['parts'] if g['type'] == 'multi' else [g]
+    if any(pt['type'] != 'prism' or len(pt['poly']) != 4 for pt in parts):
+        return None, 0.0
+    boxes, removed = [], 0.0
+    for pt in parts:
+        b0 = _box(pt)
+        bs = [b0]
+        for c in cols:
+            bs = [nb for b in bs for nb in _sub_box(b, c)]
+        removed += _vol(b0) - sum(_vol(b) for b in bs)
+        boxes += bs
+    if removed <= 1e-9:
+        return None, 0.0
+    ps = [prism([(b[0], b[2]), (b[1], b[2]), (b[1], b[3]), (b[0], b[3])], b[4], round(b[5] - b[4], 4)) for b in boxes]
+    return (ps[0] if len(ps) == 1 else dict(type='multi', parts=ps)), removed
+
+
+_cols = [_box(e['geom']) for e in elements if e['category'] == 'เสา' and e['geom']['type'] == 'prism']
+CLIPPED = []
+for e in elements:
+    if not (e['category'] in ('ผนัง', 'เสาเอ็นคานเอ็น') or (e['category'] == 'งานฉาบ' and e['id'].startswith('W-'))):
+        continue
+    ng, rem = _clip_geom(e['geom'], _cols)
+    if ng is None:
+        continue
+    e['geom'] = ng
+    CLIPPED.append(e['id'])
+    q = e.get('qty') or {}
+    if e['category'] == 'ผนัง' and 'area' in q:
+        q['area'] = round(q['area'] - rem / WALL_T, 3); q['blocks'] = round(q['area'] * BLOCK_PER_M2)
+    elif e['category'] == 'งานฉาบ' and 'area' in q:
+        q['area'] = round(q['area'] - rem / PL_T, 3)
+    elif 'concrete' in q:
+        q['concrete'] = round(q['concrete'] - rem, 4)
 
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
