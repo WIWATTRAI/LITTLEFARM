@@ -1210,6 +1210,12 @@ for e in elements:
         q['concrete'] = round(q['concrete'] - rem, 4)
 
 
+# ---------- รุ่นสุขภัณฑ์ (ผู้ใช้แจ้ง 10 พ.ย. 2569) ----------
+for e in elements:
+    if e['category'] == 'สุขภัณฑ์' and e['name'].startswith('โถส้วม'):
+        e['qty']['model'] = 'กะรัต K2760 หรือเทียบเท่า'
+
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 if __name__ == '__main__':
