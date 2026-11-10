@@ -682,10 +682,7 @@ for f in (2, 3, 4, 5):
                 add(f'FX-{tag}-LAV', 'สุขภัณฑ์', f, 'A21',
                     prism([(bxs - 0.25, wy - 0.20), (bxs + 0.25, wy - 0.20), (bxs + 0.25, wy + 0.20), (bxs - 0.25, wy + 0.20)],
                           z0 + 0.65, 0.20), name=f'อ่างล้างหน้า ชั้น {f} ห้อง {side}{i+1}', assumed=True, qty=dict(count=1))
-            else:
-                # โถงบันได: ผนังนอกแนว A มีหน้าต่าง
-                add_wall(f'W-{tag}-OST', f, 'x', y_out + 0.10, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(f, 'edge'), tw, tp,
-                         [((GX[i] + GX[i + 1]) / 2, 1.00, 1.00, 1.20)], name=f'ผนังโถงบันได ชั้น {f}')
+            # โถงบันได: ผนังนอกแนว A สร้างแยกตามช่วงชานพัก (ด้านล่าง)
         # ผนังกั้นห้องตามกริด 1–10 (ช่วงห้อง + ช่วงระเบียง)
         for k in range(10):
             ya, yb = lo(y_rm, y_cor)
@@ -704,8 +701,21 @@ cd, cw = col_d(1), col_w(1)
 for k in (3, 4):
     add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], 0.10, yB - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
     add_wall(f'W-F1-ST-G{k+1}B', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1}')
-add_wall('W-F1-ST-OUT', 1, 'x', 0.10, GX[3] + cw, GX[4] - cw, z0, beam_soffit(1, 'edge'), 'A04', 'A12',
-         [((GX[3] + GX[4]) / 2, 1.00, 1.00, 1.20)], name='ผนังนอกโถงบันไดชั้น 1')
+# ผนังนอกโถงบันไดแนว A (หลังชานพัก): ก่อระหว่างคาน BST3 ของชานพักแต่ละชั้น
+# หน้าต่างบานกระทุ้ง 1.20x0.60 ขอบล่างสูง 1.50 จากพื้นชานพัก (ผู้ใช้กำหนด 10 พ.ย. 2569)
+_zm = [FL[f] + 10 * RISER for f in (1, 2, 3, 4)]          # ระดับพื้นชานพัก
+_segs = [(FL[1], _zm[0] - 0.40, 1, None)]                   # ใต้ชานพักแรก
+for k in range(4):
+    top = _zm[k + 1] - 0.40 if k < 3 else ROOF_BEAM
+    _segs.append((_zm[k], top, k + 1, _zm[k]))
+for n, (za, zb, f, zland) in enumerate(_segs):
+    fl = max(ff for ff in FL if FL[ff] <= za + 1e-6)
+    tw = wall_task[fl]
+    tp = 'A12' if fl == 1 else plaster_task[fl]
+    win = [((GX[3] + GX[4]) / 2, 1.20, 1.50, 0.60)] if zland is not None else []
+    add_wall(f'W-ST-OUT-{n}', fl, 'x', 0.10, GX[3] + col_w(fl), GX[4] - col_w(fl), za, zb, tw, tp, win,
+             name=f'ผนังนอกโถงบันได ช่วง {n}' + (f' หน้าต่างบานกระทุ้ง 1.20x0.60 (ชานพัก +{zland:.2f})' if win else ''))
+ASSUMPTIONS.append('ผนังนอกโถงบันไดแนว A ก่อระหว่างคาน BST3 ชานพัก; ช่วงบนสุดก่อจากชานพักชั้น 4 ถึง +16.30; หน้าต่างบานกระทุ้ง 1.20x0.60 สูง 1.50 จากพื้นชานพัก')
 # ร้านค้า 3 ห้อง (กริด 5–8) หน้าร้านแนว B ด้านหลังแนว C
 for i in (4, 5, 6):
     add_wall(f'W-F1-SH{i-3}-FR', 1, 'x', yB, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
