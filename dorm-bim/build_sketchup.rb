@@ -8,7 +8,7 @@ module DormBIM
   CAT_COLORS = {
     'คานคอดิน' => [120, 120, 120], 'เสา' => [204, 89, 77], 'คาน' => [89, 140, 102],
     'พื้น' => [205, 205, 200], 'พื้นสำเร็จรูป' => [140, 178, 217], 'พื้นทับหน้า' => [230, 217, 140], 'เสาเอ็นคานเอ็น' => [140, 140, 140], 'บันได' => [180, 170, 160], 'โครงหลังคาเหล็ก' => [70, 110, 160],
-    'หลังคา' => [120, 60, 45], 'ผนัง' => [204, 158, 128],
+    'หลังคา' => [120, 60, 45], 'ราวบันได' => [25, 25, 25], 'ผนัง' => [204, 158, 128],
     'งานฉาบ' => [237, 235, 225], 'ประตูหน้าต่าง' => [115, 77, 51], 'กระเบื้อง' => [217, 204, 178], 'สุขภัณฑ์' => [248, 248, 248]
   }.freeze
   # หมวดงานสำหรับกรอง Tag: ST = โครงสร้าง, AR = สถาปัตย์
@@ -60,7 +60,12 @@ module DormBIM
 
   # C เดี่ยว: แกนกลางหน้าตัดอยู่บนเส้น, 2C: ประกบปากชนกันเป็นกล่อง กว้าง 2b
   def self.c_loops(g)
-    sec = g['sec']; b = sec['b']
+    sec = g['sec']
+    if g['shape'] == 'O'          # เหล็กกลม: รูปหลายเหลี่ยม 16 ด้าน (ตรงกับ export_glb)
+      r = sec['d'] / 2.0
+      return [(0...16).map { |i| a = 2 * Math::PI * i / 16; [r * Math.cos(a), r * Math.sin(a)] }]
+    end
+    b = sec['b']
     if g['shape'] == '2C'
       [c_section(sec, -b, false), c_section(sec, b, true)]
     else
@@ -247,8 +252,14 @@ module DormBIM
               Geom::Transformation.translation([xs.min.m - db.min.x * sx, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m - db.min.z * sz]) *
                 Geom::Transformation.scaling(ORIGIN, sx, 1, sz)
             elsif (mt = e['component_mount'])
-              # ประตูม้วน: กึ่งกลางช่อง, หลังกล่องที่ back_y (กล่องอยู่ฝั่ง y น้อย = ด้านใน), ขอบล่างที่พื้น
-              Geom::Transformation.translation([(xs.min + xs.max).m / 2.0 - (db.min.x + db.max.x) / 2.0, mt['back_y'].m - db.max.y, geo['z0'].m])
+              # ประตูม้วน: กึ่งกลางช่อง, ด้านราง (local y max) ที่ back_y, กล่องยื่นไปทาง box_dir (-1 = y น้อย, +1 = y มาก), ขอบล่างที่พื้น
+              cxm = (xs.min + xs.max).m / 2.0
+              if mt['box_dir'].to_i > 0
+                Geom::Transformation.translation([cxm + (db.min.x + db.max.x) / 2.0, mt['back_y'].m + db.max.y, geo['z0'].m]) *
+                  Geom::Transformation.rotation(ORIGIN, Z_AXIS, Math::PI)
+              else
+                Geom::Transformation.translation([cxm - (db.min.x + db.max.x) / 2.0, mt['back_y'].m - db.max.y, geo['z0'].m])
+              end
             else
               Geom::Transformation.translation([xs.min.m, yc.m - (db.min.y + db.max.y) / 2.0, geo['z0'].m])
             end

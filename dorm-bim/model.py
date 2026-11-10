@@ -320,6 +320,53 @@ for f in (2, 3, 4, 5):                             # BST1 ขอบช่อง�
     add(f'BST1-L{f}', 'คาน', f, 'DONE', member((sx0, ST_RUN_Y1 + 0.10, c), (sx1, ST_RUN_Y1 + 0.10, c), 0.20, 0.40),
         name=f'BST1 คานขอบช่องบันไดชั้น {f}', qty=dict(length=round(sx1 - sx0, 3), concrete=round((sx1 - sx0) * 0.08, 4)))
 
+# ---------- ราวบันไดหลัก + ราวกันตกโถงบันไดชั้น 5 (ผู้ใช้กำหนด 10 พ.ย. 2569) ----------
+# เหล็กทาสีดำ: แต่ละช่วงบันได (พื้น→ชานพัก, ชานพัก→พื้น) มีเสา 4 ต้น, ราวเหล็กกลม 3 แนว ราวบนสูง 1.20 จากลูกนอนที่ตั้งเสา
+# ราวต่อเนื่องตามแนวช่องว่างระหว่างช่วงบันได 0.40 ม. ตั้งแต่ชั้น 1 ถึงชั้น 5 แล้วต่อเป็นราวกันตกขอบช่องบันไดชั้น 5
+RAIL_H = (0.40, 0.80, 1.20)                   # ระดับราว 3 แนว จากลูกนอน/พื้นที่ตั้งเสา (ราวล่าง 2 แนวแบ่งเท่า: ค่าสมมติ)
+RAIL_D = 0.038                                # ราวเหล็กกลม Ø 1-1/2" (ค่าสมมติ)
+POST_W, POST_D = 0.025, 0.050                 # เสาเหล็กกล่อง 1"x2" (A-05)
+POST_K = (0, 3, 5, 8)                         # ลูกนอนที่ตั้งเสา (ขั้นที่ 1, 4, 6, 9)
+RX1, RX2 = FX1 - 0.05, GX0 + 0.05             # แนวเสาริมช่องว่างของช่วง 1 และช่วง 2
+ASSUMPTIONS.append('ราวบันได: เสาเหล็กกล่อง 1"x2" ตาม A-05, ราวเหล็กกลม Ø 1-1/2" 3 แนวที่ 0.40/0.80/1.20 ม. จากลูกนอน (ผู้ใช้กำหนดราวบน 1.20 และจำนวน 4 เสา/3 ราว ต่อช่วง), ตั้งเสาห่างขอบช่วงบันไดด้านช่องว่าง 0.05 ม., ผูกกับกิจกรรม A18 เพราะแผนไม่มีรายการราวบันได')
+
+
+def rail_pts():
+    """จุดตั้งเสาต่อเนื่องจากชั้น 1 ถึงชั้น 5: [(floor, flight_tag, [(x, y, z_base), ...])]"""
+    out = []
+    for f in (1, 2, 3, 4):
+        z0, zm = FL[f], FL[f] + 10 * RISER
+        out.append((f, f'F{f}-1', [(RX1, ST_RUN_Y1 - k * TREAD - TREAD / 2, z0 + (k + 1) * RISER) for k in POST_K]))
+        out.append((f, f'F{f}-2', [(RX2, LY1 + k * TREAD + TREAD / 2, zm + (k + 1) * RISER) for k in POST_K]))
+    yg = ST_RUN_Y1 + 0.05                        # ราวกันตกชั้น 5 บนขอบพื้นริมช่องบันได
+    xw = GX[3] + 0.035 + 0.015 + 0.03            # ชิดผิวฉาบผนังกริด 4 (ครึ่งบล็อก 0.035 + ฉาบ 0.015)
+    out.append((5, 'F5-G', [(RX2, yg, FL[5]), ((RX2 + xw) / 2, yg, FL[5]), (xw, yg, FL[5])]))
+    return out
+
+
+def round_bar(p0, p1):
+    return dict(type='member', p0=[round(v, 4) for v in p0], p1=[round(v, 4) for v in p1], w=RAIL_D, d=RAIL_D,
+                shape='O', sec=dict(d=RAIL_D))
+
+
+_runs = rail_pts()
+_prev = None
+for f, tag, pts in _runs:
+    posts = [member((x, y, z), (x, y, z + RAIL_H[-1]), POST_W, POST_D) for x, y, z in pts]
+    rails = []
+    seq = ([_prev] if _prev else []) + pts       # เชื่อมจากเสาต้นสุดท้ายของช่วงก่อนหน้า (ราวต่อเนื่อง)
+    for h in RAIL_H:
+        for (xa, ya, za), (xb, yb, zb) in zip(seq, seq[1:]):
+            rails.append(round_bar((xa, ya, za + h), (xb, yb, zb + h)))
+    L = sum(math.dist(r['p0'], r['p1']) for r in rails)
+    kind = 'ราวกันตกขอบช่องบันได' if tag.endswith('-G') else 'ราวบันได'
+    add(f'RL-{tag}', 'ราวบันได', f, 'A18', dict(type='multi', parts=posts + rails),
+        name=f'{kind} {tag} เหล็กทาสีดำ (เสา {len(posts)} ต้น ราวกลม 3 แนว สูง 1.20)', assumed=True,
+        qty=dict(posts=len(posts), post_section='เหล็กกล่อง 1"x2"', post_length=round(len(posts) * RAIL_H[-1], 3),
+                 rail_section='เหล็กกลม Ø 1-1/2"', rail_length=round(L, 3), finish='ทาสีกันสนิม + สีดำ'))
+    _prev = pts[-1]
+
+
 # ---------- หลังคา (S106 ผังโครงหลังคา, S107 รูปตัดด้านสั้น) ----------
 # หน้าตัดเหล็ก (มอก. เหล็กรูปพรรณขึ้นรูปเย็น) h, b, c, t (ม.) และน้ำหนัก กก./ม. ต่อตัว
 STEEL = {'C125': dict(h=0.125, b=0.05, c=0.02, t=0.0032, kg=6.13),
@@ -806,18 +853,20 @@ for n, (za, zb, f, zland) in enumerate(_segs):
 ASSUMPTIONS.append('ผนังนอกโถงบันไดแนว A ก่อระหว่างคาน BST3 ชานพัก; ช่วงบนสุดก่อจากชานพักชั้น 4 ถึง +16.30; หน้าต่างบานกระทุ้ง 1.20x0.60 สูง 1.50 จากพื้นชานพัก')
 # ร้านค้า 3 ห้อง (กริด 5–8) หน้าร้านแนว B ด้านหลังแนว C
 for i in (4, 5, 6):
-    add_wall(f'W-F1-SH{i-3}-FR', 1, 'x', yB, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
-             [((GX[i] + GX[i + 1]) / 2, 3.00, 0.0, beam_soffit(1, 'main') - z0)], name=f'ผนังหน้าร้าน {i-3} ช่องประตูม้วน 3.00 ม. สูงถึงใต้คาน')
-    add_wall(f'W-F1-SH{i-3}-BK', 1, 'x', yC, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
-             [(GX[i] + 0.75, 0.90, 0.0, 2.00)], name=f'ผนังหลังร้าน {i-3}')
+    # หน้าร้านอยู่ด้านใต้ถุน (แนว C) ประตูม้วน, ด้านหลัง (แนว B) ประตู 0.90 (ผู้ใช้แจ้ง 10 พ.ย. 2569)
+    add_wall(f'W-F1-SH{i-3}-FR', 1, 'x', yC, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
+             [((GX[i] + GX[i + 1]) / 2, 3.00, 0.0, beam_soffit(1, 'main') - z0)], name=f'ผนังหน้าร้าน {i-3} (แนว C ด้านใต้ถุน) ช่องประตูม้วน 3.00 ม. สูงถึงใต้คาน')
+    add_wall(f'W-F1-SH{i-3}-BK', 1, 'x', yB, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A04', 'A13',
+             [(GX[i] + 0.75, 0.90, 0.0, 2.00)], name=f'ผนังหลังร้าน {i-3} (แนว B) ประตู 0.90')
 for k in (5, 6, 7):
     add_wall(f'W-F1-SH-G{k+1}', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A04', 'A13', name=f'ผนังกั้นร้านกริด {k+1}')
 # ห้องน้ำชาย–หญิง (กริด 8–10) A14 ทั้งก่อและฉาบ
 for i in (7, 8):
+    # แนว B (ด้านหลังอาคาร) ผนังทึบไม่มีประตู, ทางเข้าอยู่แนว C ด้านใต้ถุน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
     add_wall(f'W-F1-WC{i-6}-FR', 1, 'x', yB, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A14', 'A14',
-             [(GX[i] + 1.75, 0.90, 0.0, 2.00)], name=f'ผนังห้องน้ำชั้น 1 ห้อง {i-6} ด้านหน้า')
+             name=f'ผนังห้องน้ำชั้น 1 ห้อง {i-6} ด้านหลังอาคาร (แนว B) ผนังทึบ')
     add_wall(f'W-F1-WC{i-6}-BK', 1, 'x', yC, GX[i] + cw, GX[i + 1] - cw, z0, beam_soffit(1, 'main'), 'A14', 'A14',
-             [(GX[i] + 1.75, 0.90, 0.0, 2.00)], name=f'ผนังห้องน้ำชั้น 1 ห้อง {i-6} ด้านหลัง')
+             [(GX[i] + 1.75, 0.90, 0.0, 2.00)], name=f'ผนังห้องน้ำชั้น 1 ห้อง {i-6} ด้านใต้ถุน (แนว C) ทางเข้า')
     for j in range(3):   # ห้องส้วม 3 ห้อง กว้าง 1.20 ตามแบบห้องน้ำ
         x = GX[i] + 0.25 + 1.20 * (j + 1)
         if x < GX[i + 1] - 0.3:
@@ -911,10 +960,11 @@ for e in elements:
     if re.match(r'^W-F[2-5]-[NS]\d-BAL-O2$', e['id']):
         e['component'] = 'ประตูห้องน้ำ 0.70x1.80 (ตัวอย่างชั่วคราว)'
         e['component_fit'] = 'opening'
-    # ประตูม้วนร้านค้า: ระยะระหว่างราง 3.00, กล่องม้วนสูง 0.75 ชนท้องพื้นชั้น 2 ติดตั้งด้านในร้าน หลังกล่องชิดผิวในคาน B2
+    # ประตูม้วนร้านค้า (แนว C ด้านใต้ถุน): ระยะระหว่างราง 3.00, กล่องม้วนสูง 0.75 ชนท้องพื้นชั้น 2
+    # ติดตั้งด้านในร้าน: ด้านรางของคอมโพเนนต์ชิดผิวคาน B2 ด้านในร้าน (y = C - 0.125) กล่องยื่นเข้าในร้าน
     if re.match(r'^W-F1-SH\d-FR-O1$', e['id']):
         e['component'] = 'ประตูม้วน 3.00x2.60'
-        e['component_mount'] = dict(back_y=round(GY['B'] + 0.125, 4), box_top=round(FL[2] - SLAB_T, 3))
+        e['component_mount'] = dict(back_y=round(GY['C'] - 0.125, 4), box_dir=-1, box_top=round(FL[2] - SLAB_T, 3))
 
 
 def summary():
@@ -949,6 +999,7 @@ if __name__ == '__main__':
         mirror_y(e['geom'])
         if 'component_mount' in e:
             e['component_mount']['back_y'] = round(GY['F'] - e['component_mount']['back_y'], 4)
+            e['component_mount']['box_dir'] = -e['component_mount'].get('box_dir', 1)
     GYM = {k: round(GY['F'] - v, 4) for k, v in GY.items()}
     model = dict(project='หอพักคนงาน 5 ชั้น อาคาร A (ชัยเสรี หนองแค)', units='m', axes='x=กริด1→10, y=กริดF(0)→A(15.5), z=ระดับ',
                  grid=dict(x={str(i + 1): v for i, v in enumerate(GX)}, y=GYM), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
