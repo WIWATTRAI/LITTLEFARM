@@ -135,6 +135,25 @@ module DormBIM
     f.pushpull(g['t'].m)
   end
 
+  # ชิ้นตันจากรูปตัดในระนาบ y-z ยืดตามแกน x เป็น ComponentInstance (ใช้ definition ร่วมเมื่อรูปร่างเหมือนกัน)
+  def self.xprofile_instance(ents, geo, cache)
+    y0, z0 = geo['poly'][0]
+    rel = geo['poly'].map { |y, z| [(y - y0).round(4), (z - z0).round(4)] }
+    w = (geo['x1'] - geo['x0']).round(4)
+    key = [rel, w]
+    defn = cache[key]
+    unless defn
+      model = Sketchup.active_model
+      name = "#{geo['component'] || 'xprofile'} ##{cache.size + 1}"
+      defn = model.definitions.add(name)
+      f = defn.entities.add_face(rel.map { |y, z| Geom::Point3d.new(0, y.m, z.m) })
+      f.reverse! if f.normal.x < 0
+      f.pushpull(w.m)
+      cache[key] = defn
+    end
+    ents.add_instance(defn, Geom::Transformation.new(Geom::Point3d.new(geo['x0'].m, y0.m, z0.m)))
+  end
+
   def self.material(model, cat)
     name = "BIM-#{cat}"
     m = model.materials[name]
@@ -180,6 +199,7 @@ module DormBIM
     end
     use_pb = !pb_api.nil?
     pb_cache = {}
+    comp_cache = {}
     f_4d = folder(model, '4D กิจกรรม')
     root = model.entities.grep(Sketchup::Group).find { |g| g.name == 'หอพัก A' }
     unless root
@@ -204,9 +224,16 @@ module DormBIM
       geo = e['geom']
       mat = material(model, e['category'])
       by_pb = use_pb && PB_CATS.include?(e['category'])
-      g = by_pb ? pb_member(cg.entities, e, mat.name, pb_cache) : cg.entities.add_group
+      by_comp = geo['type'] == 'xprofile'
+      g = if by_pb
+            pb_member(cg.entities, e, mat.name, pb_cache)
+          elsif by_comp
+            xprofile_instance(cg.entities, geo, comp_cache)
+          else
+            cg.entities.add_group
+          end
       g.name = e['id']
-      case (by_pb ? nil : geo['type'])
+      case (by_pb || by_comp ? nil : geo['type'])
       when 'member' then box_member(g.entities, geo)
       when 'prism' then prism(g.entities, geo)
       when 'plate' then plate(g.entities, geo)
@@ -227,7 +254,7 @@ module DormBIM
       g.set_attribute(DICT, 'name', e['name'])
       g.set_attribute(DICT, 'category', e['category'])
       g.set_attribute(DICT, 'discipline', discipline(e['category'])[1])
-      g.set_attribute(DICT, 'tool', by_pb ? 'Profile Builder 3' : 'Ruby')
+      g.set_attribute(DICT, 'tool', by_pb ? 'Profile Builder 3' : (by_comp ? 'Component' : 'Ruby'))
       g.set_attribute(DICT, 'floor', e['floor'])
       g.set_attribute(DICT, 'task_id', e['task'])
       g.set_attribute(DICT, 'task_name', t ? t['name'] : 'งานโครงสร้างเสร็จก่อนแผน R3')

@@ -52,7 +52,11 @@ def ear_clip(pts2):
         for k in range(len(idx)):
             i0, i1, i2 = idx[k - 1], idx[k], idx[(k + 1) % len(idx)]
             a, b, c = P[i0], P[i1], P[i2]
-            if cross(a, b, c) <= 1e-12:
+            cr = cross(a, b, c)
+            if abs(cr) <= 1e-12:          # จุดอยู่บนเส้นตรง: ตัดทิ้งโดยไม่สร้างสามเหลี่ยม
+                idx.pop(k)
+                break
+            if cr < 0:
                 continue
             if any(inside(P[j], a, b, c) for j in idx if j not in (i0, i1, i2)):
                 continue
@@ -98,7 +102,25 @@ def shape_member(g):
     return np.vstack(V), T
 
 
+def xprofile(g):
+    lp = [tuple(p) for p in g['poly']]
+    area = sum(lp[i][0] * lp[(i + 1) % len(lp)][1] - lp[(i + 1) % len(lp)][0] * lp[i][1] for i in range(len(lp)))
+    if area < 0:
+        lp = lp[::-1]
+    n = len(lp)
+    a = np.array([(g['x0'], y, z) for y, z in lp])
+    b = np.array([(g['x1'], y, z) for y, z in lp])
+    cap = ear_clip(lp)
+    tris = [(i, k, j) for i, j, k in cap] + [(n + i, n + j, n + k) for i, j, k in cap]
+    for i in range(n):
+        j = (i + 1) % n
+        tris += [(i, j, n + j), (i, n + j, n + i)]
+    return np.vstack([a, b]), tris
+
+
 def mesh(g):
+    if g['type'] == 'xprofile':
+        return xprofile(g)
     if g['type'] == 'multi':
         V, T, base = [], [], 0
         for p in g['parts']:

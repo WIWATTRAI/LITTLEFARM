@@ -34,7 +34,7 @@ ASSUMPTIONS = [
     'โครงหลังคาตาม S106/S107: ขื่อ/อะเส/สะพาน/ตะเข้/อกไก่/คานรับเสาดั้ง 2C125x50x20x3.2, เสารับจันทัน/เสารับอกไก่/ขื่อทางยาว 2C100x50x20x3.2, จันทัน/เหล็กทะแยง C100x50x20x3.2 ระยะจันทัน 0.875 ม.',
     '2C ขึ้นแบบประกบปากชนกันเป็นกล่อง (รอผู้ใช้ยืนยันว่าไม่ใช่ประกบหลัง); ไม่ได้ขึ้นแปสำเร็จรูปและเพลทรอยต่อ; น้ำหนักเหล็ก C125 6.13 กก./ม., C100 5.50 กก./ม.',
     'ขื่อด้านสั้นวางทุกกริด 2–9 บนคานหลังคา, เสารับจันทันที่แนว B, กลางช่วง B–C (2.55 ม.), C, D และฝั่ง E; คานรับเสาดั้งที่ +18.74 (2.44 ม. จาก +16.30)',
-    'บันไดหลักตาม A-05: ช่วงกริด 4–5 ช่วงบันไดกว้าง 1.50 ช่องกลาง 0.40 ลูกนอน 0.30 x 9 ลูกตั้ง 0.16 x 20 ชานพักกว้าง 1.50 ในแถบยื่นด้านหน้า ที่ระดับพื้น +1.60; ท้องบันไดและชานพักหนา 0.12 ม. (สมมติ)',
+    'บันไดหลักตาม A-05: ช่วงกริด 4–5 ช่วงบันไดกว้าง 1.50 ช่องกลาง 0.40 ลูกนอน 0.30 x 9 ลูกตั้ง 0.16 x 20 ชานพักกว้าง 1.50 ในแถบยื่นด้านหน้า ที่ระดับพื้น +1.60; ท้องบันไดหนา 0.12 ม. ชานพักหนา 0.16 ม. (สมมติ) บันไดแต่ละช่วงเป็น component ชิ้นตันรูปขั้นบันไดจริง',
     'คานบันได BST1/BST2/BST3 200x400 ตาม S-04: BST1 ขอบช่องเปิดระดับพื้น, BST2 (กริด 4,5) และ BST3 (ขอบนอก) ระดับชานพัก',
     'ระยะคานซอย B5 และผนังห้องน้ำปรับตามแปลน A-02/ผังคาน S-04 (เดิมใช้ S102)',
     'คานคอดิน: หลังคาน = +0.20 (ใต้พื้น GS 0.10 ม.)',
@@ -191,20 +191,27 @@ LY0, LY1 = GY['A'] + 0.15, GY['B']                 # ชานพัก
 ASSUMPTIONS.append('บันไดหลักชั้น 4→5 ใช้รูปแบบเดียวกับชั้น 1→2 (A-05 แสดงชั้น 1–2)')
 
 
-def flight(x0, x1, y_start, direction, z_start):
-    """ช่วงบันได: ขั้นบันได (prism) + ท้องบันได (plate)"""
-    parts = []
+LAND_T = RISER                                   # ชานพักหนาเท่าลูกตั้ง ให้ท้องชานพักต่อกับขั้นสุดท้าย
+
+
+def flight(x0, x1, y_start, direction, z_start, z_base=None):
+    """ช่วงบันไดเป็นชิ้นตันชิ้นเดียว: รูปตัดด้านข้าง (ขั้นบันไดจริง + ท้องบันไดหนา ST_T) ยืดตามแกน x"""
+    d = direction
+    zb = z_start if z_base is None else z_base                  # ระดับฐานช่วงบันได (ช่วง 2 ลงถึงท้องชานพัก)
+    pts = [(y_start, zb), (y_start, z_start)] if zb < z_start else [(y_start, z_start)]
     for k in range(NSTEP):
-        ya = y_start + direction * k * TREAD
-        yb = ya + direction * TREAD
-        top = z_start + (k + 1) * RISER
-        parts.append(prism([(x0, min(ya, yb)), (x1, min(ya, yb)), (x1, max(ya, yb)), (x0, max(ya, yb))], top - RISER, RISER))
-    y_end = y_start + direction * NSTEP * TREAD
-    z_end = z_start + (NSTEP + 1) * RISER
-    parts.append(plate([(x0, y_start, z_start), (x1, y_start, z_start), (x1, y_end, z_end - RISER), (x0, y_end, z_end - RISER)], ST_T))
-    run_len = math.hypot(NSTEP * TREAD, NSTEP * RISER)
-    conc = (x1 - x0) * (run_len * ST_T + NSTEP * 0.5 * TREAD * RISER)
-    return dict(type='multi', parts=parts), round(conc, 3)
+        y = y_start + d * k * TREAD
+        pts.append((y, z_start + (k + 1) * RISER))
+        pts.append((y + d * TREAD, z_start + (k + 1) * RISER))
+    y_top = y_start + d * NSTEP * TREAD
+    # ลูกตั้งสุดท้ายคือขอบชานพัก/ขอบพื้นชั้นบน
+    cos = TREAD / math.hypot(TREAD, RISER)
+    dv = ST_T / cos                                              # ความหนาท้องบันไดแนวดิ่ง
+    pts.append((y_top, z_start + NSTEP * RISER - dv))
+    pts.append((y_start + d * (dv - (z_start - zb)) * TREAD / RISER, zb))
+    poly = [[round(y, 4), round(z, 4)] for y, z in pts]
+    area = abs(sum(poly[i][0] * poly[(i + 1) % len(poly)][1] - poly[(i + 1) % len(poly)][0] * poly[i][1] for i in range(len(poly)))) / 2
+    return dict(type='xprofile', x0=round(x0, 4), x1=round(x1, 4), poly=poly, component='บันได คสล. กว้าง 1.50 ลูกตั้ง 0.16 ลูกนอน 0.30'), round(area * (x1 - x0), 3)
 
 
 for f in (1, 2, 3, 4):
@@ -215,8 +222,8 @@ for f in (1, 2, 3, 4):
         qty=dict(width=1.50, risers=10, treads=NSTEP, concrete=c))
     add(f'ST-F{f}-L', 'บันได', f, 'DONE', prism([(FX0, LY0), (GX1, LY0), (GX1, LY1), (FX0, LY1)], zm - ST_T, ST_T),
         name=f'ชานพักบันไดชั้น {f} (S2) ระดับ +{zm:.2f}', assumed=True,
-        qty=dict(area=round((GX1 - FX0) * (LY1 - LY0), 3), concrete=round((GX1 - FX0) * (LY1 - LY0) * ST_T, 3)))
-    g, c = flight(GX0, GX1, LY1, +1, zm)
+        qty=dict(area=round((GX1 - FX0) * (LY1 - LY0), 3), concrete=round((GX1 - FX0) * (LY1 - LY0) * LAND_T, 3)))
+    g, c = flight(GX0, GX1, LY1, +1, zm, zm - LAND_T)
     add(f'ST-F{f}-2', 'บันได', f, 'DONE', g, name=f'บันไดหลักชั้น {f}→{f+1} ช่วง 2 (ลูกตั้ง 11–20)',
         qty=dict(width=1.50, risers=10, treads=NSTEP, concrete=c))
     # คานชานพัก BST3 (ขอบนอก) และ BST2 (กริด 4, 5) ระดับชานพัก
@@ -810,6 +817,8 @@ def mirror_y(g):
             g['holes'] = [[[x, round(Y - y, 4)] for x, y in h][::-1] for h in g['holes']]
     elif t == 'plate':
         g['pts'] = [[x, round(Y - y, 4), z] for x, y, z in g['pts']][::-1]
+    elif t == 'xprofile':
+        g['poly'] = [[round(Y - y, 4), z] for y, z in g['poly']][::-1]
 
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
