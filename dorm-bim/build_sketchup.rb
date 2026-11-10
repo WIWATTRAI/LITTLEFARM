@@ -104,7 +104,7 @@ module DormBIM
   def self.solid_box(ents, x0, y0, z0, x1, y1, z1, mat)
     g = ents.add_group
     f = g.entities.add_face([[x0.m, y0.m, z0.m], [x1.m, y0.m, z0.m], [x1.m, y1.m, z0.m], [x0.m, y1.m, z0.m]])
-    f.reverse! if f.normal.z > 0
+    f.reverse! if f.normal.z < 0             # หันขึ้น แล้วดันขึ้นจาก z0 ถึง z1
     f.pushpull((z1 - z0).m)
     g.material = mat
     g
