@@ -938,7 +938,9 @@ ASSUMPTIONS.append('กระเบื้องห้องพัก โถง�
 # กระเบื้องห้องพักและโถงทางเดิน: Tara รุ่นเจด้าไวท์ 60x60 ซม. ยาแนว 3 มม. (ผู้ใช้กำหนด 10 พ.ย. 2569)
 TILE_TARA = dict(size='60x60 ซม.', w=0.60, model='Tara เจด้าไวท์ 60x60 ซม.', joint=0.003)
 TILE_MAT = 'Tara เจด้าไวท์ 60x60 ยาแนว 3 มม.'
-ASSUMPTIONS.append('แนวกระเบื้อง Tara เจด้าไวท์: แนวยาวขวางอาคาร (y) เริ่มจากร่องยาแนวที่กึ่งกลางทางเดิน (แนว CX) ออกไปหาหลังห้องตามที่ผู้ใช้กำหนด; แนวตามยาวอาคาร (x) ผมกำหนดให้ร่องยาแนวอยู่กึ่งกลางห้อง และกึ่งกลางอาคารสำหรับทางเดิน (ค่าสมมติ)')
+# ห้องพัก: Tara รุ่นเจเลนวูด 60x60 ซม. (ผู้ใช้กำหนด 10 พ.ย. 2569) ยาแนว 3 มม. และแนวการปูเหมือนทางเดิน
+TILE_TARA_WOOD = dict(size='60x60 ซม.', w=0.60, model='Tara เจเลนวูด 60x60 ซม.', joint=0.003, material='Tara เจเลนวูด 60x60 ยาแนว 3 มม.')
+ASSUMPTIONS.append('แนวกระเบื้อง Tara (ห้องพักเจเลนวูด, ทางเดินเจด้าไวท์; ยาแนว 3 มม. ของเจเลนวูดใช้ตามเจด้าไวท์): แนวยาวขวางอาคาร (y) เริ่มจากร่องยาแนวที่กึ่งกลางทางเดิน (แนว CX) ออกไปหาหลังห้องตามที่ผู้ใช้กำหนด; แนวตามยาวอาคาร (x) ผมกำหนดให้ร่องยาแนวอยู่กึ่งกลางห้อง และกึ่งกลางอาคารสำหรับทางเดิน (ค่าสมมติ)')
 
 
 def tile_layout(x0, x1, y0, y1, ox, oy, pitch):
@@ -965,7 +967,7 @@ def add_tile(eid, f, x0, x1, y0, y1, spec, name, z=None, origin=None):
         pitch = spec['w'] + spec['joint']
         full, cut = tile_layout(x0, x1, y0, y1, origin[0], origin[1], pitch)
         qty.update(tiles=full + cut, tiles_full=full, tiles_cut=cut, joint_mm=round(spec['joint'] * 1000, 1))
-        extra = dict(material=TILE_MAT, pitch=round(pitch, 4), origin=[round(origin[0], 4), round(origin[1], 4)])
+        extra = dict(material=spec.get('material', TILE_MAT), pitch=round(pitch, 4), origin=[round(origin[0], 4), round(origin[1], 4)])
     add(eid, 'กระเบื้อง', f, 'A16' if f < 5 else 'A17',
         prism([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], FL[f] if z is None else z, 0.02), name=name, assumed=True, qty=qty)
     if extra:
@@ -984,7 +986,7 @@ for f in (2, 3, 4, 5):
                 continue
             yw = cor_wall_y(side, f)
             ry0, ry1 = (y_rm + h, yw - h) if side == 'N' else (y_rm - h, yw + h)
-            add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_TARA, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1} Tara เจด้าไวท์ 60x60',
+            add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_TARA_WOOD, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
                      origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
             add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
