@@ -839,6 +839,15 @@ for f in (2, 3, 4, 5):
             add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ba, bb, zs, beam_soffit(f, 'main', True), tw, tp,
                      name=f'ผนังกั้นระเบียงกริด {k+1} ชั้น {f} ฝั่ง {side}')
 
+# ผนังปลายทางเดินด้านขวา (กริด 10 ระหว่างเสาแนว C–D) ชั้น 2–5: ก่ออิฐฉาบปูน
+# หน้าต่างบานเกล็ดระบายอากาศ ขนาดเท่าหน้าต่างห้องริม 1.20x1.10 ขอบล่าง 0.90 กลางผนัง (ผู้ใช้แจ้ง 10 พ.ย. 2569)
+for f in (2, 3, 4, 5):
+    cd = col_d(f)
+    add_wall(f'W-F{f}-COR-G10', f, 'y', GX[9], yC + cd, yD - cd, FL[f], beam_soffit(f, 'main'), wall_task[f], plaster_task[f],
+             [((yC + yD) / 2, 1.20, 0.90, 1.10)], name=f'ผนังปลายทางเดินกริด 10 ชั้น {f} (หน้าต่างบานเกล็ดระบายอากาศ 1.20x1.10)')
+    elements[-1]['name'] = f'หน้าต่างบานเกล็ดระบายอากาศ 1.20x1.10 ใน W-F{f}-COR-G10'
+    elements[-1]['qty']['type'] = 'บานเกล็ดระบายอากาศ'
+
 # ---------- ชั้น 1 ----------
 z0 = FL[1]
 cd, cw = col_d(1), col_w(1)
@@ -1006,7 +1015,7 @@ for f in (2, 3, 4, 5):
                 add_tile(f'TL-F{f}-{side}{i+1}-TH{k+1}', f, cx - w / 2, cx + w / 2, yy - h, yy + h, TILE_TARA_WOOD,
                          f'กระเบื้องใต้ช่อง{("ประตูหน้าห้อง", "ประตูระเบียง", "ประตูห้องน้ำ")[k]} ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
                          origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
-    add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
+    add_tile(f'TL-F{f}-COR', f, x_min, GX[9] - WALL_T / 2 - PL_T, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
              origin=((GX[0] + GX[-1]) / 2, GY['CX']))
 # ห้องน้ำรวมชั้น 1: กระเบื้องลายเทา 16x16 นิ้ว ยาแนว 3 มม. (แทนรายการเดิมที่ยังไม่ระบุรุ่น)
 _cw1, _cd1 = col_w(1), col_d(1)
