@@ -953,6 +953,14 @@ for f in (2, 3, 4, 5):
             add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_ROOM, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1}', z=FL[f] - DROP)
     add_tile(f'TL-F{f}-COR', f, x_min, x_max, yC + h, yD - h, TILE_ROOM, f'กระเบื้องโถงทางเดิน ชั้น {f}')
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
+# ระเบียงหลังห้อง: ผนังนอกเป็นช่องเปิดโล่ง ไม่มีบานหน้าต่าง; ประตูห้องพัก→ระเบียงเป็นบานเลื่อน (ผู้ใช้แจ้ง 10 พ.ย. 2569)
+elements[:] = [e for e in elements if not re.match(r'^W-F[2-5]-[NS]\d-OBL-O1$', e['id'])]
+for e in elements:
+    if re.match(r'^W-F[2-5]-[NS]\d-OBL$', e['id']):
+        e['name'] = e['name'] + ' (ช่องเปิดโล่ง 1.20x1.20 ไม่มีบาน)'
+    if re.match(r'^W-F[2-5]-[NS]\d-BAL-O1$', e['id']):
+        e['name'] = e['name'].replace('ประตู 0.80x2.00', 'ประตูบานเลื่อน 0.80x2.00')
+        e['qty']['type'] = 'บานเลื่อน'
 for e in elements:
     if e['id'].startswith('W-F') and e['id'].endswith('-COR-O1'):
         e['component'] = 'door2.dxf'
