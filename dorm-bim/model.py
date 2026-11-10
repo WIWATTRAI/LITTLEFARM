@@ -205,8 +205,9 @@ def slab_zones(f):
             sy = (GY['A'], STRIP_N) if side == 'N' else (STRIP_S, GY['F'])
             if side == 'N' and i == STAIR_BAY[0]:     # โถงบันได: เว้นช่องบันได ไม่มีพื้นในแถบชานพัก
                 r0 = STRIP_N                          # คงขอบเดิมของโถงบันได
+                # ไม่มีแถบพื้นแนว B เหนือชานพัก (เดิมยื่นเข้าช่องบันได 0.25 ม. บังระยะหัวเหนือชานพัก, ผู้ใช้แจ้ง 10 พ.ย. 2569)
                 rects = [(xa, sx0, r0, ry[1]), (sx1, xb, r0, ry[1]),
-                         (sx0, sx1, r0, sy0), (sx0, sx1, sy1, ry[1])]
+                         (sx0, sx1, sy1, ry[1])]
                 z.append((f'{side}{i+1}-RM', 'RM', rects, FL[f]))
                 continue
             z.append((f'{side}{i+1}-RM', 'RM', [(xa, xb, ry[0], ry[1])], FL[f]))
