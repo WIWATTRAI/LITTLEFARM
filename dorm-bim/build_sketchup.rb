@@ -100,6 +100,47 @@ module DormBIM
     end
   end
 
+  # กล่องตันหนึ่งชิ้น (กลุ่มย่อย) ช่วง [x0,x1]x[y0,y1]x[z0,z1] หน่วยเมตร
+  def self.solid_box(ents, x0, y0, z0, x1, y1, z1, mat)
+    g = ents.add_group
+    f = g.entities.add_face([[x0.m, y0.m, z0.m], [x1.m, y0.m, z0.m], [x1.m, y1.m, z0.m], [x0.m, y1.m, z0.m]])
+    f.reverse! if f.normal.z > 0
+    f.pushpull((z1 - z0).m)
+    g.material = mat
+    g
+  end
+
+  # คอมโพเนนต์ประตูบานเลื่อนอะลูมิเนียม 2 บาน: วงกบเต็มช่อง w x h ลึก d (แกน y กึ่งกลางที่ 0), บานวิ่งบน 2 ราง
+  def self.sliding_door_def(model, name, sp)
+    cdef = model.definitions[name]
+    return cdef if cdef
+    w, h, d = sp['w'], sp['h'], sp['d']
+    ft, sl, st, ov = sp['frame'], sp['sill'], sp['sash_t'], sp['overlap']
+    al = model.materials['อะลูมิเนียม'] || model.materials.add('อะลูมิเนียม').tap { |m| m.color = Sketchup::Color.new(190, 192, 195) }
+    gl = model.materials['กระจกใส'] || model.materials.add('กระจกใส').tap { |m| m.color = Sketchup::Color.new(170, 205, 220); m.alpha = 0.35 }
+    cdef = model.definitions.add(name)
+    e = cdef.entities
+    hd = d / 2.0
+    solid_box(e, 0, -hd, 0, ft, hd, h, al)                 # วงกบตั้งซ้าย
+    solid_box(e, w - ft, -hd, 0, w, hd, h, al)             # วงกบตั้งขวา
+    solid_box(e, ft, -hd, h - ft, w - ft, hd, h, al)       # วงกบบน
+    solid_box(e, ft, -hd, 0, w - ft, hd, sl, al)           # ธรณี/รางล่าง
+    ws = (w - 2 * ft + ov) / 2.0                           # ความกว้างบาน
+    z0, z1 = sl, h - ft
+    sf = 0.05                                              # หน้ากรอบบาน
+    [[ft, -st / 2.0 - 0.003], [w - ft - ws, st / 2.0 + 0.003]].each do |x0, yc|
+      y0, y1 = yc - st / 2.0, yc + st / 2.0
+      x1 = x0 + ws
+      solid_box(e, x0, y0, z0, x0 + sf, y1, z1, al)
+      solid_box(e, x1 - sf, y0, z0, x1, y1, z1, al)
+      solid_box(e, x0 + sf, y0, z0, x1 - sf, y1, z0 + sf * 1.6, al)
+      solid_box(e, x0 + sf, y0, z1 - sf, x1 - sf, y1, z1, al)
+      solid_box(e, x0 + sf, yc - 0.003, z0 + sf * 1.6, x1 - sf, yc + 0.003, z1 - sf, gl)
+    end
+    cdef.set_attribute(DICT, 'spec', sp.to_a.flatten.join(' '))
+    cdef
+  end
+
   def self.box_member(ents, g)
     return shape_member(ents, g) if g['shape']
     p0 = pt(g['p0']); p1 = pt(g['p1'])
@@ -255,6 +296,7 @@ module DormBIM
           end
       g.name = e['id']
       # บานประตู: ใช้คอมโพเนนต์ที่ผู้ใช้ใส่ในโมเดล (เช่น door2.dxf) ถ้ามี แทนแผ่นตัวแทน
+      sliding_door_def(model, e['component'], e['component_spec']) if e['component_spec']
       cdef = e['component'] && model.definitions[e['component']]
       if cdef && geo['type'] == 'prism'
         xs = geo['poly'].map { |p| p[0] }
