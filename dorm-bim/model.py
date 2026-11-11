@@ -256,6 +256,62 @@ def plank_qty(rects):
 ASSUMPTIONS.append('แผ่นพื้นสำเร็จรูป PS 350x50 พาดช่วงสั้นระหว่างคาน (แบบไม่ระบุทิศทาง) จำนวนแผ่นคิดจากความกว้างช่วง/0.35 ปัดขึ้น ความยาวคิดระยะศูนย์คาน')
 ASSUMPTIONS.append('พื้นระเบียงหลังห้องและห้องน้ำชั้น 2–5 ต่ำกว่าห้องพัก/ทางเดิน 0.075 ม.: หลังคาน B3/B4/B5 ในแถบยื่นลดลง 0.075 ม.; คาน B2 แนว B/E คงระดับเดิม พื้นห้องพักวางทับเต็มหลังคาน')
 
+PLANK_GAP = 0.005       # ร่องระหว่างแผ่นพื้นสำเร็จรูปทางเดิน 5 มม. (ผู้ใช้สั่ง 11 พ.ย. 2569)
+
+
+def cor_planks(f, sfx, rect, top):
+    """แผ่นพื้นสำเร็จรูปท้องเรียบกว้าง 0.35 หนา 0.05 พาดแนว y (C–D) วางเรียงแนว x เว้นร่อง 5 มม.
+    แผ่นสุดท้ายของช่วงตัดตามความกว้างที่เหลือ; ส่วนที่ชนเสา (หน้าตัดเสาชั้นล่าง f-1) ตัดออกเสมอผิวเสา"""
+    x0, x1, y0, y1 = rect
+    w, d = COL_SEC[f - 1]
+    cols = [(GX[i] - w / 2, GX[i] + w / 2, GY[r] - d / 2, GY[r] + d / 2) for i in range(10) for r in ('C', 'D')]
+    last_bay = sfx == 'COR9'
+    xs, x = [], x0
+    while x < x1 - 1e-6:
+        room = x1 - x - (0.0 if last_bay else PLANK_GAP)
+        if room < 0.02:
+            break
+        pw = min(PLANK_W, room)
+        xs.append((x, x + pw))
+        x += pw + PLANK_GAP
+    parts, n_cut, lens = [], 0, []
+    for px0, px1 in xs:
+        lo_pts, hi_pts = [(px0, y0), (px1, y0)], [(px1, y1), (px0, y1)]
+        cut = pw_cut = abs((px1 - px0) - PLANK_W) > 1e-6
+        for cx0, cx1, cy0, cy1 in cols:
+            ox0, ox1 = max(px0, cx0), min(px1, cx1)
+            if ox1 - ox0 < 1e-6:
+                continue
+            if cy0 < y0 < cy1:       # เสาแนว C: บากปลายด้าน y0
+                yd, chain, fwd = cy1, lo_pts, True
+            elif cy0 < y1 < cy1:     # เสาแนว D: บากปลายด้าน y1
+                yd, chain, fwd = cy0, hi_pts, False
+            else:
+                continue
+            cut = True
+            ye = chain[0][1]
+            a, b = (ox0, ox1) if fwd else (ox1, ox0)
+            pts = [chain[0]]
+            if (a > px0 + 1e-6) if fwd else (a < px1 - 1e-6):
+                pts += [(a, ye)]
+            else:
+                pts = []
+            pts += [(a, yd), (b, yd)]
+            if (b < px1 - 1e-6) if fwd else (b > px0 + 1e-6):
+                pts += [(b, ye), chain[-1]]
+            chain[:] = pts
+        poly = lo_pts + hi_pts
+        dedup = [p for k, p in enumerate(poly) if k == 0 or (abs(p[0] - poly[k - 1][0]) > 1e-6 or abs(p[1] - poly[k - 1][1]) > 1e-6)]
+        parts.append(prism(dedup, top - SLAB_T, 0.05))
+        n_cut += cut
+        lens.append(round(px1 - px0, 3))
+    full = sum(1 for L in lens if abs(L - PLANK_W) < 1e-6)
+    qc = dict(planks=len(parts), planks_full_width=full, planks_cut=n_cut, plank_size='กว้าง 0.35 หนา 0.05 ม. ท้องเรียบ',
+              plank_length=round(y1 - y0, 3), gap_mm=5,
+              plank_layout=f'{len(parts)} แผ่น ยาว {y1 - y0:.2f} ม. พาดแนว y (กว้างเต็ม {full}, ตัดกว้าง {len(parts) - full}; บาก/ตัดชนเสา {n_cut})')
+    return (parts[0] if len(parts) == 1 else dict(type='multi', parts=parts)), qc
+
+
 SLAB_ZONES = {f: slab_zones(f) for f in (2, 3, 4, 5)}
 for f in (2, 3, 4, 5):
     for sfx, kind, rects, top in SLAB_ZONES[f]:
@@ -265,6 +321,15 @@ for f in (2, 3, 4, 5):
             add(f'S1-F{f}-{sfx}', 'พื้น', f, 'DONE', rects_geom(rects, top - S1_T, S1_T),
                 name=f'พื้นหล่อในที่ S1 หนา 0.10 {where} ชั้น {f} {sfx[:-3]} (ต่ำกว่าพื้นห้อง 0.075)',
                 qty=dict(area=A, concrete=round(A * S1_T, 4), thickness=S1_T, top_level=round(top, 3)))
+            continue
+        if kind == 'COR':   # ทางเดิน: แผ่นพื้นสำเร็จรูปท้องเรียบรายแผ่น (ผู้ใช้สั่ง 11 พ.ย. 2569)
+            geo, qc = cor_planks(f, sfx, rects[0], top)
+            add(f'PS-F{f}-{sfx}', 'พื้นสำเร็จรูป', f, 'DONE', geo,
+                name=f'แผ่นพื้นสำเร็จรูปท้องเรียบ 0.35 ม. ทางเดิน ชั้น {f} {sfx} (ร่อง 5 มม. ตัดชนเสา)', assumed=True,
+                qty=dict(area=A, top_level=round(top - 0.05, 3), **qc))
+            add(f'TP-F{f}-{sfx}', 'พื้นทับหน้า', f, 'DONE', rects_geom(rects, top - 0.05, 0.05),
+                name=f'คอนกรีตทับหน้า ทางเดิน ชั้น {f} {sfx} หนา 0.05',
+                qty=dict(area=A, concrete=round(A * 0.05, 4), top_level=round(top, 3)))
             continue
         n, runs = plank_qty(rects)
         lvl = '' if kind in ('RM', 'COR') else ' (ต่ำกว่าพื้นห้อง 0.075)'
