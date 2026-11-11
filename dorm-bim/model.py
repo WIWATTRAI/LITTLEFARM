@@ -1402,6 +1402,17 @@ for f in (2, 3, 4, 5):
                 wa, wb = (ya, yb - 0.125) if side == 'N' else (ya + 0.125, yb)
                 add_wall(f'W-{tag}-WC', f, 'y', b5x(i, side), wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
                          name=f'ผนังห้องน้ำด้านระเบียง ชั้น {f} ห้อง {side}{i+1}')
+                # ช่วงปลายผนัง B5 ใต้คานแนว B/E ก่อต่อจนชนผนังหลังห้อง (เดิมหยุดที่ผิวคาน เหลือช่องว่าง 9 ซม.) (ผู้ใช้แจ้ง 12 พ.ย. 2569)
+                # ก่อถึงใต้ท้องคานหลัก ฉาบ 2 ด้านจบที่ผิวฉาบผนังหลังห้อง
+                xa_, xb_ = (yb - 0.125, y_rm - WALL_T / 2) if side == 'N' else (y_rm + WALL_T / 2, ya + 0.125)
+                add_wall(f'W-{tag}-WCX', f, 'y', b5x(i, side), xa_, xb_, zs, beam_soffit(f, 'main'), tw, tp,
+                         name=f'ผนังห้องน้ำด้านระเบียง ช่วงต่อชนผนังหลังห้อง ชั้น {f} ห้อง {side}{i+1}')
+                _yr = y_rm - (WALL_T / 2 + PL_T) if side == 'N' else y_rm + (WALL_T / 2 + PL_T)
+                for _e in elements[-3:]:
+                    if _e['id'] == f'W-{tag}-WCX-PL':
+                        for _p in _e['geom']['parts']:
+                            _p['poly'] = [[q[0], min(q[1], _yr) if side == 'N' else max(q[1], _yr)] for q in _p['poly']]
+                        _e['qty']['area'] = round(_e['qty']['area'] * (abs(_yr - (xa_ if side == 'N' else xb_)) / abs(xb_ - xa_)), 3)
                 # ผนังนอกห้องน้ำ: หน้าต่าง W1 KPA 0.60x0.40 ขอบล่าง 1.80 ชิดเสา (ศูนย์กลางห่างกริด 0.47 ตาม A106)
                 add_wall(f'W-{tag}-OWC', f, 'x', y_out + (OUT_C if side == 'N' else -OUT_C),
                          ox(tx0, 1), ox(tx1, -1), zs, beam_soffit(f, 'edge', True), tw, tp,
