@@ -506,7 +506,8 @@ for f in (1, 2, 3, 4):
     zc = zm - 0.20
     add(f'BST3-M{f}', 'คาน', f, 'DONE', member((GX[3] + 0.125, GY['A'] + 0.10, zc), (GX[4] - 0.125, GY['A'] + 0.10, zc), 0.20, 0.40),
         name=f'BST3 คานชานพักชั้น {f}', qty=dict(length=3.25, concrete=round(3.25 * 0.2 * 0.4, 4)))
-    add(f'BST1-B-M{f}', 'คาน', f, 'DONE', member((sx0, GY['B'], zc), (sx1, GY['B'], zc), 0.20, 0.40),
+    # BST1 แนว B เลื่อนไปทางแนว A 0.10 ให้ผิวคานเสมอขอบชานพัก ไม่โผล่เหนือขั้นบนสุดช่วง 1 (ผู้ใช้เลือก 11 พ.ย. 2569)
+    add(f'BST1-B-M{f}', 'คาน', f, 'DONE', member((sx0, GY['B'] - 0.10, zc), (sx1, GY['B'] - 0.10, zc), 0.20, 0.40),
         name=f'BST1 คานขอบชานพักแนว B ชั้น {f}', qty=dict(length=round(sx1 - sx0, 3), concrete=round((sx1 - sx0) * 0.08, 4)))
     for k in (3, 4):
         add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'], zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),   # ปลายนอกเสมอขอบนอก BST3 (แนว A) (ผู้ใช้สั่ง 11 พ.ย. 2569)
@@ -1998,6 +1999,16 @@ for f in (1, 2, 3, 4):
         z_cut = zm + 9 * RISER + ST_TILE_T
         for q in plb['geom']['parts']:
             if q['w'] < 0.01 and q['p0'][1] < ST_RUN_Y1:
+                zb_, zt_ = q['p0'][2] - q['d'] / 2, q['p0'][2] + q['d'] / 2
+                if zt_ > z_cut:
+                    q['d'] = round(z_cut - zb_, 4)
+                    q['p0'][2] = q['p1'][2] = round((zb_ + z_cut) / 2, 4)
+    # ฉาบผิวข้างคาน BST1 แนว B ด้านช่วง 1 (ผิวคานเสมอลูกตั้งขั้นสุดท้าย): หยุดใต้กระเบื้องลูกตั้งขั้นสุดท้ายช่วง 1
+    plb = next((e for e in elements if e['id'] == f'PL-BST1-B-M{f}'), None)
+    if plb:
+        z_cut = z0 + 9 * RISER + ST_TILE_T
+        for q in plb['geom']['parts']:
+            if q['w'] < 0.01 and q['p0'][1] > LY1 - 1e-6:
                 zb_, zt_ = q['p0'][2] - q['d'] / 2, q['p0'][2] + q['d'] / 2
                 if zt_ > z_cut:
                     q['d'] = round(z_cut - zb_, 4)
