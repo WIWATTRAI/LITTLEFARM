@@ -1757,6 +1757,66 @@ for e in elements:
     for i in range(10):
         tile_cut_box(e, GX[i] - 0.10 - PL_COL, GX[i] + 0.10 + PL_COL, ya_, yb_, spec)
 
+# ---------- งานเทคอนกรีตพื้น: เติมเต็มช่อง + ตัดหลบเสา/คาน (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# topping เทเต็มชั้นแผ่นพื้นด้วย: ช่องขนานคาน (<= 2.5 ซม.) หลังคานที่แผ่นพาด (เลยระยะพาด 5 ซม.) ร่องแผ่น 3 มม. แถบแคบ
+# ผิวล่างคอนกรีตเติมเสมอท้องแผ่น/หลังคาน ขอบเสมอผิวคาน; หักเนื้อเสา คาน แผ่นพื้น ออก ไม่ให้ solid ซ้อนกัน
+def _solid_boxes(g):
+    t = g['type']
+    if t == 'multi':
+        for q in g['parts']:
+            yield from _solid_boxes(q)
+    elif t == 'prism':
+        xs = [p[0] for p in g['poly']]; ys = [p[1] for p in g['poly']]
+        yield (min(xs), max(xs), min(ys), max(ys), g['z0'], g['z0'] + g['t'])
+    elif t == 'member':
+        p0, p1, w, d = g['p0'], g['p1'], g['w'], g['d']
+        if abs(p0[2] - p1[2]) > 1e-6:
+            return
+        if abs(p0[1] - p1[1]) < 1e-6:
+            yield (min(p0[0], p1[0]), max(p0[0], p1[0]), p0[1] - w / 2, p0[1] + w / 2, p0[2] - d / 2, p0[2] + d / 2)
+        elif abs(p0[0] - p1[0]) < 1e-6:
+            yield (p0[0] - w / 2, p0[0] + w / 2, min(p0[1], p1[1]), max(p0[1], p1[1]), p0[2] - d / 2, p0[2] + d / 2)
+
+
+_POUR_SOLIDS = [b for e in elements if e['category'] in ('เสา', 'คาน', 'พื้นสำเร็จรูป') for b in _solid_boxes(e['geom'])]
+
+
+def pour_geom(rects, z0, z1):
+    """คอนกรีตเทในกรอบ rects ช่วง z0..z1 หักเนื้อเสา/คาน/แผ่นพื้น แบ่งชั้นตามระดับ z ของชิ้นที่ตัด คืน (geom, [(z0,t,area)])"""
+    bx = [b for b in _POUR_SOLIDS if b[5] > z0 + 1e-6 and b[4] < z1 - 1e-6 and
+          any(min(b[1], x1) - max(b[0], x0) > 1e-6 and min(b[3], y1) - max(b[2], y0) > 1e-6 for x0, x1, y0, y1 in rects)]
+    zs = sorted({round(z0, 4), round(z1, 4)} | {round(v, 4) for b in bx for v in (b[4], b[5]) if z0 + 1e-6 < v < z1 - 1e-6})
+    bands = []
+    for za, zb in zip(zs, zs[1:]):
+        rs = list(rects)
+        for b in bx:
+            if b[4] <= za + 1e-6 and b[5] >= zb - 1e-6:
+                rs = _rects_minus(rs, b[0], b[1], b[2], b[3])
+        rs = sorted((round(a, 4), round(c, 4), round(d_, 4), round(f_, 4)) for a, c, d_, f_ in rs if c - a > 1e-6 and f_ - d_ > 1e-6)
+        if bands and bands[-1][2] == rs:
+            bands[-1][1] = zb
+        else:
+            bands.append([za, zb, rs])
+    parts = [prism([(a, c), (b, c), (b, d_), (a, d_)], za, round(zb - za, 4)) for za, zb, rs in bands for a, b, c, d_ in rs]
+    return (parts[0] if len(parts) == 1 else dict(type='multi', parts=parts)), [(za, zb - za, rect_area(rs)) for za, zb, rs in bands]
+
+
+for f in (2, 3, 4, 5):
+    for sfx, kind, rects, top in SLAB_ZONES[f]:
+        sid = f'S1-F{f}-{sfx}' if kind in ('WC', 'BL') else f'TP-F{f}-{sfx}'
+        e = next(x for x in elements if x['id'] == sid)
+        geo, bands = pour_geom(rects, top - SLAB_T, top) if kind not in ('WC', 'BL') else pour_geom(rects, top - S1_T, top)
+        e['geom'] = geo
+        vol = sum(t * a for _, t, a in bands)
+        e['qty']['concrete'] = round(vol, 4)
+        if sid.startswith('TP'):
+            vt = sum(t * a for z, t, a in bands if z >= top - 0.05 - 1e-6)
+            e['qty']['concrete_topping'] = round(vt, 4)
+            e['qty']['concrete_fill'] = round(vol - vt, 4)
+            e['name'] += ' + เติมช่องแผ่นพื้น/หลังคาน (หักเสา/คาน)'
+        else:
+            e['name'] += ' (หักเสา/คาน)'
+
 # ---------- สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569) ----------
 for e in elements:
     if e['category'] == 'คาน':
