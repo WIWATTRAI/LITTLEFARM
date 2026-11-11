@@ -301,7 +301,14 @@ module DormBIM
                    # คอนกรีตเททับหน้า + พื้นหล่อในที่ ชนิดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
                    'BIM-คอนกรีตเทพื้น' => [196, 192, 182], 'BIM-เชิงชายสีซีเมนต์' => [168, 168, 163], 'BIM-กระเบื้องบันได' => [236, 234, 228], 'BIM-จมูกบันไดเทาเข้ม' => [70, 72, 74],
                    'BIM-เหล็กโครงสร้าง' => [28, 78, 168], 'BIM-สลักเหล็ก' => [120, 120, 125] }.freeze
+  # วัสดุจากคลัง SketchUp (ชื่อในวงเล็บเหลี่ยม): โหลดไฟล์ .skm ถ้ายังไม่มีในโมเดล
+  LIB_MATERIALS = { '[Checker Plate]' => 'Patterns/Checker Plate.skm' }.freeze
   def self.named_material(model, name)
+    if !model.materials[name] && LIB_MATERIALS[name]
+      dir = Sketchup.find_support_file('Materials') || 'C:/ProgramData/SketchUp/SketchUp 2024/SketchUp/Materials'
+      f = File.join(dir, LIB_MATERIALS[name])
+      model.materials.load(f) if File.exist?(f)
+    end
     model.materials[name] || model.materials.add(name).tap { |m| m.color = Sketchup::Color.new(*(NAMED_COLORS[name] || [200, 200, 200])) }
   end
 
