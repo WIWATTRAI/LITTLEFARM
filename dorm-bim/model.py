@@ -393,6 +393,11 @@ for f in (1, 2, 3, 4):
     for k in (3, 4):
         add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'] + 0.20, zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),
             name=f'BST2 คานชานพักกริด {k+1} ชั้น {f}', qty=dict(length=1.20, concrete=round(1.2 * 0.2 * 0.4, 4)))
+# คานรับฐานบันไดชั้น 1 ขนาด B1 0.25x0.50 (เพิ่มจากแบบ ผู้ใช้สั่ง 11 พ.ย. 2569): ใต้ปลายล่างช่วงบันได 1
+# พาดแนว x ระหว่างคานคอดิน GB1 กริด 4–5, ขอบหน้าคานเสมอลูกตั้งแรก (y = ST_RUN_Y1), หลังคานเสมอหลังคานคอดิน (+0.20) ใต้พื้น GS
+_L = (GX[4] - 0.125) - (GX[3] + 0.125)
+add('B1-ST-F1', 'คาน', 1, 'DONE', member((GX[3] + 0.125, ST_RUN_Y1 - 0.125, 0.20 - 0.25), (GX[4] - 0.125, ST_RUN_Y1 - 0.125, 0.20 - 0.25), 0.25, 0.50),
+    name='B1 คานรับฐานบันไดชั้น 1 (เพิ่มจากแบบ)', assumed=True, qty=dict(length=round(_L, 3), concrete=round(_L * 0.25 * 0.5, 4)))
 for f in (2, 3, 4, 5):                             # BST1 ขอบช่องเปิดบันไดระดับพื้น
     c = FL[f] - SLAB_T - 0.20
     add(f'BST1-L{f}', 'คาน', f, 'DONE', member((sx0, ST_RUN_Y1 + 0.10, c), (sx1, ST_RUN_Y1 + 0.10, c), 0.20, 0.40),
@@ -1127,7 +1132,7 @@ for e in [e for e in elements if e['category'] == 'เสา' and e['task'] in (
     add(f'PL-{e["id"]}', 'งานฉาบ', f, ceil_task[f], prism([(xa, ya), (xb, ya), (xb, yb), (xa, yb)], g['z0'], h),
         name=f'ฉาบเสา {e["name"]} หนา 1 ซม.', assumed=True,
         qty=dict(area=round(2 * ((max(xs) - min(xs)) + (max(ys) - min(ys))) * h, 3), thickness=PL_COL))
-for e in [e for e in elements if e['category'] == 'คาน']:
+for e in [e for e in elements if e['category'] == 'คาน' and e['id'] != 'B1-ST-F1']:   # คานรับฐานบันไดอยู่ใต้ดิน ไม่ฉาบ
     g = e['geom']
     p0, p1 = g['p0'], g['p1']
     lv = e['id'].rsplit('-', 1)[1]          # L2..L5 / LR
