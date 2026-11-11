@@ -2384,6 +2384,18 @@ for r in ('C', 'D'):
             qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
         elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
 
+# คานแนวเสา 10/M–11/M (ห่างแนว C 3.25 ม.) ขนาดเดียวกับคานรับชานพัก H200x100x7x11 ชั้น 2–5 (ผู้ใช้สั่ง 11 พ.ย. 2569)
+# หลังคาน FL - 0.10 ปลายชนผิวปีกเสาด้านใน
+for f in (2, 3, 4, 5):
+    x0, x1 = SC_X10M + SC_D / 2, GX11 - SC_D / 2
+    zc = FL[f] - 0.10 - LB_D / 2
+    g = member((x0, FS_YM, zc), (x1, FS_YM, zc), LB_B, LB_D)
+    g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in LB_POLY]
+    add(f'SC-LB-M-F{f}', 'คาน', f, 'DONE', g,
+        name=f'คานเหล็ก H200x100x7x11 แนวเสา 10/M–11/M (ห่างแนว C 3.25 ม.) ชั้น {f}', assumed=True,
+        qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
+    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
 # ---------- บันไดเหล็กหนีไฟ (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
 # บันไดพับกลับ 2 ช่วงต่อชั้น ระหว่างชานพักชั้น (แนว C–D บนคาน SC-LB) กับชานพักกลาง (ติดแนวเสา 10/M, 11/M)
 # แม่บันไดเหล็กรางน้ำ C200x100 (tw 7.5, tf 11 มม. ผมสมมติ) หันหน้าเรียบเข้าหาขั้น ขั้นเหล็กลาย 4 มม. พับรูป Z เชื่อมชนหน้าเรียบ
@@ -2609,17 +2621,20 @@ for f in (1, 2, 3, 4):
     for fl, lane, sgn, yb, zb, ye in (('A', LANE_OUT, -1, FS_YT, z0, FS_YL1), ('B', LANE_IN, 1, FS_YL1, zm, FS_YT)):
         nose = lambda x, y, yb=yb, zb=zb, sgn=sgn, R=R: zb + R + sgn * (y - yb) * R / FS_G
         for side, xw, dirx in (('L', lane[0], 1), ('R', lane[1], -1)):
+            if fl == 'A' and side == 'R':
+                continue                                            # ราวด้านกริด 11 รวมกับราวชานพักกลางเป็นชุดเดียว (ด้านล่าง)
             xp = xw - dirx * SG_B / 2                               # เสาตั้งกลางปีกบนแม่บันได (ปีกออกนอก)
             ys = _spaced(yb + sgn * 0.08, ye - sgn * 0.08)
             posts = [(xp, y, nose(xp, y) + _FL_TOP / cth) for y in ys]
             _rail_set(f'FS-HR-F{f}-{fl}-{side}', f, f'ราวจับบันไดหนีไฟ ชั้น {f}→{f+1} ช่วง {fl} ด้าน{"ซ้าย" if side == "L" else "ขวา"} ท่อเหล็กดำ 1.5"/1"', posts, nose)
     # ชานพักกลาง: ขอบหลัง (แนวเสา M, ระหว่างเสา 10/M กับขอบนอก) และขอบนอกด้านกริด 11
-    # เสาตั้งกลางปีกบนแม่บันไดขอบชานพัก (หลังแม่บันไดสูงกว่าผิวชานพัก)
-    zl = zm
-    zs = zm + (0.010 + SG_TF) / cth
+    # ราวด้านนอกชุดเดียวต่อเนื่องจากเสา C/11 -> ช่วงบันได A -> ขอบชานพักกลางด้านกริด 11 -> ขอบหลัง ถึงเสา 10/M (ผู้ใช้สั่ง 11 พ.ย. 2569)
+    # เสาตั้งกลางปีกบนแม่บันได; เสาที่ขอบชานพัก (y = FS_YL1) ใช้ร่วมกัน ราวบนต่อระดับพอดี (แนวจมูกขั้น = ผิวชานพักที่ขอบ)
     xi, yi = FS_X1 + SG_B / 2, FS_YL0 + SG_B / 2
-    pts = [(x, yi) for x in _spaced(FS_X0 + SG_B / 2, xi)] + [(xi, y) for y in _spaced(yi, FS_YL1 - 0.03)][1:]
-    _rail_set(f'FS-HR-ML-F{f}', f, f'ราวกันตกชานพักกลางบันไดหนีไฟ ชั้น {f}→{f+1} ท่อเหล็กดำ 1.5"/1"', [(x, y, zs) for x, y in pts], lambda x, y, zl=zl: zl)
+    nA = lambda x, y, z0=z0, R=R, zm=zm: zm if y <= FS_YL1 + 1e-9 else z0 + R + (FS_YT - y) * R / FS_G
+    pts = [(xi, y) for y in _spaced(FS_YT - 0.08, FS_YL1)] + [(xi, y) for y in _spaced(FS_YL1, yi)][1:] + [(x, yi) for x in _spaced(xi, FS_X0 + SG_B / 2)][1:]
+    _rail_set(f'FS-HR-F{f}-O', f, f'ราวจับบันไดหนีไฟด้านนอก ชั้น {f}→{f+1} ชุดเดียวจากเสา C/11 ผ่านชานพักครึ่งชั้นถึงเสา 10/M ท่อเหล็กดำ 1.5"/1"',
+              [(x, y, nA(x, y) + (0.010 + SG_TF) / cth) for x, y in pts], nA)
 for f in (2, 3, 4, 5):
     zl = LT[f]
     xi = FS_X1 - 0.03
