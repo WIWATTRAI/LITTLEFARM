@@ -66,11 +66,12 @@ module DormBIM
   end
 
   # สร้าง PB member หนึ่งเส้น (profile, x_offset) แล้วตัดปลายตามระนาบ trim
-  def self.pb_line(ents, m, prof, xoff, mat_name)
+  def self.pb_line(ents, m, prof, xoff, mat_name, yoff = 0)
     api = pb_api
     pm = api::ProfileMember.add(ents, api::Chain.new([pt(m['p0']), pt(m['p1'])]))
     pm.profile = prof
     pm.x_offset = xoff.m if xoff != 0
+    pm.y_offset = yoff.m if yoff != 0
     pm.material_name = mat_name
     pm.draw
     (m['trim'] || []).each_with_index { |c, i| pm.trim_to_plane(pb_plane(c), i) if c }
@@ -103,7 +104,10 @@ module DormBIM
           tmp.erase!
           pr
         end)
-        pb_line(g.entities, m, prof, 0, mat_name)
+        # PB วางหน้าตัดที่กึ่งกลางกรอบ (placement point 5): เลื่อน x_offset/y_offset ให้จุด (0,0) ของ poly2d อยู่บนแกนชิ้นงาน
+        xs = m['poly2d'].map { |a, _| a }; ys = m['poly2d'].map { |_, b| b }
+        cx = (xs.min + xs.max) / 2.0; cy = (ys.min + ys.max) / 2.0
+        pm_i = pb_line(g.entities, m, prof, cx.abs > 1e-9 ? cx : 0, mat_name, cy.abs > 1e-9 ? cy : 0)
       elsif m['shape'] == 'C'
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), 0, mat_name)
       else
