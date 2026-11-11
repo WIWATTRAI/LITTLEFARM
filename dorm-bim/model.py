@@ -2236,7 +2236,7 @@ def _aabb(p):
 _EXT_SKIP = ('ไฟฟ้า', 'ประตูหน้าต่าง', 'ราวบันได', 'สุขภัณฑ์', 'โครงหลังคาเหล็ก', 'หลังคา', 'จมูกบันได', 'กระเบื้อง', 'บันได')
 _ext_boxes = []
 for e in elements:
-    if e['category'] in _EXT_SKIP:
+    if e['category'] in _EXT_SKIP or e['id'].startswith('SC-'):      # เหล็กบันไดหนีไฟ/เพลทฝัง ไม่ฉาบ
         continue
     for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]):
         b = _aabb(p)
