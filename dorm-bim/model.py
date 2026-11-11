@@ -1417,6 +1417,15 @@ for f in (2, 3, 4, 5):
                          name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านข้าง')
                 add_wall(f'W-{tag}-SH2', f, 'x', g['yr'] - g['s'] * (SH_D - WALL_T / 2), *lo(g['xg'], g['xg'] + g['dr'] * (SH_W - WALL_T)), zs, zt, tw, tp,
                          name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านหน้า')
+                # ฉาบผนังชาร์ฟเฉพาะด้านในห้องน้ำ ผิวด้านในช่องชาร์ฟไม่ฉาบ (ผู้ใช้สั่ง 12 พ.ย. 2569)
+                for sid, ax, wc_dir in (('SH1', 0, g['dr']), ('SH2', 1, -g['s'])):
+                    pe = next(e for e in elements if e['id'] == f'W-{tag}-{sid}-PL')
+                    wall = next(e for e in elements if e['id'] == f'W-{tag}-{sid}')
+                    wcen = (min(p[ax] for p in wall['geom']['parts'][0]['poly']) + max(p[ax] for p in wall['geom']['parts'][0]['poly'])) / 2
+                    pe['geom']['parts'] = [p for p in pe['geom']['parts']
+                                           if (sum(q[ax] for q in p['poly']) / len(p['poly']) - wcen) * wc_dir > 0]
+                    pe['qty']['area'] = round(pe['qty']['area'] / 2, 3)
+                    pe['name'] = f'ฉาบ W-{tag}-{sid} (เฉพาะด้านในห้องน้ำ)'
                 # สุขภัณฑ์: โถส้วมหลังชิดผนังกริดที่มุมผนังนอก, อ่างล้างหน้าติดผนังชาร์ฟ (A106)
                 wx0, wx1 = g['xg'], g['xg'] + g['dr'] * 0.70
                 wyc = g['yo'] + g['s'] * 0.40
