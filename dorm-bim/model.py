@@ -1489,6 +1489,11 @@ for e in elements:
         e['qty']['model'] = 'กะรัต K1225'
 
 
+# ---------- สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569) ----------
+for e in elements:
+    if e['category'] == 'คาน':
+        e['material'] = 'BIM-คาน-' + e['id'].split('-')[0]
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 if __name__ == '__main__':
