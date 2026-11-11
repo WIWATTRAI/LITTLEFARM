@@ -68,7 +68,9 @@ module DormBIM
   # สร้าง PB member หนึ่งเส้น (profile, x_offset) แล้วตัดปลายตามระนาบ trim
   def self.pb_line(ents, m, prof, xoff, mat_name, yoff = 0)
     api = pb_api
-    pm = api::ProfileMember.add(ents, api::Chain.new([pt(m['p0']), pt(m['p1'])]))
+    # path หลายจุด (เช่น ข้อต่องอโค้ง) ใช้ chain ต่อเนื่อง; ปกติ 2 จุด
+    pts = m['path'] ? m['path'].map { |q| pt(q) } : [pt(m['p0']), pt(m['p1'])]
+    pm = api::ProfileMember.add(ents, api::Chain.new(pts))
     pm.profile = prof
     pm.x_offset = xoff.m if xoff != 0
     pm.y_offset = yoff.m if yoff != 0
