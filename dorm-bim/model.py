@@ -392,8 +392,8 @@ for f in (1, 2, 3, 4):
     add(f'BST1-B-M{f}', 'คาน', f, 'DONE', member((sx0, GY['B'], zc), (sx1, GY['B'], zc), 0.20, 0.40),
         name=f'BST1 คานขอบชานพักแนว B ชั้น {f}', qty=dict(length=round(sx1 - sx0, 3), concrete=round((sx1 - sx0) * 0.08, 4)))
     for k in (3, 4):
-        add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'] + 0.20, zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),
-            name=f'BST2 คานชานพักกริด {k+1} ชั้น {f}', qty=dict(length=1.20, concrete=round(1.2 * 0.2 * 0.4, 4)))
+        add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'], zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),   # ปลายนอกเสมอขอบนอก BST3 (แนว A) (ผู้ใช้สั่ง 11 พ.ย. 2569)
+            name=f'BST2 คานชานพักกริด {k+1} ชั้น {f}', qty=dict(length=1.40, concrete=round(1.4 * 0.2 * 0.4, 4)))
 # คานรับฐานบันไดชั้น 1 ขนาด B1 0.25x0.50 (เพิ่มจากแบบ ผู้ใช้สั่ง 11 พ.ย. 2569): ใต้ปลายล่างช่วงบันได 1
 # พาดแนว x ระหว่างคานคอดิน GB1 กริด 4–5, ขอบหน้าคานเสมอลูกตั้งแรก (y = ST_RUN_Y1), หลังคานเสมอหลังคานคอดิน (+0.20) ใต้พื้น GS
 _L = (GX[4] - 0.125) - (GX[3] + 0.125)
@@ -1534,11 +1534,18 @@ def _clip_geom(g, cols):
 
 
 _cols = [_box(e['geom']) for e in elements if e['category'] == 'เสา' and e['geom']['type'] == 'prism']
+_BST2_END = []
+# ปลายคาน BST2 ที่ยืดถึงแนว A (ช่วง A..A+0.20 รวมฉาบคาน): ผนังนอกห้องน้ำที่ก่อผ่านระดับชานพักเว้นช่องรอบปลายคาน (ผู้ใช้เลือก 11 พ.ย. 2569)
+for e in elements:
+    if e['id'].startswith('BST2-'):
+        g = e['geom']; x, z = g['p0'][0], g['p0'][2]
+        hw = g['w'] / 2 + PL_BEAM
+        _BST2_END.append([x - hw, x + hw, GY['A'], GY['A'] + 0.20, z - g['d'] / 2 - PL_BEAM, z + g['d'] / 2])
 CLIPPED = []
 for e in elements:
     if not (e['category'] in ('ผนัง', 'เสาเอ็นคานเอ็น') or (e['category'] == 'งานฉาบ' and e['id'].startswith('W-'))):
         continue
-    ng, rem = _clip_geom(e['geom'], _cols)
+    ng, rem = _clip_geom(e['geom'], _cols + (_BST2_END if '-OWC' in e['id'] else []))   # เฉพาะผนังนอกห้องน้ำที่ปลาย BST2
     if ng is None:
         continue
     e['geom'] = ng
