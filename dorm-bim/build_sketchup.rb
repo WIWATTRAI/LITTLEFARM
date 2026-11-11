@@ -89,10 +89,16 @@ module DormBIM
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), -b / 2.0, mat_name)
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], true, cache), b / 2.0, mat_name)
       elsif m['shape'] == 'POLY'
-        key = 'POLY ' + m['poly2d'].to_s
+        key = 'POLY ' + m['poly2d'].to_s + (m['hole2d'] ? ' H' + m['hole2d'].to_s : '')
         prof = (cache[key] ||= begin
           tmp = model.entities.add_group
           f = tmp.entities.add_face(m['poly2d'].map { |a, b| Geom::Point3d.new(a.m, b.m, 0) })
+          # หน้าตัดกลวง (เหล็กกล่อง/ท่อ): เจาะรูด้านใน
+          if m['hole2d']
+            hf = tmp.entities.add_face(m['hole2d'].map { |a, b| Geom::Point3d.new(a.m, b.m, 0) })
+            hf.erase! if hf && hf.valid?
+            f = tmp.entities.grep(Sketchup::Face).first
+          end
           pr = pb_api::Profile.new(f, "#{e['category']} #{(m['w'] * 1000).round}x#{(m['d'] * 1000).round}")
           tmp.erase!
           pr

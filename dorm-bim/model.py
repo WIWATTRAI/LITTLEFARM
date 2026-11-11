@@ -628,6 +628,8 @@ for k in (3, 4):
         b3 = _b3z.get((str(k + 1), f'L{j + 1}'))
         if j > 0 and b3 and za < b3[0] < zb:
             segs = [(za, b3[0], 'a'), (b3[1], zb, 'b')]
+        if j == 0:          # เสา CX ใต้ชานพักชั้น 1 ไม่มีจริง (ผู้ใช้แจ้ง 11 พ.ย. 2569: เข้าใจผิด ลบออก)
+            continue
         for z0_, z1_, sx in segs:
             add(f'CX-{k+1}A-M{j+1}{sx}', 'เสา', j + 1, 'DONE',
                 prism([(GX[k] - 0.10, GY['A']), (GX[k] + 0.10, GY['A']), (GX[k] + 0.10, GY['A'] + 0.20), (GX[k] - 0.10, GY['A'] + 0.20)], z0_, round(z1_ - z0_, 3)),
@@ -1469,7 +1471,9 @@ z0 = FL[1]
 cd, cw = col_d(1), col_w(1)
 # โถงบันได (กริด 4–5) จากขอบนอกถึงแนว C
 for k in (3, 4):
-    add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], OUT_C, yB - cd, z0, beam_soffit(1, 'main', True), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
+    # ผนังช่วงยื่นกริด 4 ชั้น 1 ไม่มีจริง (ผู้ใช้แจ้ง 11 พ.ย. 2569: เข้าใจผิด ลบออก)
+    if k != 3:
+        add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], OUT_C, yB - cd, z0, beam_soffit(1, 'main', True), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
     add_wall(f'W-F1-ST-G{k+1}B', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1}')
 # ผนังนอกโถงบันไดแนว A (หลังชานพัก): ก่อระหว่างคาน BST3 ของชานพักแต่ละชั้น
 # หน้าต่างบานกระทุ้ง 1.20x0.60 ขอบล่างสูง 1.50 จากพื้นชานพัก (ผู้ใช้กำหนด 10 พ.ย. 2569)
@@ -1479,6 +1483,8 @@ for k in range(4):
     top = _zm[k + 1] - 0.40 if k < 3 else ROOF_BEAM
     _segs.append((_zm[k], top, k + 1, _zm[k]))
 for n, (za, zb, f, zland) in enumerate(_segs):
+    if n == 0:              # ผนังนอกโถงบันไดใต้ชานพักชั้น 1 ไม่มีจริง (ผู้ใช้แจ้ง 11 พ.ย. 2569: เข้าใจผิด ลบออก)
+        continue
     fl = max(ff for ff in FL if FL[ff] <= za + 1e-6)
     tw = wall_task[fl]
     tp = 'A12' if fl == 1 else plaster_task[fl]
@@ -1935,6 +1941,8 @@ def mirror_y(g):
             g[k][1] = round(Y - g[k][1], 4)
         if g.get('shape') == 'POLY':             # หน้าตัดไม่สมมาตร: กลับทิศ chain ให้ด้านหน้าหน้าตัดยังหันทิศเดิมหลังกลับแกน y
             g['p0'], g['p1'] = g['p1'], g['p0']
+            if g.get('trim'):
+                g['trim'] = g['trim'][::-1]
         for c in g.get('trim') or []:
             if c:
                 c[1], c[4] = round(Y - c[1], 5), round(-c[4], 5) + 0.0
@@ -2375,6 +2383,123 @@ for r in ('C', 'D'):
             name=f'คานเหล็กรับชานพักบันไดหนีไฟ H200x100x7x11 แนว {r}/10–{r}/11 ชั้น {f}', assumed=True,
             qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
         elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
+# ---------- บันไดเหล็กหนีไฟ (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# บันไดพับกลับ 2 ช่วงต่อชั้น ระหว่างชานพักชั้น (แนว C–D บนคาน SC-LB) กับชานพักกลาง (ติดแนวเสา 10/M, 11/M)
+# แม่บันไดเหล็กรางน้ำ C200x100 (tw 7.5, tf 11 มม. ผมสมมติ) หันปีกเข้าหาขั้น ขั้นเหล็กลาย 4 มม. พับรูป Z สอดปลายในร่องรางน้ำ
+# ผิวชานพัก = เหล็กลาย 4 มม. บนโครงที่หลังคาน FL-0.10 (ผู้ใช้เลือก) => ระดับเหยียบ FL-0.096
+# โครงชานพัก: กระทงหลักเหล็กกล่อง 125x75x3.2 ซอยด้วย 100x50x3.2 @0.40 (ผู้ใช้กำหนด)
+ST_T = 0.004
+SG_H, SG_B, SG_TW, SG_TF = 0.200, 0.100, 0.0075, 0.011
+FS_X0, FS_X1, FS_GAP = _xf + 0.025, GX11 - SC_D / 2, 0.05          # กว้างรวมจากห่างผิวฉาบ 10 มม. ถึงผิวปีกเสากริด 11
+_lw = (FS_X1 - FS_X0 - FS_GAP) / 2
+LANE_IN, LANE_OUT = (FS_X0, FS_X0 + _lw), (FS_X1 - _lw, FS_X1)
+FS_YT = GY['C'] - 0.05                                              # ขอบชานพักชั้น (ผิวปีกคาน SC-LB แนว C)
+FS_YL0 = FS_YM + SC_B / 2                                           # ชานพักกลาง: ชิดขอบปีกเสา 10/M, 11/M
+FS_YL1 = FS_YL0 + 0.80                                              # กว้างชานพักกลาง 0.80
+FS_N = 18                                                           # ลูกตั้งต่อชั้น (2 ช่วง ช่วงละ 9)
+FS_G = (FS_YT - FS_YL1) / (FS_N // 2 - 1)                           # ลูกนอน
+LT = {f: FL[f] - 0.10 + ST_T for f in FL}
+
+
+def _box_poly(w, d, t):
+    o = [(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)]
+    i = [(-w / 2 + t, -d / 2 + t), (w / 2 - t, -d / 2 + t), (w / 2 - t, d / 2 - t), (-w / 2 + t, d / 2 - t)]
+    return [[round(a, 5), round(b, 5)] for a, b in o], [[round(a, 5), round(b, 5)] for a, b in i]
+
+
+def _box(p0, p1, w, d, t=0.0032):
+    g = member(p0, p1, w, d)
+    g['shape'] = 'POLY'; g['poly2d'], g['hole2d'] = _box_poly(w, d, t)
+    return g
+
+
+def _chan_poly(k):
+    h, b, tw, tf = SG_H / 2, SG_B, SG_TW, SG_TF
+    p = [(0, -h), (b, -h), (b, -h + tf), (tw, -h + tf), (tw, h - tf), (b, h - tf), (b, h), (0, h)]
+    return [[round(k * a, 5), round(c, 5)] for a, c in p]
+
+
+def _steel_add(eid, cat, f, g, name, qty):
+    add(eid, cat, f, 'DONE', g, name=name, assumed=True, qty=qty)
+    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
+
+for f in (1, 2, 3, 4):
+    z0 = LT[f]
+    R = (LT[f + 1] - z0) / FS_N
+    zm = z0 + R * FS_N // 2 if False else z0 + R * (FS_N // 2)
+    L = math.hypot(FS_G, R)
+    for fl, lane, sgn, yb, zb, ye in (('A', LANE_OUT, -1, FS_YT, z0, FS_YL1), ('B', LANE_IN, 1, FS_YL1, zm, FS_YT)):
+        # sgn: ทิศขึ้นตามแกน y; จมูกขั้นที่ 1 อยู่ที่ (yb, zb + R)
+        u = (0.0, sgn * FS_G / L, R / L)
+        n = (0.0, -sgn * R / L, FS_G / L)                          # ตั้งฉากแนวลาด ชี้ขึ้น
+        nose = (0.0, yb, zb + R)
+        off = 0.010 + SG_TF - SG_H / 2                              # แกนแม่บันได (กึ่งกลางความลึก) จากเส้นจมูกขั้น ตามแนว n
+        s_sign = -sgn                                               # แกน a ของหน้าตัด (u x z) ชี้ทาง x = -sgn ... (A: -x, B: +x)
+        s_sign = -1 if sgn < 0 else 1
+        c_start = cut((0, yb, 0), (0, sgn * -1, 0)) if not (f == 1 and fl == 'A') else cut((0, 0, SC_BASE), (0, 0, -1))
+        c_end = cut((0, ye, 0), (0, sgn, 0))
+        for side, xw, dirx in (('L', lane[0], 1), ('R', lane[1], -1)):
+            a0 = (xw, nose[1] + n[1] * off, nose[2] + n[2] * off)
+            a1 = tuple(a + 3.0 * b for a, b in zip(a0, u))
+            q0 = _on_plane(a0, a1, c_start); q1 = _on_plane(a0, a1, c_end)
+            g = member(q0, q1, SG_B, SG_H)
+            g['shape'] = 'POLY'; g['poly2d'] = _chan_poly(dirx * s_sign)
+            g['trim'] = [c_start, c_end]
+            _steel_add(f'FS-SG-F{f}-{fl}-{side}', 'บันได', f, g,
+                       f'แม่บันไดหนีไฟ เหล็กรางน้ำ C200x100x7.5x11 ชั้น {f}→{f+1} ช่วง {fl} ด้าน{"ซ้าย" if side == "L" else "ขวา"}',
+                       dict(length=round(mlen(q0, q1), 3), section='C200x100x7.5x11'))
+        # ขั้นเหล็กลาย 4 มม. พับ Z: ปีกพับลง 30 มม. ที่จมูกขั้น ปีกพับขึ้น 30 มม. ด้านหลัง
+        t = ST_T
+        zp = [(0, -0.03), (t, -0.03), (t, -t), (FS_G, -t), (FS_G, 0.03), (FS_G - t, 0.03), (FS_G - t, 0), (0, 0)]
+        xa, xb = lane[0] + SG_TW, lane[1] - SG_TW
+        if sgn > 0:
+            xa, xb = xb, xa                                         # ขึ้นทาง +y: ลากแกนทาง -x ให้หน้าตัดหันทิศขึ้น
+        parts = []
+        for k in range(1, FS_N // 2):
+            yf, zt = yb + sgn * (k - 1) * FS_G, zb + k * R
+            g = member((xa, yf, zt), (xb, yf, zt), abs(xb - xa), 0.06)
+            g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(c, 5)] for a, c in zp]
+            parts.append(g)
+        _steel_add(f'FS-TR-F{f}-{fl}', 'บันได', f, dict(type='multi', parts=parts),
+                   f'ขั้นบันไดหนีไฟ เหล็กลาย 4 มม. พับ Z ชั้น {f}→{f+1} ช่วง {fl} {len(parts)} ขั้น (ลูกตั้ง {R*1000:.1f} ลูกนอน {FS_G*1000:.0f} มม.)',
+                   dict(count=len(parts), riser=round(R, 4), going=round(FS_G, 4), width=round(abs(xb - xa), 3), thickness=ST_T))
+    # ชานพักกลาง: เหล็กลายบนโครงกล่อง
+    zt = zm - ST_T
+    _steel_add(f'FS-ML-F{f}', 'บันได', f,
+               prism([(FS_X0, FS_YL0), (FS_X1, FS_YL0), (FS_X1, FS_YL1), (FS_X0, FS_YL1)], zt, ST_T),
+               f'ชานพักกลางบันไดหนีไฟ เหล็กลาย 4 มม. ชั้น {f}→{f+1}', dict(area=round((FS_X1 - FS_X0) * 0.80, 3), thickness=ST_T))
+    zc1, zc2 = zt - 0.0625, zt - 0.05
+    fr = [_box((FS_X0, FS_YL1 - 0.0375, zc1), (FS_X1, FS_YL1 - 0.0375, zc1), 0.075, 0.125),
+          _box((FS_X0, FS_YL0 + 0.0375, zc1), (FS_X1, FS_YL0 + 0.0375, zc1), 0.075, 0.125),
+          _box((FS_X0 + 0.0375, FS_YL0 + 0.075, zc1), (FS_X0 + 0.0375, FS_YL1 - 0.075, zc1), 0.075, 0.125),
+          _box((FS_X1 - 0.0375, FS_YL0 + 0.075, zc1), (FS_X1 - 0.0375, FS_YL1 - 0.075, zc1), 0.075, 0.125)]
+    x = FS_X0 + 0.40
+    while x < FS_X1 - 0.20:
+        fr.append(_box((x, FS_YL0 + 0.075, zc2), (x, FS_YL1 - 0.075, zc2), 0.050, 0.100))
+        x += 0.40
+    _steel_add(f'FS-MLF-F{f}', 'บันได', f, dict(type='multi', parts=fr),
+               f'โครงชานพักกลาง เหล็กกล่อง 125x75x3.2 ซอย 100x50x3.2 @0.40 ชั้น {f}→{f+1}', dict(pieces=len(fr)))
+
+# ชานพักชั้น 2–5 แนว C–D: เหล็กลายบนโครงกล่องระหว่างคาน SC-LB
+for f in (2, 3, 4, 5):
+    zt = FL[f] - 0.10
+    ya, yb = GY['C'] - 0.05, GY['D'] + 0.05
+    _steel_add(f'FS-LD-F{f}', 'บันได', f,
+               prism([(FS_X0, ya), (FS_X1, ya), (FS_X1, yb), (FS_X0, yb)], zt, ST_T),
+               f'ชานพักชั้น {f} บันไดหนีไฟ เหล็กลาย 4 มม. แนว C–D', dict(area=round((FS_X1 - FS_X0) * (yb - ya), 3), thickness=ST_T))
+    y0, y1 = GY['C'] + 0.05, GY['D'] - 0.05
+    zc1, zc2 = zt - 0.0625, zt - 0.05
+    fr = [_box((FS_X0 + 0.0375, y0, zc1), (FS_X0 + 0.0375, y1, zc1), 0.075, 0.125),
+          _box((FS_X1 - 0.0375, y0, zc1), (FS_X1 - 0.0375, y1, zc1), 0.075, 0.125)]
+    y = GY['C'] + 0.40
+    while y < GY['D'] - 0.20:
+        fr.append(_box((FS_X0 + 0.075, y, zc2), (FS_X1 - 0.075, y, zc2), 0.050, 0.100))
+        y += 0.40
+    _steel_add(f'FS-LDF-F{f}', 'บันได', f, dict(type='multi', parts=fr),
+               f'โครงชานพักชั้น {f} เหล็กกล่อง 125x75x3.2 ซอย 100x50x3.2 @0.40', dict(pieces=len(fr)))
+ASSUMPTIONS.append('บันไดหนีไฟ: แม่บันได C200x100 ใช้ tw 7.5 tf 11 มม. (ผู้ใช้ไม่ระบุความหนา); 18 ลูกตั้งต่อชั้น; ผิวชานพักเหล็กลาย FL-0.096')
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
