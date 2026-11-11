@@ -178,9 +178,33 @@ elements[:] = [e for e in elements if e['id'] not in _drop]
 
 # ---------- พื้น ----------
 x_min, x_max = GX[0] - 0.175, GX[-1] + 0.175
-add('GS-F1', 'พื้น', 1, 'DONE', prism([(x_min, GY['B']), (x_max, GY['B']), (x_max, GY['E']), (x_min, GY['E'])],
-                                       FL[1] - GS_T, GS_T),
-    name='พื้นชั้น 1 (GS)', qty=dict(area=round((x_max - x_min) * (GY['E'] - GY['B']), 3)))
+# พื้นชั้น 1 หล่อในที่ หนา 0.10 เว้นหน้าเสา (ผู้ใช้สั่ง 11 พ.ย. 2569): เสาแนว B/E เป็นรอยบากที่ขอบพื้น เสาแนว C/D เป็นช่องในพื้น
+_cw0, _cd0 = COL_SEC[0][0] / 2, COL_SEC[0][1] / 2
+
+
+def _gs_edge(y, dy):
+    """ขอบพื้นแนว y จาก x_min ไป x_max บากรอบเสา (ลึก dy เข้าในพื้น)"""
+    pts = []
+    for i in range(10):
+        a, b = max(GX[i] - _cw0, x_min), min(GX[i] + _cw0, x_max)
+        if a <= x_min + 1e-9:
+            pts += [(x_min, y + dy), (b, y + dy), (b, y)]
+        elif b >= x_max - 1e-9:
+            pts += [(a, y), (a, y + dy), (x_max, y + dy)]
+        else:
+            pts += [(a, y), (a, y + dy), (b, y + dy), (b, y)]
+    return pts
+
+
+_gs_poly = _gs_edge(GY['B'], _cd0) + _gs_edge(GY['E'], -_cd0)[::-1]
+_gs_holes = [[(GX[i] - _cw0, GY[r] - _cd0), (GX[i] + _cw0, GY[r] - _cd0), (GX[i] + _cw0, GY[r] + _cd0), (GX[i] - _cw0, GY[r] + _cd0)]
+             for i in range(10) for r in ('C', 'D')]
+_gs_geo = prism(_gs_poly, FL[1] - GS_T, GS_T)
+_gs_geo['holes'] = [[[round(x, 4), round(y, 4)] for x, y in h] for h in _gs_holes]
+_gs_area = (x_max - x_min) * (GY['E'] - GY['B']) - 20 * (2 * _cw0) * _cd0 - 20 * (2 * _cw0) * (2 * _cd0)   # หักรอยบากเสาขอบ 20 ต้น (ลึก cd) และช่องเสาใน 20 ต้น
+add('GS-F1', 'พื้น', 1, 'DONE', _gs_geo,
+    name='พื้นชั้น 1 หล่อในที่ หนา 0.10 (เว้นหน้าเสา)',
+    qty=dict(area=round(_gs_area, 3), concrete=round(_gs_area * GS_T, 3), thickness=GS_T, type='พื้นหล่อในที่'))
 sx0, sx1 = GX[STAIR_BAY[0]] + 0.125, GX[STAIR_BAY[1]] - 0.125   # ผิวคาน B1 กริด 4/5
 sy0, sy1 = GY['B'] + 0.125, ST_RUN_Y1                            # ช่องเปิดบันได
 STRIP_Y1 = GY['B'] - 0.125                                       # แถบยื่นช่วงชานพัก (ไม่มีพื้นระดับชั้น)
