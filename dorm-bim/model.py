@@ -19,8 +19,15 @@ DROP = 0.075            # พื้นระเบียงหลังห้อ
 S1_T = 0.10             # พื้นหล่อในที่ S1 ห้องน้ำ (S911 แบบขยายพื้น S1 หนา 100)
 PLANK_W = 0.35          # แผ่นพื้นสำเร็จรูป 350x50 (S911)
 
-# เสา C1 (S910): ชั้น 1–2 0.35x0.50, ชั้น 3 0.30x0.50, ชั้น 4–5 0.30x0.40
-COL_SEC = {0: (0.35, 0.50), 1: (0.35, 0.50), 2: (0.35, 0.50), 3: (0.30, 0.50), 4: (0.30, 0.40), 5: (0.30, 0.40)}
+# เสา C1 (S910 เดิม: ชั้น 1–2 0.35x0.50, ชั้น 3 0.30x0.50, ชั้น 4–5 0.30x0.40)
+# ผู้ใช้สั่ง 11 พ.ย. 2569: เสาทุกชั้น 1–5 ขนาด 0.35x0.50 เท่ากันหมด
+COL_SEC = {0: (0.35, 0.50), 1: (0.35, 0.50), 2: (0.35, 0.50), 3: (0.35, 0.50), 4: (0.35, 0.50), 5: (0.35, 0.50)}
+
+
+def edge_dx(i, w, k=1):
+    """คานบนกริด 1 และ 10 (ด้านข้างอาคาร): เลื่อนศูนย์คานออกนอกให้ผิวนอกคานเสมอผิวนอกเสา (ผู้ใช้สั่ง 11 พ.ย. 2569)"""
+    off = COL_SEC[k][0] / 2 - w / 2
+    return -off if i == 0 else (off if i == 9 else 0.0)
 COL_ROWS = ['B', 'C', 'D', 'E']
 
 # คานซอย B5 (S102) ตำแหน่ง x
@@ -98,8 +105,9 @@ for i in range(10):                     # GB1 200x500 แนวขวาง (ผ
         y0, y1 = GY[a] + 0.25, GY[b] - 0.25
         z = 0.20 - 0.25
         L = y1 - y0
+        xg = GX[i] + edge_dx(i, 0.20, 0)
         add(f'GB1-{i+1}-{a}{b}', 'คานคอดิน', 1, 'DONE',
-            member((GX[i], y0, z), (GX[i], y1, z), 0.20, 0.50),
+            member((xg, y0, z), (xg, y1, z), 0.20, 0.50),
             qty=dict(length=round(L, 3), concrete=round(L * 0.20 * 0.5, 4)))
 
 # ---------- เสา ----------
@@ -134,8 +142,9 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
         for a, b in (('B', 'C'), ('C', 'D'), ('D', 'E')):
             y0, y1 = GY[a] + 0.25, GY[b] - 0.25
             c = top - 0.25
+            xb = GX[i] + edge_dx(i, 0.25, floor - 1)
             add(f'B1-{i+1}-{a}{b}-{sfx}', 'คาน', floor, task,
-                member((GX[i], y0, c), (GX[i], y1, c), 0.25, 0.50), assumed=assumed,
+                member((xb, y0, c), (xb, y1, c), 0.25, 0.50), assumed=assumed,
                 qty=dict(length=round(y1 - y0, 3), concrete=round((y1 - y0) * 0.25 * 0.5, 4)))
         for a, b in (('A', 'B'), ('E', 'F')):   # B3 ยื่น
             ya, yb = sorted((GY[a], GY[b]))
@@ -143,16 +152,20 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
             y0 = ya + (0.0 if a == 'A' else 0.25)
             y1 = yb - (0.25 if a == 'A' else 0.0)
             c = top - drop - 0.25
+            xb = GX[i] + edge_dx(i, 0.25, floor - 1)
             add(f'B3-{i+1}-{a}{b}-{sfx}', 'คาน', floor, task,
-                member((GX[i], y0, c), (GX[i], y1, c), 0.25, 0.50), assumed=assumed,
+                member((xb, y0, c), (xb, y1, c), 0.25, 0.50), assumed=assumed,
                 qty=dict(length=round(y1 - y0, 3), concrete=round((y1 - y0) * 0.25 * 0.5, 4)))
     for r in ('A', 'F'):                # B4 ขอบ
         y = GY[r] + (0.10 if r == 'A' else -0.10)
         for i in range(9):
             c = top - drop - 0.20
-            L = 3.5 - 0.25
+            # ปลาย B4 ชนผิวข้างคาน B3 (B3 บนกริด 1, 10 เลื่อนออกนอกตาม edge_dx)
+            bx0 = GX[i] + edge_dx(i, 0.25, floor - 1) + 0.125
+            bx1 = GX[i + 1] + edge_dx(i + 1, 0.25, floor - 1) - 0.125
+            L = round(bx1 - bx0, 4)
             add(f'B4-{r}{i+1}-{i+2}-{sfx}', 'คาน', floor, task,
-                member((GX[i] + 0.125, y, c), (GX[i + 1] - 0.125, y, c), 0.20, 0.40), assumed=assumed,
+                member((bx0, y, c), (bx1, y, c), 0.20, 0.40), assumed=assumed,
                 qty=dict(length=L, concrete=round(L * 0.2 * 0.4, 4)))
     if with_b5:
         for j in range(len(B5_X)):    # B5 ยื่นซอย
