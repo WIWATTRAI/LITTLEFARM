@@ -29,6 +29,8 @@ def edge_dx(i, w, k=1):
     off = COL_SEC[k][0] / 2 - w / 2
     return -off if i == 0 else (off if i == 9 else 0.0)
 COL_ROWS = ['B', 'C', 'D', 'E']
+# คาน B2 แนว C, D (ทางเดินหน้าห้อง): ผิวคานด้านทางเดินเสมอผิวเสา ผนังทางเดินอยู่ใต้คาน ฉาบเสา–คาน–ผนังแนวเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+B2_DY = {'B': 0.0, 'C': 0.125, 'D': -0.125, 'E': 0.0}
 
 # คานซอย B5 (S102) ตำแหน่ง x
 B5_X = [1.5, 5.5, 8.5, 12.5, 15.5, 19.5, 22.5, 26.5, 30.0]   # ตามระยะ 1.50/2.00 ในแปลน A-02 และผังคาน S-04
@@ -136,7 +138,7 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
             L = 3.5 - COL_SEC[floor - 1][0]
             hw = COL_SEC[floor - 1][0] / 2
             add(f'B2-{r}{i+1}-{i+2}-{sfx}', 'คาน', floor, task,
-                member((GX[i] + hw, GY[r], c), (GX[i + 1] - hw, GY[r], c), 0.25, 0.50),
+                member((GX[i] + hw, GY[r] + B2_DY[r], c), (GX[i + 1] - hw, GY[r] + B2_DY[r], c), 0.25, 0.50),
                 assumed=assumed, qty=dict(length=round(L, 3), concrete=round(L * 0.25 * 0.5, 4)))
     for i in range(10):                 # B1 แนวขวาง
         for a, b in (('B', 'C'), ('C', 'D'), ('D', 'E')):
@@ -328,7 +330,7 @@ def planks_x(f, rects, top):
             continue
         x0, x1 = bear(x0, 1), bear(x1, -1)
         # ไม่วางแผ่นทับแนวคานแนว x (B2 แนวเสา, BST1 ขอบช่องบันได): เริ่ม/จบที่ผิวคาน (ผู้ใช้สั่ง 11 พ.ย. 2569)
-        for lo_, hi_ in [(GY[r] - 0.125, GY[r] + 0.125) for r in COL_ROWS] + [(ST_RUN_Y1, ST_RUN_Y1 + 0.20)]:
+        for lo_, hi_ in [(GY[r] + B2_DY[r] - 0.125, GY[r] + B2_DY[r] + 0.125) for r in COL_ROWS] + [(ST_RUN_Y1, ST_RUN_Y1 + 0.20)]:
             if lo_ - 1e-6 <= y0 < hi_ - 1e-6:
                 y0 = hi_
             if lo_ + 1e-6 < y1 <= hi_ + 1e-6:
@@ -337,7 +339,7 @@ def planks_x(f, rects, top):
         # ช่องขนานคานเหลือได้ไม่เกิน PLANK_EDGE_MAX (เททับหน้าปิด); ถ้าเกิน เพิ่ม 1 แผ่นแล้ววางกึ่งกลาง ขอบแผ่นริมวางบนหลังคานเท่ากันสองข้าง
         k = int((y1 - y0 + PLANK_GAP) // (PLANK_W + PLANK_GAP) + 1e-9)
         left = (y1 - y0) - (k * PLANK_W + (k - 1) * PLANK_GAP)
-        if left > PLANK_EDGE_MAX + 1e-6:
+        if left / 2 > PLANK_EDGE_MAX + 1e-6:          # วางกึ่งกลาง ช่องสองข้างเท่ากัน ข้างละ left/2
             k += 1
             left = (y1 - y0) - (k * PLANK_W + (k - 1) * PLANK_GAP)
         ys = [(y0 + left / 2 + j * (PLANK_W + PLANK_GAP), y0 + left / 2 + j * (PLANK_W + PLANK_GAP) + PLANK_W) for j in range(k)]
@@ -1103,8 +1105,8 @@ for f in (2, 3, 4, 5):
             tag = f'F{f}-{side}{i+1}'
             # ผนังทางเดิน (ประตูห้อง)
             if not stair:
-                # ผิวก่อด้านทางเดินเสมอขอบเสา (ผู้ใช้แจ้ง 10 พ.ย. 2569): ผนังพ้นแนวคาน B2 จึงก่อถึงใต้ท้องพื้น
-                add_wall(f'W-{tag}-COR', f, 'x', cor_wall_y(side, f), x0, x1, z0, (FL[f + 1] - SLAB_T) if f < 5 else ROOF_BEAM, tw, tp,
+                # ผิวก่อด้านทางเดินเสมอขอบเสา (ผู้ใช้แจ้ง 10 พ.ย. 2569); คาน B2 แนว C/D เลื่อนมาเสมอผิวเสา ผนังจึงก่อถึงใต้ท้องคาน (11 พ.ย. 2569)
+                add_wall(f'W-{tag}-COR', f, 'x', cor_wall_y(side, f), x0, x1, z0, beam_soffit(f, 'main'), tw, tp,
                          [(GX[i] + 0.75, 0.90, 0.0, 2.00)], name=f'ผนังทางเดิน ชั้น {f} ห้อง {side}{i+1}')
                 # ---- ผังห้องน้ำ/ระเบียงตามแบบ A106 (ผู้ใช้ส่ง 10 พ.ย. 2569) ----
                 # คงแนวผนัง B5 เดิม (ตรงคานซอย B5 ตาม S-04); xc = แนวกริดฝั่งเสาของห้องน้ำ, dr = ทิศจากกริดเข้าห้องน้ำ
@@ -1540,7 +1542,7 @@ for f in (2, 3, 4, 5):
                 el_add(f'EL-{tag}-JB{k}', f, el_pipe((xj, yface, zr), (xj, yface + dn * EL_JB[1], zr)) | dict(w=EL_JB[0], d=EL_JB[0], sec=dict(d=EL_JB[0])),
                        f'Junction box {k} {room}', dict(count=1, size='Ø0.08'))
             # ท่อ: ตู้→JB1 (ขึ้น), JB1→JB2 (ตามผนัง), JB2→สวิตช์ (ลง), JB2→โคมกลางห้อง
-            yb = (yC - 0.125 - 0.03) if side == 'N' else (yD + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
+            yb = (yC + B2_DY['C'] - 0.125 - 0.03) if side == 'N' else (yD + B2_DY['D'] + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
             runs = [((x_cu, yp, cu_top), (x_cu, yp, zr)), ((x_cu, yp, zr), (x_sw, yp, zr)),
                     ((x_sw, yp, zr), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zr), (x_l, yp, zr))]
             ye = y_l - dn * EL_LAMP[1] / 2
@@ -1633,7 +1635,7 @@ for e in elements:
     # ติดตั้งด้านในร้าน: ด้านรางของคอมโพเนนต์ชิดผิวคาน B2 ด้านในร้าน (y = C - 0.125) กล่องยื่นเข้าในร้าน
     if re.match(r'^W-F1-SH\d-FR-O1$', e['id']):
         e['component'] = 'ประตูม้วน 3.00x2.60'
-        e['component_mount'] = dict(back_y=round(GY['C'] - 0.125, 4), box_dir=-1, box_top=round(FL[2] - SLAB_T, 3))
+        e['component_mount'] = dict(back_y=round(GY['C'] + B2_DY['C'] - 0.125, 4), box_dir=-1, box_top=round(FL[2] - SLAB_T, 3))
 
 
 def summary():
