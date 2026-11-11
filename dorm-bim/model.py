@@ -781,6 +781,24 @@ for k, (p0, p1) in enumerate((((ex0, ey0), (ex1, ey0)), ((ex1, ey0), (ex1, ey1))
 WALL_T = 0.07            # บล็อก 3 รู 7x10x20 ซม. (ผู้ใช้กำหนด 9 พ.ย. 2569)
 BLOCK_PER_M2 = round(1 / (0.20 + 0.01) / (0.10 + 0.01), 1)   # ก้อน/ตร.ม. รวมรอยต่อ 1 ซม.
 PL_T = 0.015             # ฉาบแต่ละด้าน
+# ผนังก่อรอบอาคาร: ผิวนอกบล็อกเสมอขอบนอกคาน/เสา ให้ฉาบภายนอกต่อเนื่องเป็นผืนเดียว (ผู้ใช้สั่ง 11 พ.ย. 2569)
+OUT_C = WALL_T / 2       # ศูนย์ผนังนอกแนว A/F ห่างแนวกริด (ผิวนอกเสมอขอบนอกคาน B4 ที่แนวกริด)
+
+
+def gw(x):
+    """ศูนย์ผนังบนแนวกริด x: กริด 1 และ 10 (ผนังริมอาคาร) เลื่อนออกนอกให้ผิวนอกเสมอผิวนอกเสา/คาน"""
+    if abs(x - GX[0]) < 1e-6:
+        return GX[0] - (COL_SEC[1][0] / 2 - WALL_T / 2)
+    if abs(x - GX[9]) < 1e-6:
+        return GX[9] + (COL_SEC[1][0] / 2 - WALL_T / 2)
+    return x
+
+
+def ox(t, sgn):
+    """ปลายผนังนอกแนว A/F ที่กริด t: กริดริม (1, 10) ยาวถึงมุมนอกอาคาร, กริดใน ชนผิวผนังกริด"""
+    if abs(t - GX[0]) < 1e-6 or abs(t - GX[9]) < 1e-6:
+        return gw(t) - sgn * WALL_T / 2
+    return t + sgn * WALL_T / 2
 ASSUMPTIONS += [
     'กริดสถาปัตย์ A,B,C,D ในแปลน A-01/A-02 ตรงกับกริดโครงสร้าง B,C,D,E',
     'เสาเอ็น/คานเอ็น คสล. กว้าง 0.10 ม. หนาเท่าบล็อก 0.07 ม.: เสาเอ็นข้างวงกบประตูหน้าต่างทุกช่อง, เสาเอ็นกลางผนังทึบที่ยาวเกิน 3.50 ม., คานเอ็นกลางความสูงผนังทุกผนัง, คานทับหลังและคานใต้วงกบยาวชนเสาเอ็นข้างช่องพอดี (ช่องเปิดกว้างไม่เกิน 1 ม. เสาเอ็นข้างช่องตั้งบนคานใต้วงกบ)',
@@ -988,8 +1006,8 @@ def wc_geo(i, side, f):
     cwf = col_w(f)
     face_b5 = b5 + dr * (WALL_T / 2)                       # ผิวผนัง B5 ด้านระเบียง (จาก B5 ห้องน้ำอยู่ทิศ -dr ระเบียงอยู่ทิศ +dr)
     face_col = xb - dr * cwf                               # ผิวเสาฝั่งระเบียง
-    return dict(xc=xc, dr=dr, s=s, xg=xc + dr * (WALL_T / 2 + PL_T),
-                yo=y_out + s * (0.10 + WALL_T / 2 + PL_T), yr=y_rm - s * (WALL_T / 2 + PL_T),
+    return dict(xc=xc, dr=dr, s=s, xg=gw(xc) + dr * (WALL_T / 2 + PL_T),
+                yo=y_out + s * (OUT_C + WALL_T / 2 + PL_T), yr=y_rm - s * (WALL_T / 2 + PL_T),
                 d3=b5 - dr * 0.55, d2=(face_b5 + face_col) / 2)
 yB, yC, yD, yE, yF = GY['B'], GY['C'], GY['D'], GY['E'], GY['F']
 
@@ -1025,17 +1043,17 @@ for f in (2, 3, 4, 5):
                 # ผนังข้างห้องน้ำ (แนว B5) ประตูห้องน้ำ
                 ya, yb = lo(y_out, y_rm)
                 # ผนังกั้นห้องน้ำกับระเบียง (แนว B5) ผนังทึบ: เข้าห้องน้ำจากในห้องพัก (ผู้ใช้แจ้ง 10 พ.ย. 2569)
-                wa, wb = (ya + 0.10, yb - 0.125) if side == 'N' else (ya + 0.125, yb - 0.10)
+                wa, wb = (ya + OUT_C, yb - 0.125) if side == 'N' else (ya + 0.125, yb - OUT_C)
                 add_wall(f'W-{tag}-WC', f, 'y', b5x(i, side), wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
                          name=f'ผนังห้องน้ำด้านระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ผนังนอกห้องน้ำ: หน้าต่าง W1 KPA 0.60x0.40 ขอบล่าง 1.80 ชิดเสา (ศูนย์กลางห่างกริด 0.47 ตาม A106)
-                add_wall(f'W-{tag}-OWC', f, 'x', y_out + (0.10 if side == 'N' else -0.10),
-                         tx0 + (WALL_T / 2), tx1 - (WALL_T / 2), zs, beam_soffit(f, 'edge', True), tw, tp,
+                add_wall(f'W-{tag}-OWC', f, 'x', y_out + (OUT_C if side == 'N' else -OUT_C),
+                         ox(tx0, 1), ox(tx1, -1), zs, beam_soffit(f, 'edge', True), tw, tp,
                          [(g['xc'] + g['dr'] * 0.47, 0.60, 1.80, 0.40)], name=f'ผนังนอกห้องน้ำ ชั้น {f} ห้อง {side}{i+1}')
                 elements[-1].update(name=f'หน้าต่าง W1 0.60x0.40 ใน W-{tag}-OWC')
                 elements[-1]['qty'].update(type='หน้าต่างบานกระจกซ้อน อะลูมิเนียม', model=W1_MODEL)
-                add_wall(f'W-{tag}-OBL', f, 'x', y_out + (0.10 if side == 'N' else -0.10),
-                         bx0 + (WALL_T / 2), bx1 - (WALL_T / 2), zs, beam_soffit(f, 'edge', True), tw, tp,
+                add_wall(f'W-{tag}-OBL', f, 'x', y_out + (OUT_C if side == 'N' else -OUT_C),
+                         ox(bx0, 1), ox(bx1, -1), zs, beam_soffit(f, 'edge', True), tw, tp,
                          [((bx0 + bx1) / 2, 1.20, 0.90, 1.20)], name=f'ผนังนอกระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ช่องชาร์ฟท่อแนวดิ่งมุมห้องน้ำชิดเสาฝั่งแนวห้อง (A106 ขนาดนอก 0.475x0.65) ผนังบล็อก 2 ด้าน ก่อถึงใต้พื้นชั้นบน
                 zt = (FL[f + 1] - DROP - S1_T) if f < 5 else beam_soffit(f, 'edge', True)
@@ -1061,12 +1079,14 @@ for f in (2, 3, 4, 5):
             ya, yb = lo(y_rm, y_cor)
             # ห้องริม (กริด 1, 10): หน้าต่าง W16 1.20x1.10 ขอบล่าง 0.90 กลางห้อง (ผู้ใช้แจ้ง, ขนาดวัดจากรูปด้าน A203)
             win = [((ya + yb) / 2, 1.20, 0.90, 1.10)] if k in (0, 9) else []
-            add_wall(f'W-F{f}-{side}G{k+1}-RM', f, 'y', GX[k], ya + cd, yb - cd, z0, beam_soffit(f, 'main'), tw, tp, win,
+            add_wall(f'W-F{f}-{side}G{k+1}-RM', f, 'y', gw(GX[k]), ya + cd, yb - cd, z0, beam_soffit(f, 'main'), tw, tp, win,
                      name=f'ผนังกั้นห้องกริด {k+1} ชั้น {f} ฝั่ง {side}' + (' (ผนังริม มีหน้าต่าง)' if win else ''))
             ya, yb = lo(y_out, y_rm)
             # ฝั่ง N เสาอยู่ที่ yb (แนว B), ฝั่ง S เสาอยู่ที่ ya (แนว E): เว้นระยะเสาด้านที่ชนเสา (เดิมฝั่ง S ล้ำเข้าเนื้อเสา, ผู้ใช้แจ้ง 10 พ.ย. 2569)
-            ba, bb = (ya + 0.10, yb - cd) if side == 'N' else (ya + cd, yb - 0.10)
-            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', GX[k], ba, bb, zs, beam_soffit(f, 'main', True), tw, tp,
+            # กริดริม (1, 10): เริ่มที่ผิวในผนังนอกแนว A/F (ผนังนอกวิ่งผ่านถึงมุมอาคาร); กริดใน: ชนศูนย์ผนังนอก
+            eo = WALL_T if k in (0, 9) else OUT_C
+            ba, bb = (ya + eo, yb - cd) if side == 'N' else (ya + cd, yb - eo)
+            add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', gw(GX[k]), ba, bb, zs, beam_soffit(f, 'main', True), tw, tp,
                      name=f'ผนังกั้นระเบียงกริด {k+1} ชั้น {f} ฝั่ง {side}')
 
 # ผนังปลายทางเดินด้านขวา (กริด 10 ระหว่างเสาแนว C–D) ชั้น 2–5: ก่ออิฐฉาบปูน
@@ -1075,7 +1095,7 @@ for f in (2, 3, 4, 5):
     cd = col_d(f)
     # ผู้ใช้แจ้ง 10 พ.ย. 2569 (ตามแบบ A102): ประตู D33 ออกบันไดหนีไฟภายนอก ประตูเหล็กทนไฟ Professional Door FD1G 86.4x204.8 ซม. สีเทา
     # เปิดซ้าย ผลักออกด้านนอก; ศูนย์กลางช่องวัดจากแบบ A102 ห่างแนว C 1.27 ม. (ไปทางแนว D)
-    add_wall(f'W-F{f}-COR-G10', f, 'y', GX[9], yC + cd, yD - cd, FL[f], beam_soffit(f, 'main'), wall_task[f], plaster_task[f],
+    add_wall(f'W-F{f}-COR-G10', f, 'y', gw(GX[9]), yC + cd, yD - cd, FL[f], beam_soffit(f, 'main'), wall_task[f], plaster_task[f],
              [(yC + 1.27, 0.864, 0.0, 2.048)], name=f'ผนังปลายทางเดินกริด 10 ชั้น {f} (ประตูหนีไฟ D33 0.864x2.048)')
     elements[-1]['name'] = f'ประตูเหล็กทนไฟ D33 0.864x2.048 ใน W-F{f}-COR-G10'
     elements[-1]['qty'].update(type='ประตูเหล็กทนไฟ ออกบันไดหนีไฟ', model='Professional Door FD1G 86.4x204.8 ซม. สีเทา (เปิดซ้าย ผลักออกด้านนอก) MegaHome 1308235', swing='เปิดซ้าย ผลักออกด้านนอก')
@@ -1084,7 +1104,7 @@ for f in (2, 3, 4, 5):
 # ขนาดและชนิดเดียวกับหน้าต่างห้องริม W3 (1.20x1.10 ขอบล่าง 0.90) วางกลางทางเดิน (ผู้ใช้กำหนด 10 พ.ย. 2569)
 for f in (2, 3, 4, 5):
     cd = col_d(f)
-    add_wall(f'W-F{f}-COR-G1', f, 'y', GX[0], yC + cd, yD - cd, FL[f], beam_soffit(f, 'main'), wall_task[f], plaster_task[f],
+    add_wall(f'W-F{f}-COR-G1', f, 'y', gw(GX[0]), yC + cd, yD - cd, FL[f], beam_soffit(f, 'main'), wall_task[f], plaster_task[f],
              [((yC + yD) / 2, 1.20, 0.90, 1.10)], name=f'ผนังปลายทางเดินกริด 1 ชั้น {f} (หน้าต่างบานเกล็ด 1.20x1.10)')
     elements[-1]['name'] = f'หน้าต่างบานเกล็ด 1.20x1.10 ปลายทางเดิน ใน W-F{f}-COR-G1'
     elements[-1]['qty'].update(type='หน้าต่างบานเกล็ด (ขนาดและชนิดเดียวกับหน้าต่างห้องริม W3)')
@@ -1094,7 +1114,7 @@ z0 = FL[1]
 cd, cw = col_d(1), col_w(1)
 # โถงบันได (กริด 4–5) จากขอบนอกถึงแนว C
 for k in (3, 4):
-    add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], 0.10, yB - cd, z0, beam_soffit(1, 'main', True), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
+    add_wall(f'W-F1-ST-G{k+1}A', 1, 'y', GX[k], OUT_C, yB - cd, z0, beam_soffit(1, 'main', True), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1} ช่วงยื่น')
     add_wall(f'W-F1-ST-G{k+1}B', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A04', 'A12', name=f'ผนังโถงบันไดชั้น 1 กริด {k+1}')
 # ผนังนอกโถงบันไดแนว A (หลังชานพัก): ก่อระหว่างคาน BST3 ของชานพักแต่ละชั้น
 # หน้าต่างบานกระทุ้ง 1.20x0.60 ขอบล่างสูง 1.50 จากพื้นชานพัก (ผู้ใช้กำหนด 10 พ.ย. 2569)
@@ -1108,7 +1128,7 @@ for n, (za, zb, f, zland) in enumerate(_segs):
     tw = wall_task[fl]
     tp = 'A12' if fl == 1 else plaster_task[fl]
     win = [((GX[3] + GX[4]) / 2, 1.20, 1.50, 0.60)] if zland is not None else []
-    add_wall(f'W-ST-OUT-{n}', fl, 'x', 0.10, GX[3] + col_w(fl), GX[4] - col_w(fl), za, zb, tw, tp, win,
+    add_wall(f'W-ST-OUT-{n}', fl, 'x', OUT_C, GX[3] + col_w(fl), GX[4] - col_w(fl), za, zb, tw, tp, win,
              name=f'ผนังนอกโถงบันได ช่วง {n}' + (f' หน้าต่างบานกระทุ้ง 1.20x0.60 (ชานพัก +{zland:.2f})' if win else ''))
 ASSUMPTIONS.append('ผนังนอกโถงบันไดแนว A ก่อระหว่างคาน BST3 ชานพัก; ช่วงบนสุดก่อจากชานพักชั้น 4 ถึง +16.30; หน้าต่างบานกระทุ้ง 1.20x0.60 สูง 1.50 จากพื้นชานพัก')
 # ร้านค้า 3 ห้อง (กริด 5–8) หน้าร้านแนว B ด้านหลังแนว C
@@ -1134,7 +1154,7 @@ _fx = lambda eid, name, x0, x1, y0, y1, za, t, **q: add(eid, 'สุขภัณ
 for i in (7, 8):
     n = i - 6
     room = 'ห้องน้ำชาย' if i == 7 else 'ห้องน้ำหญิง'
-    xl, xr = GX[i] + _hw, GX[i + 1] - _hw                  # แนวผิวกลางผนังกริดซ้าย/ขวา (ผนังชนกัน)
+    xl, xr = gw(GX[i]) + _hw, gw(GX[i + 1]) - _hw                  # แนวผิวกลางผนังกริดซ้าย/ขวา (ผนังชนกัน)
     fl, fr = GX[i] + _hw + PL_T, GX[i + 1] - _hw - PL_T    # ผิวฉาบผนังกริด
     # หน้าต่างระบายอากาศ W1 0.60x0.40 ขอบล่าง 1.80 เหมือนห้องน้ำห้องพัก ห้องละ 2 จุด (ผู้ใช้สั่ง 10 พ.ย. 2569)
     # ตำแหน่ง: กึ่งกลางช่วงผนังแต่ละฝั่งของผนังหน้าห้องส้วม (ฝั่งห้องส้วม 1 จุด ฝั่งที่ล้างมือ 1 จุด)
@@ -1194,7 +1214,7 @@ for i in (7, 8):
         name=f'อ่างล้างมือรวม ก่ออิฐปูกระเบื้อง {room}ชั้น 1 (2.135x0.545 สูง 0.60, 3 ก๊อก)', assumed=True,
         qty=dict(count=1, length=2.135, depth=0.545, height=0.60, taps=3, type='อ่างล้างมือรวม ก่ออิฐปูกระเบื้อง'))
 for k in (8, 9):
-    add_wall(f'W-F1-WC-G{k+1}', 1, 'y', GX[k], yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A14', 'A14', name=f'ผนังห้องน้ำชั้น 1 กริด {k+1}')
+    add_wall(f'W-F1-WC-G{k+1}', 1, 'y', gw(GX[k]), yB + cd, yC - cd, z0, beam_soffit(1, 'main'), 'A14', 'A14', name=f'ผนังห้องน้ำชั้น 1 กริด {k+1}')
 add(f'TL-F1-WC', 'กระเบื้อง', 1, 'A14', prism([(GX[7] + cw, yB + cd), (GX[9] - cw, yB + cd), (GX[9] - cw, yC - cd), (GX[7] + cw, yC - cd)], z0, 0.02),
     name='กระเบื้องพื้นห้องน้ำชั้น 1 16x16 นิ้ว', assumed=True, qty=dict(area=round((GX[9] - GX[7] - 2 * cw) * (yC - yB - 2 * cd), 3), tile_size='16x16 นิ้ว', tile_model='ระบุภายหลัง', tiles=math.ceil((GX[9] - GX[7] - 2 * cw) * (yC - yB - 2 * cd) / 0.4064 ** 2)))
 
@@ -1334,10 +1354,10 @@ h = WALL_T / 2 + PL_T
 for f in (2, 3, 4, 5):
     for side in ('N', 'S'):
         y_out, y_rm, y_cor = (0.0, yB, yC) if side == 'N' else (yF, yE, yD)
-        o = 0.10 + h if side == 'N' else -(0.10 + h)
+        o = OUT_C + h if side == 'N' else -(OUT_C + h)
         for i in range(9):
             tx0, tx1, bx0, bx1 = bay_split(i, side)
-            x0, x1 = GX[i] + h, GX[i + 1] - h
+            x0, x1 = gw(GX[i]) + h, gw(GX[i + 1]) - h
             if side == 'N' and i == STAIR_BAY[0]:
                 # โถงหน้าบันไดปูเจด้าไวท์เหมือนโถงทางเดิน (ผู้ใช้แจ้ง 10 พ.ย. 2569) แนวร่องต่อเนื่องกับทางเดิน
                 add_tile(f'TL-F{f}-ST-HALL', f, x0, x1, sy1, yC + col_d(f) + PL_T, TILE_TARA, f'กระเบื้องโถงหน้าบันได ชั้น {f} Tara เจด้าไวท์ 60x60',
@@ -1348,13 +1368,13 @@ for f in (2, 3, 4, 5):
             add_tile(f'TL-F{f}-{side}{i+1}-RM', f, x0, x1, ry0, ry1, TILE_TARA_WOOD, f'กระเบื้องห้องพัก ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
                      origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
             wy0, wy1 = y_out + o, (y_rm - h if side == 'N' else y_rm + h)
-            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(tx0 + h, x0), min(tx1 - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ลายเทา 16x16 นิ้ว', z=FL[f] - DROP,
-                     origin=((max(tx0 + h, x0) + min(tx1 - h, x1)) / 2, (wy0 + wy1) / 2))
+            add_tile(f'TL-F{f}-{side}{i+1}-WC', f, max(gw(tx0) + h, x0), min(gw(tx1) - h, x1), wy0, wy1, TILE_WC, f'กระเบื้องห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ลายเทา 16x16 นิ้ว', z=FL[f] - DROP,
+                     origin=((max(gw(tx0) + h, x0) + min(gw(tx1) - h, x1)) / 2, (wy0 + wy1) / 2))
             # ช่องชาร์ฟ (A106): ตัดกระเบื้องห้องน้ำออกตามขนาดนอกช่องชาร์ฟรวมฉาบ
             g = wc_geo(i, side, f)
             tile_cut_box(elements[-1], g['xg'], g['xg'] + g['dr'] * (SH_W + PL_T), g['yr'], g['yr'] - g['s'] * (SH_D + PL_T), TILE_WC)
             # เจเลนวูดปูตั้งแต่แนวประตูหน้าห้องถึงแนวหลังระเบียง (ผู้ใช้กำหนด 10 พ.ย. 2569) แนวร่องต่อเนื่องจากห้องพัก
-            add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(bx0 + h, x0), min(bx1 - h, x1), wy0, wy1, TILE_TARA_WOOD, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60', z=FL[f] - DROP,
+            add_tile(f'TL-F{f}-{side}{i+1}-BL', f, max(gw(bx0) + h, x0), min(gw(bx1) - h, x1), wy0, wy1, TILE_TARA_WOOD, f'กระเบื้องระเบียง ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60', z=FL[f] - DROP,
                      origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
             # ใต้ช่องประตู (ความหนาผนัง+ฉาบ 0.10): เดิมกระเบื้องหยุดที่ผิวฉาบ เห็นผิวพื้นทับหน้าโผล่ (ผู้ใช้แจ้ง 10 พ.ย. 2569)
             # ปูเจเลนวูดต่อจากห้องพักผ่านช่องประตู ที่ระดับพื้นห้อง FL (ฝั่งระเบียง/ห้องน้ำลดระดับที่ผิวผนัง)
@@ -1363,7 +1383,7 @@ for f in (2, 3, 4, 5):
                          f'กระเบื้องใต้ช่อง{("ประตูหน้าห้อง", "ประตูระเบียง", "ประตูห้องน้ำ")[k]} ชั้น {f} ห้อง {side}{i+1} Tara เจเลนวูด 60x60',
                          origin=((GX[i] + GX[i + 1]) / 2, GY['CX']))
     # เริ่มที่ผิวฉาบผนังปลายทางเดินกริด 1 (เพิ่ม 10 พ.ย. 2569)
-    add_tile(f'TL-F{f}-COR', f, GX[0] + WALL_T / 2 + PL_T, GX[9] - WALL_T / 2 - PL_T, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
+    add_tile(f'TL-F{f}-COR', f, gw(GX[0]) + WALL_T / 2 + PL_T, gw(GX[9]) - WALL_T / 2 - PL_T, yC + col_d(f) + PL_T, yD - col_d(f) - PL_T, TILE_TARA, f'กระเบื้องโถงทางเดิน ชั้น {f} Tara เจด้าไวท์ 60x60',
              origin=((GX[0] + GX[-1]) / 2, GY['CX']))
 # ห้องน้ำรวมชั้น 1: กระเบื้องลายเทา 16x16 นิ้ว ยาแนว 3 มม. (แทนรายการเดิมที่ยังไม่ระบุรุ่น)
 _cw1, _cd1 = col_w(1), col_d(1)
@@ -1472,7 +1492,7 @@ for f in (2, 3, 4, 5):
             el_add(f'EL-{tag}-SW2', f, el_box_on_x_wall(x_s2, y_bal + sr * wf, sr, fl + EL_SW_Z, *EL_BOX),
                    f'สวิตช์ 2 ตัวในกล่องเดียว (โคมห้องน้ำ + โคมหลังห้อง) หน้าห้องน้ำ {room}',
                    dict(count=1, box='บล็อกลอย 2x4 นิ้ว', gang=2, height=EL_SW_Z))
-            x_pw = xb - dr * wf                                                  # ผิวผนังกั้นห้องฝั่ง D2
+            x_pw = gw(xb) - dr * wf                                                  # ผิวผนังกั้นห้องฝั่ง D2
             cwf, cdf = col_w(f), col_d(f)
             COL_PL = 0.01                                                        # ฉาบเสา 1 ซม.
             y_so = y_bal + sr * (cdf + 0.15 + EL_BOX[0] / 2)                     # ถัดผิวเสา 0.15
