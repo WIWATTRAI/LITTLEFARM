@@ -139,8 +139,9 @@ def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
                 qty=dict(length=round(y1 - y0, 3), concrete=round((y1 - y0) * 0.25 * 0.5, 4)))
         for a, b in (('A', 'B'), ('E', 'F')):   # B3 ยื่น
             ya, yb = sorted((GY[a], GY[b]))
-            y0 = ya + (0.10 if a == 'A' else 0.25)
-            y1 = yb - (0.25 if a == 'A' else 0.10)
+            # ปลายคาน B3 ด้านนอกเสมอขอบนอกคานริม B4 (แนวกริด A/F) (ผู้ใช้สั่ง 11 พ.ย. 2569)
+            y0 = ya + (0.0 if a == 'A' else 0.25)
+            y1 = yb - (0.25 if a == 'A' else 0.0)
             c = top - drop - 0.25
             add(f'B3-{i+1}-{a}{b}-{sfx}', 'คาน', floor, task,
                 member((GX[i], y0, c), (GX[i], y1, c), 0.25, 0.50), assumed=assumed,
