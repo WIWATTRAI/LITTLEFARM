@@ -1997,12 +1997,11 @@ for f in (1, 2, 3, 4):
             qty=dict(count=10, length=round(10 * W, 3), bars_2m=10 * math.ceil(round(W / NOSE_L, 6)),
                      model='MAC PVC Stair Nosing DF38-20G1 Dark Gray 3.8x200x1.5 ซม. (ผู้ใช้กำหนด 11 พ.ย. 2569)'))
         elements[-1]['material'] = 'BIM-จมูกบันไดเทาเข้ม'
-    # ชานพัก: กระเบื้องบนผิวชานพัก เว้นแถบจมูกบันไดขอบชานพัก (ช่วง 1)
-    rects = _rects_minus([(FX0, GX1, LY0, LY1)], FX0, FX1, LY1 - (NOSE_W - ST_TILE_T), LY1 + 1)
-    add(f'TL-ST-F{f}-L', 'กระเบื้อง', f, 'A16', rects_geom(rects, zm, ST_TILE_T),
-        name=f'ปูนกาว+กระเบื้องชานพักบันไดชั้น {f} Tara เจด้าไวท์ 60x60 (ชนิดเดียวกับโถงหน้าห้อง)', assumed=True,
-        qty=dict(area=round(rect_area(rects), 3), tiles=math.ceil(rect_area(rects) / 0.36), tile_model=TILE_TARA['model'], thickness=ST_TILE_T))
-    elements[-1]['material'] = 'BIM-กระเบื้องบันได'
+    # ชานพัก: กระเบื้องชนิดเดียวกับทางเดินหน้าห้อง แนวร่องต่อเนื่องจากทางเดิน (ผู้ใช้สั่ง 11 พ.ย. 2569) เว้นแถบจมูกบันไดขอบชานพัก (ช่วง 1)
+    add_tile(f'TL-ST-F{f}-L', f, FX0, GX1, LY0, LY1, TILE_TARA, f'ปูนกาว+กระเบื้องชานพักบันไดชั้น {f} Tara เจด้าไวท์ 60x60 (ชนิดและแนวร่องต่อเนื่องจากทางเดินหน้าห้อง)',
+             z=zm, origin=((GX[0] + GX[-1]) / 2, GY['CX']))
+    elements[-1]['task'] = 'A16'
+    tile_cut_box(elements[-1], FX0, FX1, LY1 - (NOSE_W - ST_TILE_T), LY1 + 1, TILE_TARA)
     # ฉาบผิวข้างคาน BST1 ขอบช่องบันได (ด้านบันได) หยุดใต้กระเบื้องลูกตั้งขั้นสุดท้ายของช่วง 2 (กระเบื้องปูทับแทนฉาบ)
     plb = next((e for e in elements if e['id'] == f'PL-BST1-L{f+1}'), None)
     if plb:
