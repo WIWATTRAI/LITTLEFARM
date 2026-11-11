@@ -434,7 +434,7 @@ for f in (2, 3, 4, 5):
     for sfx, kind, rects, top in SLAB_ZONES[f]:
         A = round(rect_area(rects), 3)
         where = {'RM': 'ห้องพัก' if not sfx.startswith('N4') else 'โถงบันได', 'COR': 'ทางเดิน', 'BL': 'ระเบียง', 'WC': 'ห้องน้ำ'}[kind]
-        if kind == 'WC':
+        if kind in ('WC', 'BL'):   # ห้องน้ำและระเบียงหลังห้อง: พื้นเทในที่ S1 (ระเบียงผู้ใช้สั่ง 11 พ.ย. 2569)
             add(f'S1-F{f}-{sfx}', 'พื้น', f, 'DONE', rects_geom(rects, top - S1_T, S1_T),
                 name=f'พื้นหล่อในที่ S1 หนา 0.10 {where} ชั้น {f} {sfx[:-3]} (ต่ำกว่าพื้นห้อง 0.075)',
                 qty=dict(area=A, concrete=round(A * S1_T, 4), thickness=S1_T, top_level=round(top, 3)))
