@@ -143,6 +143,61 @@ _y0, _y1 = GY['C'] + 0.10, GY['D'] - 0.10
 add('GB1-11-CD', 'คานคอดิน', 1, 'DONE', member((GX11, _y0, _GB_Z), (GX11, _y1, _GB_Z), 0.20, 0.50),
     name='GB1 กริด 11 แนว C–D (บันไดหนีไฟ)', assumed=True, qty=dict(length=round(_y1 - _y0, 3), concrete=round((_y1 - _y0) * 0.20 * 0.5, 4)))
 
+# ---------- เสาเหล็กบันไดหนีไฟ C/11, D/11 (ผู้ใช้สั่ง 11 พ.ย. 2569) ขึ้นด้วย Profile Builder ----------
+# H 175x175x11x16 ยาวท่อนละ 6 ม. รอยต่อเว้น 3 มม. (งานเชื่อม) แผ่นประกับ PL8x120x120 ที่เอวทั้งสองด้าน
+# เพลทฐาน PL20x200x200 บนหลังคาน GB1 (+0.20), สลัก M16x200 จำนวน 4 ตัว ระยะ 125x125
+# แนวเอวขนานแกน x (ปีกหันเข้าหาอาคาร/ออกนอก) ปลายบนจบที่หลังคานชานพักชั้น 5 (FL5 - 0.10) (ผมกำหนด)
+SC_D, SC_B, SC_TW, SC_TF = 0.175, 0.175, 0.011, 0.016
+_hd, _hb, _hw, _ti = SC_D / 2, SC_B / 2, SC_TW / 2, SC_D / 2 - SC_TF
+SC_POLY = [(-_hd, -_hb), (-_ti, -_hb), (-_ti, -_hw), (_ti, -_hw), (_ti, -_hb), (_hd, -_hb),
+           (_hd, _hb), (_ti, _hb), (_ti, _hw), (-_ti, _hw), (-_ti, _hb), (-_hd, _hb)]
+BOLT_POLY = [(0.008 * math.cos(2 * math.pi * k / 16), 0.008 * math.sin(2 * math.pi * k / 16)) for k in range(16)]
+SC_BASE = 0.20                       # หลังคาน GB1
+SC_TOP = FL[5] - 0.10                # หลังคานชานพักชั้น 5
+SC_LEN, SC_GAP = 6.0, 0.003
+
+
+def _floor_at(z):
+    return max([1] + [f for f in FL if FL[f] <= z + 1e-6])
+
+
+for r in ('C', 'D'):
+    cx, cy = GX11, GY[r]
+    tag = f'11{r}'
+    sq = lambda hx, hy, z0, t: prism([(cx - hx, cy - hy), (cx + hx, cy - hy), (cx + hx, cy + hy), (cx - hx, cy + hy)], z0, t)
+    add(f'SC-{tag}-BP', 'เสา', 1, 'DONE', sq(0.10, 0.10, SC_BASE, 0.020),
+        name=f'เพลทฐานเสาเหล็ก PL20x200x200 กริด {r}/11', assumed=True, qty=dict(count=1, size='PL20x200x200', weight_kg=round(0.2 * 0.2 * 0.02 * 7850, 2)))
+    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+    for k, (dx, dy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+        bx, by = cx + dx * 0.0625, cy + dy * 0.0625
+        g = member((bx, by, SC_BASE + 0.06 - 0.20), (bx, by, SC_BASE + 0.06), 0.016, 0.016)
+        g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in BOLT_POLY]
+        add(f'SC-{tag}-AB{k+1}', 'เสา', 1, 'DONE', g, name=f'สลักยึดเสา M16x200 กริด {r}/11', assumed=True, qty=dict(count=1, size='M16x200'))
+        elements[-1]['material'] = 'BIM-สลักเหล็ก'
+    z, n, joints = SC_BASE + 0.020, 0, []
+    while z < SC_TOP - 1e-6:
+        n += 1
+        z1 = min(z + SC_LEN, SC_TOP)
+        g = member((cx, cy, z), (cx, cy, z1), SC_B, SC_D)
+        g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in SC_POLY]
+        add(f'SC-{tag}-{n}', 'เสา', _floor_at(z), 'DONE', g,
+            name=f'เสาเหล็ก H175x175x11x16 กริด {r}/11 ท่อน {n} ยาว {z1 - z:.3f} ม.', assumed=True,
+            qty=dict(length=round(z1 - z, 3), section='H175x175x11x16'))
+        elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+        if z1 < SC_TOP - 1e-6:
+            joints.append(z1 + SC_GAP / 2)
+        z = z1 + SC_GAP
+    for j, zj in enumerate(joints):
+        for side, sy in (('L', -1), ('R', 1)):
+            y0 = cy + sy * _hw
+            y1 = y0 + sy * 0.008
+            add(f'SC-{tag}-SP{j+1}{side}', 'เสา', _floor_at(zj), 'DONE',
+                prism([(cx - 0.06, min(y0, y1)), (cx + 0.06, min(y0, y1)), (cx + 0.06, max(y0, y1)), (cx - 0.06, max(y0, y1))], round(zj - 0.06, 4), 0.12),
+                name=f'แผ่นประกับรอยต่อเสาเหล็ก PL8x120x120 กริด {r}/11 รอยต่อ {j+1}', assumed=True,
+                qty=dict(count=1, size='PL8x120x120', weight_kg=round(0.12 * 0.12 * 0.008 * 7850, 2)))
+            elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
+
 # ---------- คานชั้น 2–5 และคานหลังคา ----------
 def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
     """drop: ลดระดับหลังคานในแถบยื่น (B3, B4, B5) ใต้พื้นระเบียง/ห้องน้ำ"""
@@ -1491,7 +1546,7 @@ add(f'TL-F1-WC', 'กระเบื้อง', 1, 'A14', prism([(GX[7] + cw, yB
 # ---------- ฉาบโครงสร้าง: เสา 1 ซม., ท้องคานและข้างคาน 0.5 ซม. (ผู้ใช้กำหนด) ----------
 PL_COL, PL_BEAM = 0.010, 0.005
 ceil_task = {1: 'A12', 2: 'A09', 3: 'A09', 4: 'A10', 5: 'A11'}   # งานฉาบของชั้นที่คาน/เสาอยู่
-for e in [e for e in elements if e['category'] == 'เสา' and e['task'] in ('DONE', 'A01') and not e['id'].endswith('-ST')]:
+for e in [e for e in elements if e['category'] == 'เสา' and e['task'] in ('DONE', 'A01') and not e['id'].endswith('-ST') and not e['id'].startswith('SC-')]:
     g = e['geom']
     xs = [p[0] for p in g['poly']]; ys = [p[1] for p in g['poly']]
     xa, xb, ya, yb = min(xs) - PL_COL, max(xs) + PL_COL, min(ys) - PL_COL, max(ys) + PL_COL
