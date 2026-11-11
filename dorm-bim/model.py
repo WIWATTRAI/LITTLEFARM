@@ -177,10 +177,11 @@ def _floor_at(z):
 
 
 # เสาที่ 11/M (แนวคานขวางปลายบันได ห่างแนว C 3.25 ม.) ขนาดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
-for r, cy in (('C', GY['C']), ('D', GY['D']), ('M', FS_YM)):
-    cx = GX11
-    tag = f'11{r}'
-    lab = f'{r}/11' if r != 'M' else '11 ห่างแนว C 3.25 ม.'
+# เสาที่ 10/M บนหลังคาน GB1-10-11-M ผิวปีกเสาห่างผิวฉาบนอกกริด 10 (ผนัง 1.5 ซม.) 10 มม. (ผู้ใช้สั่ง 11 พ.ย. 2569)
+SC_X10M = GX[9] + COL_SEC[1][0] / 2 + 0.015 + 0.010 + SC_D / 2
+_SC_SET = [('11C', GX11, GY['C'], 'C/11'), ('11D', GX11, GY['D'], 'D/11'), ('11M', GX11, FS_YM, '11 ห่างแนว C 3.25 ม.'),
+           ('10M', SC_X10M, FS_YM, '10 ห่างแนว C 3.25 ม. (ผิวเสาห่างผิวฉาบ 10 มม.)')]
+for tag, cx, cy, lab in _SC_SET:
     sq = lambda hx, hy, z0, t: prism([(cx - hx, cy - hy), (cx + hx, cy - hy), (cx + hx, cy + hy), (cx - hx, cy + hy)], z0, t)
     add(f'SC-{tag}-BP', 'เสา', 1, 'DONE', sq(0.10, 0.10, SC_BASE, 0.020),
         name=f'เพลทฐานเสาเหล็ก PL20x200x200 กริด {lab}', assumed=True, qty=dict(count=1, size='PL20x200x200', weight_kg=round(0.2 * 0.2 * 0.02 * 7850, 2)))
@@ -2225,6 +2226,43 @@ for f in (2, 3, 4, 5):
     if ng is not None:
         pe['geom'] = ng
         pe['qty']['area'] = round(pe['qty']['area'] - 0.15 * 0.30, 3)
+
+# ---------- เพลทฝังคาน B1 กริด 10 แนวเสา 10/M (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# รูปแบบเดียวกับเพลทเสา C/10: PL12x150x300 + เดือย 6-DB16 ระดับเดียวกัน (กึ่งกลาง FL - 0.20) ชั้น 2–5
+# ฝังเสมอผิวนอกคาน B1-10-BC (และขอบพื้นเหนือคาน) ที่แนวเสา 10/M ไว้เป็นจุดยึดเสาภายหลัง; ฉาบคานเว้นช่องเพลท
+for f in (2, 3, 4, 5):
+    zc = FL[f] - 0.10 - 0.10
+    yc = FS_YM
+    add(f'SC-EP-10M-F{f}', 'เสา', f - 1, 'DONE',
+        prism([(_xf - 0.012, yc - 0.075), (_xf, yc - 0.075), (_xf, yc + 0.075), (_xf - 0.012, yc + 0.075)], round(zc - 0.15, 4), 0.30),
+        name=f'เพลทฝังผิวคาน B1 กริด 10 แนวเสา 10/M PL12x150x300 จุดยึดเสาเหล็กชั้น {f}', assumed=True,
+        qty=dict(count=1, size='PL12x150x300', weight_kg=round(0.15 * 0.30 * 0.012 * 7850, 2)))
+    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+    parts = []
+    for dy in (-0.045, 0.045):
+        for dz in (-0.10, 0.0, 0.10):
+            y, z = yc + dy, zc + dz
+            a = member((_xf - 0.012, y, z), (_xf - 0.012 - 0.15 + 0.008, y, z), 0.016, 0.016)
+            b = member((_xf - 0.012 - 0.15, y, z + 0.008), (_xf - 0.012 - 0.15, y, z - 0.05), 0.016, 0.016)
+            for g in (a, b):
+                g['shape'] = 'POLY'; g['poly2d'] = EP_BOLT16
+            parts += [a, b]
+    add(f'SC-EP-10M-F{f}-DW', 'เสา', f - 1, 'DONE', dict(type='multi', parts=parts),
+        name=f'เหล็กเดือย 6-DB16 ยาว 0.15 งอปลาย 0.05 หลังเพลทฝังคาน B1 กริด 10 แนวเสา 10/M ชั้น {f}', assumed=True,
+        qty=dict(count=6, size='DB16', length_each=0.20, weight_kg=round(6 * 0.20 * 1.578, 2)))
+    elements[-1]['material'] = 'BIM-สลักเหล็ก'
+    # ฉาบคาน (ชิ้นผิวนอก) แยกเป็น 3 ชิ้น เว้นช่องหน้าเพลท
+    pe = next(e for e in elements if e['id'] == f'PL-B1-10-BC-L{f}')
+    po = next(p for p in pe['geom']['parts'] if p['type'] == 'member' and abs(p['p0'][0] - _xf - p['w'] / 2) < 1e-6)
+    i = pe['geom']['parts'].index(po)
+    px, pc, pd, pw = po['p0'][0], po['p0'][2], po['d'], po['w']
+    ya, yb = sorted((po['p0'][1], po['p1'][1]))
+    zb, zt = pc - pd / 2, pc + pd / 2
+    zh = zc - 0.15
+    new = [member((px, ya, pc), (px, yc - 0.075, pc), pw, pd), member((px, yc + 0.075, pc), (px, yb, pc), pw, pd),
+           member((px, yc - 0.075, (zb + zh) / 2), (px, yc + 0.075, (zb + zh) / 2), pw, round(zh - zb, 4))]
+    pe['geom']['parts'][i:i + 1] = new
+    pe['qty']['area'] = round(pe['qty']['area'] - 0.15 * (zt - zh), 3)
 
 # ---------- ปิดผิวฉาบภายนอกให้ต่อเนื่อง (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
 # ผิวโครงสร้าง/งานก่อที่อยู่บนระนาบผิวนอกอาคาร (แนว A, F, กริด 1, 10) แต่ยังไม่มีงานฉาบปิด เช่น ขอบพื้นหล่อในที่/ทับหน้า,
