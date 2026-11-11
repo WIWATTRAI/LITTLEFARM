@@ -176,18 +176,20 @@ def _floor_at(z):
     return max([1] + [f for f in FL if FL[f] <= z + 1e-6])
 
 
-for r in ('C', 'D'):
-    cx, cy = GX11, GY[r]
+# เสาที่ 11/M (แนวคานขวางปลายบันได ห่างแนว C 3.25 ม.) ขนาดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+for r, cy in (('C', GY['C']), ('D', GY['D']), ('M', FS_YM)):
+    cx = GX11
     tag = f'11{r}'
+    lab = f'{r}/11' if r != 'M' else '11 ห่างแนว C 3.25 ม.'
     sq = lambda hx, hy, z0, t: prism([(cx - hx, cy - hy), (cx + hx, cy - hy), (cx + hx, cy + hy), (cx - hx, cy + hy)], z0, t)
     add(f'SC-{tag}-BP', 'เสา', 1, 'DONE', sq(0.10, 0.10, SC_BASE, 0.020),
-        name=f'เพลทฐานเสาเหล็ก PL20x200x200 กริด {r}/11', assumed=True, qty=dict(count=1, size='PL20x200x200', weight_kg=round(0.2 * 0.2 * 0.02 * 7850, 2)))
+        name=f'เพลทฐานเสาเหล็ก PL20x200x200 กริด {lab}', assumed=True, qty=dict(count=1, size='PL20x200x200', weight_kg=round(0.2 * 0.2 * 0.02 * 7850, 2)))
     elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
     for k, (dx, dy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
         bx, by = cx + dx * 0.0625, cy + dy * 0.0625
         g = member((bx, by, SC_BASE + 0.06 - 0.20), (bx, by, SC_BASE + 0.06), 0.016, 0.016)
         g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in BOLT_POLY]
-        add(f'SC-{tag}-AB{k+1}', 'เสา', 1, 'DONE', g, name=f'สลักยึดเสา M16x200 กริด {r}/11', assumed=True, qty=dict(count=1, size='M16x200'))
+        add(f'SC-{tag}-AB{k+1}', 'เสา', 1, 'DONE', g, name=f'สลักยึดเสา M16x200 กริด {lab}', assumed=True, qty=dict(count=1, size='M16x200'))
         elements[-1]['material'] = 'BIM-สลักเหล็ก'
     z, n, joints = SC_BASE + 0.020, 0, []
     while z < SC_TOP - 1e-6:
@@ -196,7 +198,7 @@ for r in ('C', 'D'):
         g = member((cx, cy, z), (cx, cy, z1), SC_B, SC_D)
         g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in SC_POLY]
         add(f'SC-{tag}-{n}', 'เสา', _floor_at(z), 'DONE', g,
-            name=f'เสาเหล็ก H175x175x11x16 กริด {r}/11 ท่อน {n} ยาว {z1 - z:.3f} ม.', assumed=True,
+            name=f'เสาเหล็ก H175x175x11x16 กริด {lab} ท่อน {n} ยาว {z1 - z:.3f} ม.', assumed=True,
             qty=dict(length=round(z1 - z, 3), section='H175x175x11x16'))
         elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
         if z1 < SC_TOP - 1e-6:
@@ -208,7 +210,7 @@ for r in ('C', 'D'):
             y1 = y0 + sy * 0.008
             add(f'SC-{tag}-SP{j+1}{side}', 'เสา', _floor_at(zj), 'DONE',
                 prism([(cx - 0.06, min(y0, y1)), (cx + 0.06, min(y0, y1)), (cx + 0.06, max(y0, y1)), (cx - 0.06, max(y0, y1))], round(zj - 0.06, 4), 0.12),
-                name=f'แผ่นประกับรอยต่อเสาเหล็ก PL8x120x120 กริด {r}/11 รอยต่อ {j+1}', assumed=True,
+                name=f'แผ่นประกับรอยต่อเสาเหล็ก PL8x120x120 กริด {lab} รอยต่อ {j+1}', assumed=True,
                 qty=dict(count=1, size='PL8x120x120', weight_kg=round(0.12 * 0.12 * 0.008 * 7850, 2)))
             elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
 
