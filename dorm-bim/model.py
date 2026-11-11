@@ -128,6 +128,17 @@ for k in range(6):                      # k=0 ตอม่อ, 1..5 เสาช
                 name=f'C1 {i+1}/{r} {tag}',
                 qty=dict(height=round(z1 - z0, 3), concrete=round(w * d * (z1 - z0), 4)))
 
+# ---------- ฐานบันไดหนีไฟ กริด 11 (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# ตอม่อ F1 0.60x0.60x0.60 ที่ C/11, D/11 (ระดับเดียวกับตอม่อเดิม -0.30..+0.30) และคานคอดิน GB1 200x500 หลังคาน +0.20
+# ต่อจากตอม่อ C1 กริด 10 แนว C, D มาชนตอม่อ F1 (ช่วงกริด 10–11)
+for r in ('C', 'D'):
+    add(f'F1-11{r}-ST', 'เสา', 1, 'DONE',
+        prism([(GX11 - 0.30, GY[r] - 0.30), (GX11 + 0.30, GY[r] - 0.30), (GX11 + 0.30, GY[r] + 0.30), (GX11 - 0.30, GY[r] + 0.30)], FOOT_TOP, 0.60),
+        name=f'ตอม่อ F1 0.60x0.60x0.60 กริด 11/{r} (บันไดหนีไฟ)', assumed=True, qty=dict(height=0.60, concrete=round(0.6 * 0.6 * 0.6, 4)))
+    _x0, _x1 = GX[9] + COL_SEC[0][0] / 2, GX11 - 0.30
+    add(f'GB1-10-11-{r}', 'คานคอดิน', 1, 'DONE', member((_x0, GY[r], 0.20 - 0.25), (_x1, GY[r], 0.20 - 0.25), 0.20, 0.50),
+        name=f'GB1 กริด 10–11 แนว {r} (บันไดหนีไฟ)', assumed=True, qty=dict(length=round(_x1 - _x0, 3), concrete=round((_x1 - _x0) * 0.20 * 0.5, 4)))
+
 
 # ---------- คานชั้น 2–5 และคานหลังคา ----------
 def beams_level(lv, top, task, floor, with_b5=True, assumed=False, drop=0.0):
