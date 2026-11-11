@@ -610,16 +610,22 @@ STEEL = {'C125': dict(h=0.125, b=0.05, c=0.02, t=0.0032, kg=6.13),
          'C100': dict(h=0.100, b=0.05, c=0.02, t=0.0032, kg=5.50)}
 # ชั้นวัสดุใต้ผิวหลังคา (วัดจากผิวบนหลังคา zroof ลงมา)
 SKIN_T, PURLIN_T = 0.03, 0.04            # แผ่นหลังคา, แปเหล็กกัลวาไนซ์ (สูง 0.04 ค่าสมมติ)
-RAF_TOP = SKIN_T + PURLIN_T              # หลังจันทัน
-RAF_C = RAF_TOP + 0.05                   # แกนจันทัน C100
-RAF_BOT = RAF_TOP + 0.10                 # ท้องจันทัน = หลังสะพานรับจันทัน / หลังตะเข้สัน
+STACK_T = SKIN_T + PURLIN_T              # กระเบื้อง + แป วัดตั้งฉากกับลาดหลังคา
+# RAF_TOP/RAF_C/RAF_BOT (ระยะดิ่งจากผิวหลังคา) คำนวณหลังได้ความลาด: ซ้อนชั้นตั้งฉากกับลาด (ผู้ใช้สั่ง 11 พ.ย. 2569)
 WP_Y = 0.10                              # แนวอะเสจากขอบคาน
 OV_SIDE, OV_END = 1.195, 1.33
 yc = GY['CX']
 # ระนาบหลังคา: ท้องจันทันวางบนอะเส (หลังอะเส = +16.30 + 0.125) และผิวบนที่สันหลังคา = +20.00
 BASE_PL_T = 0.012                        # เพลทหัวเสา PL12x200x200 (ผู้ใช้กำหนด)
 RB = ROOF_BEAM + BASE_PL_T               # ท้องโครงเหล็กหลังคา (บนเพลทหัวเสา)
-slope = (RIDGE - (RB + 0.125 + RAF_BOT)) / (yc - (GY['A'] + WP_Y))   # tan ≈ 24°
+# ความลาด: ท้องจันทัน (หน้าตัดตั้งฉากกับลาด) แตะหลังอะเสที่ขอบนอกอะเสพอดี และผิวบนที่สัน = RIDGE
+slope = 0.45
+for _ in range(60):
+    slope = (RIDGE - (RB + 0.125) - (STACK_T + 0.10) * math.sqrt(1 + slope * slope)) / (yc - (GY['A'] + WP_Y - 0.05))
+_SEC = math.sqrt(1 + slope * slope)
+RAF_TOP = STACK_T * _SEC                 # หลังจันทัน (ระยะดิ่งใต้ผิวหลังคา) = ท้องแป
+RAF_C = (STACK_T + 0.05) * _SEC          # แกนจันทัน C100
+RAF_BOT = (STACK_T + 0.10) * _SEC        # ท้องจันทัน
 half = yc - GY['A']
 run = half + OV_SIDE
 z_eave = RIDGE - run * slope
@@ -634,49 +640,122 @@ def zroof(x, y):
     return RIDGE - max(dy, dx) * slope
 
 
-def steel(eid, p0, p1, sec, double, name, mark):
-    """ชิ้นส่วนเหล็กรูปตัวซี: double=True คือ 2C ประกบปากชนกันเป็นกล่อง"""
+def zface(face, x, y):
+    """ผิวบนหลังคาแต่ละด้าน (ระนาบ) A/F ด้านยาว, 1/10 ด้านสกัด"""
+    return {'A': RIDGE - (yc - y) * slope, 'F': RIDGE - (y - yc) * slope,
+            '1': RIDGE - (rx0 - x) * slope, '10': RIDGE - (x - rx1) * slope}[face]
+
+
+def _sub(a, b): return tuple(p - q for p, q in zip(a, b))
+def _dot(a, b): return sum(p * q for p, q in zip(a, b))
+def _unit(a):
+    n = math.sqrt(_dot(a, a)); return tuple(p / n for p in a)
+def _cross(a, b): return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def cut(pt, n):
+    """ระนาบตัดปลายชิ้น (จุด, เวกเตอร์ตั้งฉาก) สำหรับ Profile Builder trim_to_plane"""
+    return [round(v, 5) for v in (*pt, *_unit(n))]
+
+
+def _on_plane(p0, p1, c):
+    """จุดที่แกนชิ้น p0→p1 ตัดระนาบ c"""
+    u = _sub(p1, p0); n = c[3:]; t = _dot(_sub(c[:3], p0), n) / _dot(u, n)
+    return tuple(a + t * b for a, b in zip(p0, u))
+
+
+def steel(eid, p0, p1, sec, double, name, mark, cuts=(None, None), segs=None):
+    """ชิ้นส่วนเหล็กรูปตัวซี (สร้างด้วย Profile Builder): double=True คือ 2C ประกบปากชนกันเป็นกล่อง
+    cuts = (ระนาบตัดปลายต้น, ระนาบตัดปลายท้าย) ตัด/ยืดปลายให้ผิวชนผิวชิ้นที่รองรับพอดี ไม่ทะลุกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+    segs = [(p0, p1, cuts), ...] ชิ้นที่แบ่งเป็นท่อน (เช่น ขื่อทางยาวตัดชนขื่อด้านสั้น)"""
     sp = STEEL[sec]
-    g = member(p0, p1, 2 * sp['b'] if double else sp['b'], sp['h'])
-    g['shape'] = '2C' if double else 'C'
-    g['sec'] = {k: sp[k] for k in ('h', 'b', 'c', 't')}
-    L = mlen(p0, p1)
+    parts, L = [], 0.0
+    for a, b, (c0, c1) in (segs or [(p0, p1, cuts)]):
+        q0 = _on_plane(a, b, c0) if c0 else a
+        q1 = _on_plane(a, b, c1) if c1 else b
+        g = member(q0, q1, 2 * sp['b'] if double else sp['b'], sp['h'])
+        g['shape'] = '2C' if double else 'C'
+        g['sec'] = {k: sp[k] for k in ('h', 'b', 'c', 't')}
+        if c0 or c1:
+            g['trim'] = [c0, c1]
+        parts.append(g)
+        L += mlen(q0, q1)
     secname = f"{'2' if double else ''}{sec}x50x20x3.2"
-    add(eid, 'โครงหลังคาเหล็ก', 5, 'A03.2', g, name=f'{mark} {name} {secname}',
-        qty=dict(length=round(L, 3), section=secname, mark=mark,
+    add(eid, 'โครงหลังคาเหล็ก', 5, 'A03.2', parts[0] if len(parts) == 1 else dict(type='multi', parts=parts),
+        name=f'{mark} {name} {secname}',
+        qty=dict(length=round(L, 3), section=secname, mark=mark, pieces=len(parts),
                  weight_kg=round(L * sp['kg'] * (2 if double else 1), 2)))
 
 
 ZB = RB + 0.0625                             # แกนขื่อ/อะเส 2C125 วางบนเพลทหัวเสา
 ZB_TOP = RB + 0.125
 ZA = RB + 0.05                               # แกนขื่อทางยาว 2C100
+ZA_TOP = RB + 0.10
 Y_MID_N, Y_MID_S = GY['B'] + 2.55, GY['E'] - 2.55       # เสารับจันทันกลางช่วง (S107)
 Y_HIP_N = yc - (rx0 - GX[1])                  # แนวสะพานช่วงตะเข้ (ตรงกับระยะ 550 ใน S106)
 Y_HIP_S = yc + (rx0 - GX[1])
 X_E0, X_E1 = GX[1], GX[8]                     # สะพานรับจันทันพรางด้านสกัด กริด 2 และ 9
+HB = 0.05                                     # ครึ่งความกว้าง 2C (กล่อง 100 มม.)
+HIP_DROP = slope * HB / math.sqrt(2)          # ลดตะเข้ให้ขอบหลังตะเข้แตะระนาบหลังจันทันทั้งสองด้าน
+XP, YP, ZP = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+FASCIA_T, FASCIA_H = 0.016, 0.23              # เชิงชาย DURAONE Fascia 23x300x1.6 ซม. (ผู้ใช้กำหนด 11 พ.ย. 2569) ผิวนอกอยู่บนแนวชายคา
+FI = FASCIA_T                                 # ปลายจันทัน/ตะเข้ตัดชนผิวด้านในเชิงชาย
+
+# ตะเข้สัน: มุมชายคา → ปลายสัน (แปลน 45°)
+HIPS = {1: ((ex0, ey0), (rx0, yc), 'A'), 2: ((ex1, ey0), (rx1, yc), 'A'),
+        3: ((ex1, ey1), (rx1, yc), 'F'), 4: ((ex0, ey1), (rx0, yc), 'F')}
 
 
-def z_bridge(x, y):
-    return zroof(x, y) - RAF_BOT - 0.0625     # แกนสะพาน 2C125 ใต้ท้องจันทัน
+def hip_frame(k):
+    (cx, cy), (qx, qy), face = HIPS[k]
+    d = _unit((qx - cx, qy - cy, 0))
+    u = _unit((d[0], d[1], slope / math.sqrt(2)))
+    s = _unit(_cross(u, ZP)); t = _unit(_cross(s, u))
+    return (cx, cy), (qx, qy), face, d, u, s, t
 
 
-def bridge_bot(x, y):
-    return zroof(x, y) - RAF_BOT - 0.125
+def hip_top(k, x, y):
+    """จุดบนแนวกึ่งกลางหลังตะเข้ (แปลน x,y อยู่บนแนวตะเข้)"""
+    face = HIPS[k][2]
+    return (x, y, zface(face, x, y) - RAF_TOP - HIP_DROP)
 
 
-# B อะเส รอบอาคาร
+def hip_side(k, toward):
+    """ระนาบผิวข้างตะเข้ k (ดิ่ง) ด้านที่หันเข้าหาจุด toward (x, y)"""
+    (cx, cy), _, _, d, *_ = hip_frame(k)
+    n = (d[1], -d[0], 0)
+    if (toward[0] - cx) * n[0] + (toward[1] - cy) * n[1] < 0:
+        n = (-n[0], -n[1], 0)
+    return cut((cx + HB * n[0], cy + HB * n[1], 0), n)
+
+
+def hip_bottom(k):
+    """ระนาบท้องตะเข้ k"""
+    (cx, cy), *_ , t = hip_frame(k)
+    p = hip_top(k, cx, cy)
+    return cut(tuple(a - 0.125 * b for a, b in zip(p, t)), t)
+
+
+# B อะเส รอบอาคาร: แนว A/F ยาวต่อเนื่อง; แนวกริด 1/10 ตัดชนผิวด้านในอะเส A/F
+YW0, YW1 = GY['A'] + WP_Y + HB, GY['F'] - WP_Y - HB     # ผิวด้านในอะเส A/F
 for k, (q0, q1) in enumerate((((GX[0], GY['A'] + WP_Y), (GX[-1], GY['A'] + WP_Y)),
                                ((GX[0], GY['F'] - WP_Y), (GX[-1], GY['F'] - WP_Y)),
-                               ((GX[0] + WP_Y, GY['A'] + WP_Y), (GX[0] + WP_Y, GY['F'] - WP_Y)),
-                               ((GX[-1] - WP_Y, GY['A'] + WP_Y), (GX[-1] - WP_Y, GY['F'] - WP_Y)))):
-    steel(f'RF-WP{k+1}', (*q0, ZB), (*q1, ZB), 'C125', True, 'อะเส', 'B')
-# B ขื่อด้านสั้น ทุกกริด 2–9 (วางบนคานหลังคาแนว y)
+                               ((GX[0] + WP_Y, YW0), (GX[0] + WP_Y, YW1)),
+                               ((GX[-1] - WP_Y, YW0), (GX[-1] - WP_Y, YW1)))):
+    cs = (None, None)
+    if k < 2:                                  # อะเส A/F ปลายตัดชนผิวข้างตะเข้ที่มุมอาคาร (ตะเข้ผ่านเหนือมุมอะเส)
+        ha, hb_ = (1, 2) if k == 0 else (4, 3)
+        cs = (hip_side(ha, (GX[4], q0[1])), hip_side(hb_, (GX[4], q0[1])))
+    steel(f'RF-WP{k+1}', (*q0, ZB), (*q1, ZB), 'C125', True, 'อะเส', 'B', cuts=cs)
+# B ขื่อด้านสั้น ทุกกริด 2–9 (วางบนคานหลังคาแนว y) ตัดชนผิวด้านในอะเส A/F
 for gi in range(1, 9):
     x = GX[gi]
-    steel(f'RF-TS{gi+1}', (x, GY['A'] + WP_Y, ZB), (x, GY['F'] - WP_Y, ZB), 'C125', True, f'ขื่อด้านสั้น กริด {gi+1}', 'B')
-# A ขื่อทางยาว แนว B C D E
+    steel(f'RF-TS{gi+1}', (x, YW0, ZB), (x, YW1, ZB), 'C125', True, f'ขื่อด้านสั้น กริด {gi+1}', 'B')
+# A ขื่อทางยาว แนว B C D E: แบ่งท่อนระหว่างขื่อด้านสั้น ปลายชนผิวข้างขื่อ/อะเสกริด 1, 10
+_tl_x = [GX[0] + WP_Y + HB] + [v for gi in range(1, 9) for v in (GX[gi] - HB, GX[gi] + HB)] + [GX[-1] - WP_Y - HB]
 for r in COL_ROWS:
-    steel(f'RF-TL-{r}', (GX[0] + WP_Y, GY[r], ZA), (GX[-1] - WP_Y, GY[r], ZA), 'C100', True, f'ขื่อทางยาว แนว {r}', 'A')
+    segs = [((_tl_x[j], GY[r], ZA), (_tl_x[j + 1], GY[r], ZA), (None, None)) for j in range(0, len(_tl_x), 2)]
+    steel(f'RF-TL-{r}', None, None, 'C100', True, f'ขื่อทางยาว แนว {r} ({len(segs)} ท่อน)', 'A', segs=segs)
 
 # เพลทหัวเสา PL12x200x200 + J-BOLT M12 บนหัวเสา คสล. ชั้น 5 (ผู้ใช้กำหนด)
 JB_N, JB_EMBED, JB_PROJ, JB_PITCH = 4, 0.30, 0.05, 0.14
@@ -694,66 +773,128 @@ for i in range(10):
                 qty=dict(count=1, mark='JB', length=round(JB_EMBED + BASE_PL_T + JB_PROJ, 3)))
 ASSUMPTIONS.append('J-BOLT M12 ต่อเพลท 4 ตัว ระยะ 140 มม. ฝัง 0.30 ม. โผล่เหนือเพลท 0.05 ม. (รอผู้ใช้ยืนยัน); เพลทวางทุกหัวเสา แนว B–E กริด 1–10')
 
-# C สะพานรับจันทัน (แนว x) ใต้จันทันด้านยาว
-bridges = []                                  # (eid, y, x0, x1)
-for r in ('B', 'C', 'D', 'E'):
-    dy = abs(GY[r] - yc)
-    bridges.append((f'RF-BR-{r}', GY[r], rx0 - dy, rx1 + dy))
-bridges += [('RF-BR-MN', Y_MID_N, GX[2], GX[7]), ('RF-BR-MS', Y_MID_S, GX[2], GX[7]),
-            ('RF-BR-HN1', Y_HIP_N, X_E0, GX[2]), ('RF-BR-HN2', Y_HIP_N, GX[7], X_E1),
-            ('RF-BR-HS1', Y_HIP_S, X_E0, GX[2]), ('RF-BR-HS2', Y_HIP_S, GX[7], X_E1)]
-for eid, y, x0, x1 in bridges:
-    z = z_bridge((x0 + x1) / 2, y)
-    steel(eid, (x0, y, z), (x1, y, z), 'C125', True, f'สะพานรับจันทัน y={y:.2f}', 'C')
-# C สะพานรับจันทันพรางด้านสกัด (แนว y) กริด 2 และ 9
-for k, x in enumerate((X_E0, X_E1)):
-    z = z_bridge(x, yc)
-    steel(f'RF-BR-END{k+1}', (x, Y_HIP_N, z), (x, Y_HIP_S, z), 'C125', True, f'สะพานรับจันทันพราง กริด {2 if k == 0 else 9}', 'C')
 
-# D เสารับจันทัน 2C100 บนขื่อด้านสั้น
-posts = []                                    # (x, y)
+def bridge_top(face, x, y):
+    """หลังสะพาน 2C125 แนวราบใต้จันทัน: แตะท้องจันทันที่ขอบด้านล่างลาดของสะพาน"""
+    if face == 'A': y -= HB
+    elif face == 'F': y += HB
+    elif face == '1': x -= HB
+    else: x += HB
+    return zface(face, x, y) - RAF_BOT
+
+
+# C สะพานรับจันทัน (แนว x) ใต้จันทันด้านยาว
+BR_BOT = {}                                   # (x หรือ None, y) → ท้องสะพาน
+def _bridge(eid, y, x0, x1, c0=None, c1=None):
+    face = 'A' if y < yc else 'F'
+    zt = bridge_top(face, 0, y)
+    steel(eid, (x0, y, zt - 0.0625), (x1, y, zt - 0.0625), 'C125', True, f'สะพานรับจันทัน y={y:.2f}', 'C', cuts=(c0, c1))
+    return zt - 0.125
+
+
+for r in ('B', 'C', 'D', 'E'):
+    y = GY[r]; dy = abs(y - yc)
+    h0, h1 = (1, 2) if y < yc else (4, 3)
+    BR_BOT[y] = _bridge(f'RF-BR-{r}', y, rx0 - dy, rx1 + dy, hip_side(h0, (rx0, y)), hip_side(h1, (rx0, y)))
+BR_BOT[Y_MID_N] = _bridge('RF-BR-MN', Y_MID_N, GX[2] - HB, GX[7] + HB)
+BR_BOT[Y_MID_S] = _bridge('RF-BR-MS', Y_MID_S, GX[2] - HB, GX[7] + HB)
+# สะพานช่วงตะเข้: ปลายด้านสกัดอยู่บนแนวตะเข้ ตัดชนผิวข้างตะเข้
+BR_BOT[Y_HIP_N] = _bridge('RF-BR-HN1', Y_HIP_N, X_E0, GX[2] + HB, hip_side(1, (GX[2], Y_HIP_N)))
+_bridge('RF-BR-HN2', Y_HIP_N, GX[7] - HB, X_E1, None, hip_side(2, (GX[7], Y_HIP_N)))
+BR_BOT[Y_HIP_S] = _bridge('RF-BR-HS1', Y_HIP_S, X_E0, GX[2] + HB, hip_side(4, (GX[2], Y_HIP_S)))
+_bridge('RF-BR-HS2', Y_HIP_S, GX[7] - HB, X_E1, None, hip_side(3, (GX[7], Y_HIP_S)))
+# C สะพานรับจันทันพรางด้านสกัด (แนว y) กริด 2 และ 9: ปลายตัดชนผิวข้างตะเข้
+END_BOT = {}
+for k, (x, face) in enumerate(((X_E0, '1'), (X_E1, '10'))):
+    zt = bridge_top(face, x, yc)
+    ha, hb_ = (1, 4) if face == '1' else (2, 3)
+    steel(f'RF-BR-END{k+1}', (x, Y_HIP_N, zt - 0.0625), (x, Y_HIP_S, zt - 0.0625), 'C125', True,
+          f'สะพานรับจันทันพราง กริด {2 if k == 0 else 9}', 'C', cuts=(hip_side(ha, (x, yc)), hip_side(hb_, (x, yc))))
+    END_BOT[x] = zt - 0.125
+
+# D เสารับจันทัน 2C100 บนขื่อด้านสั้น: หัวเสาแตะท้องสะพาน (เสาใต้แนวตะเข้: ตัดหัวเสาตามท้องตะเข้)
+posts = []                                    # (x, y, หัวเสา z หรือ None, ระนาบตัดหัวเสา)
 for gi in range(2, 8):
     for y in (GY['B'], Y_MID_N, GY['C'], GY['D'], Y_MID_S, GY['E']):
-        posts.append((GX[gi], y))
+        posts.append((GX[gi], y, BR_BOT[y], None))
 for x in (X_E0, X_E1):
-    for y in (GY['B'], Y_HIP_N, GY['C'], GY['D'], Y_HIP_S, GY['E']):
-        posts.append((x, y))
+    for y in (GY['B'], GY['E']):
+        posts.append((x, y, BR_BOT[y], None))
+    for y in (GY['C'], GY['D']):
+        posts.append((x, y, END_BOT[x], None))
+    for y in (Y_HIP_N, Y_HIP_S):              # เสาที่จุดตัดแนวตะเข้: หัวเสาราบที่ระดับท้องสะพานพราง (ต่ำกว่าท้องตะเข้)
+        posts.append((x, y, END_BOT[x], None))
 for x in (GX[2], GX[7]):                      # ปลายสะพานช่วงตะเข้
     for y in (Y_HIP_N, Y_HIP_S):
-        posts.append((x, y))
-for n, (x, y) in enumerate(posts, 1):
-    zt = bridge_bot(x, y)
-    steel(f'RF-P{n:02d}', (x, y, ZB_TOP), (x, y, zt), 'C100', True, 'เสารับจันทัน', 'D')
+        posts.append((x, y, BR_BOT[y], None))
+for n, (x, y, zt, ct) in enumerate(posts, 1):
+    if ct:
+        steel(f'RF-P{n:02d}', (x, y, ZB_TOP), (x, y, ZB_TOP + 1.0), 'C100', True, 'เสารับจันทัน (รับตะเข้)', 'D', cuts=(None, ct))
+    else:
+        steel(f'RF-P{n:02d}', (x, y, ZB_TOP), (x, y, zt), 'C100', True, 'เสารับจันทัน', 'D')
 
 # I เหล็กทะแยง C100 (S107): หัวเสาแนว B → โคนเสากลาง, หัวเสากลาง → โคนเสาแนว C (และฝั่ง E/D)
+# ปลายตัดดิ่งชนผิวข้างเสา; มุมบนแตะท้องสะพาน มุมล่างแตะหลังขื่อ (ไม่ทะลุ)
+def diag_line(yu, z1, yl, z0, h):
+    """แกนเหล็กทะแยงในระนาบ y-z: ขอบบนผ่าน (yu, z1) ขอบล่างผ่าน (yl, z0) หน้าตัดลึก h"""
+    my, mz = (yu + yl) / 2, (z1 + z0) / 2
+    Dy, Dz = yu - yl, z1 - z0
+    L_ = math.hypot(Dy, Dz); a = math.asin(h / L_)
+    for sg in (1, -1):
+        ang = math.atan2(Dz, Dy) + sg * a
+        uy, uz = math.cos(ang), math.sin(ang)
+        ty, tz = -uz, uy                      # ตั้งฉากในระนาบ (หันขึ้น)
+        if tz < 0: ty, tz = -ty, -tz
+        if (yu - my) * ty + (z1 - mz) * tz > 0:
+            return (my, mz), (uy, uz)
+    raise ValueError
+
+
 n = 0
 for gi in range(2, 8):
     x = GX[gi]
     for ya, yb in ((GY['B'], Y_MID_N), (Y_MID_N, GY['C']), (GY['E'], Y_MID_S), (Y_MID_S, GY['D'])):
         n += 1
-        steel(f'RF-DG{n:02d}', (x, ya, bridge_bot(x, ya) - 0.05), (x, yb, ZB_TOP + 0.05), 'C100', False, 'เหล็กทะแยง', 'I')
+        sg = 1 if yb > ya else -1
+        yu, yl = ya + sg * 0.05, yb - sg * 0.05
+        (my, mz), (uy, uz) = diag_line(yu, BR_BOT[ya], yl, ZB_TOP, STEEL['C100']['h'])
+        zl = lambda yy: mz + (yy - my) * uz / uy
+        # เสารับจันทันที่อยู่ระหว่างช่วง (เสาปลายสะพานช่วงตะเข้): แบ่งเหล็กทะแยงเป็น 2 ท่อน ปลายชนผิวข้างเสา
+        mid = sorted((py for px, py, *_ in posts if abs(px - x) < 1e-6 and min(yu, yl) < py < max(yu, yl)), key=lambda v: sg * v)
+        ys_ = [yu] + [v for py in mid for v in (py - sg * 0.05, py + sg * 0.05)] + [yl]
+        segs = [((x, ys_[j], zl(ys_[j])), (x, ys_[j + 1], zl(ys_[j + 1])), (cut((x, ys_[j], 0), YP), cut((x, ys_[j + 1], 0), YP)))
+                for j in range(0, len(ys_), 2)]
+        steel(f'RF-DG{n:02d}', None, None, 'C100', False, 'เหล็กทะแยง' + (f' ({len(segs)} ท่อน)' if len(segs) > 1 else ''), 'I', segs=segs)
 
-# E คานรับเสาดั้ง + F เสารับอกไก่ + G อกไก่
+# G อกไก่: ใต้ท้องจันทันที่สัน (แตะขอบท้องจันทันสองด้าน) ปลายเลยแกนเสารับอกไก่ปลายสัน 0.05
+RIDGE_TOP = RIDGE - HB * slope - RAF_BOT
+steel('RF-RIDGE', (rx0 - HB, yc, RIDGE_TOP - 0.0625), (rx1 + HB, yc, RIDGE_TOP - 0.0625), 'C125', True, 'อกไก่', 'G')
+
+# E คานรับเสาดั้ง + F เสารับอกไก่
 Z_E = ROOF_BEAM + 2.44
-
 xs_king = [rx0] + [GX[i] for i in range(3, 7)] + [rx1]
 for k, x in enumerate(xs_king, 1):
-    steel(f'RF-KB{k}', (x, GY['C'], Z_E), (x, GY['D'], Z_E), 'C125', True, 'คานรับเสาดั้ง', 'E')
-    steel(f'RF-KP{k}', (x, yc, Z_E + 0.0625), (x, yc, bridge_bot(x, yc)), 'C100', True, 'เสารับอกไก่', 'F')
-    if x in (rx0, rx1):                       # เสารับคานรับเสาดั้งที่ปลายสัน ยืนบนขื่อทางยาว C/D
+    on_posts = x in GX                         # มีเสารับจันทันแนว C/D ที่กริดนี้: ตัดปลายชนผิวข้างเสา
+    y0, y1 = (GY['C'] + HB, GY['D'] - HB) if on_posts else (GY['C'], GY['D'])
+    steel(f'RF-KB{k}', (x, y0, Z_E), (x, y1, Z_E), 'C125', True, 'คานรับเสาดั้ง', 'E')
+    steel(f'RF-KP{k}', (x, yc, Z_E + 0.0625), (x, yc, RIDGE_TOP - 0.125), 'C100', True, 'เสารับอกไก่', 'F')
+    if not on_posts:                           # เสารับคานรับเสาดั้งที่ปลายสัน ยืนบนขื่อทางยาว C/D
         for r in ('C', 'D'):
-            steel(f'RF-KC{k}{r}', (x, GY[r], ZA + 0.05), (x, GY[r], Z_E - 0.0625), 'C100', True, 'เสารับคานรับเสาดั้ง', 'D')
-zr = z_bridge(rx0, yc)
-steel('RF-RIDGE', (rx0, yc, zr), (rx1, yc, zr), 'C125', True, 'อกไก่', 'G')
+            steel(f'RF-KC{k}{r}', (x, GY[r], ZA_TOP), (x, GY[r], Z_E - 0.0625), 'C100', True, 'เสารับคานรับเสาดั้ง', 'D')
 
-# C ตะเข้สัน: หลังตะเข้เสมอหลังจันทัน
-for k, (cx, cy) in enumerate(((ex0, ey0), (ex1, ey0), (ex1, ey1), (ex0, ey1))):
-    rx = rx0 if cx == ex0 else rx1
-    q0 = (cx, cy, z_eave - RAF_TOP - 0.0625)
-    q1 = (rx, yc, RIDGE - RAF_TOP - 0.0625)
-    steel(f'RF-HIP{k+1}', q0, q1, 'C125', True, 'ตะเข้สัน', 'C')
+# C ตะเข้สัน: ขอบหลังตะเข้แตะระนาบหลังจันทัน; ปลายล่างตัดดิ่งตั้งฉาก (มุมไม่เลยแนวชายคา) ปลายบนตัดชนผิวข้างอกไก่
+for k in (1, 2, 3, 4):
+    (cx, cy), (qx, qy), face, d, u, s, t = hip_frame(k)
+    off = 0.0625 * math.sqrt(1 + (slope / math.sqrt(2)) ** 2)
+    a0, a1 = hip_top(k, cx, cy), hip_top(k, qx, qy)
+    q0 = (a0[0], a0[1], a0[2] - off); q1 = (a1[0], a1[1], a1[2] - off)
+    ins = HB + FI * math.sqrt(2)               # มุมตะเข้ไม่เลยผิวด้านในเชิงชาย
+    c0 = cut((cx + ins * d[0], cy + ins * d[1], 0), (d[0], d[1], 0))
+    c1 = cut((qx, yc - HB if qy - cy > 0 else yc + HB, 0), YP)
+    steel(f'RF-HIP{k}', q0, q1, 'C125', True, 'ตะเข้สัน', 'C', cuts=(c0, c1))
 
 # H จันทัน C100 @0.875 ด้านยาว (แนว y) และจันทันพรางด้านสกัด (แนว x)
+# ปลายชายคาตัดดิ่ง, ปลายบนตัดดิ่งที่แนวสัน (ชนจันทันอีกด้าน) หรือชนผิวข้างตะเข้
 xs = []
 x = ex0 + 0.477
 while x < ex1 - 0.2:
@@ -762,15 +903,19 @@ n = 0
 for x in xs:
     for side in (0, 1):
         y_e = ey0 if side == 0 else ey1
+        face = 'A' if side == 0 else 'F'
         if rx0 <= x <= rx1:
-            y_t = yc
+            y_t, ct = yc, cut((x, yc, 0), YP)
         else:
             d = (rx0 - x) if x < rx0 else (x - rx1)
             y_t = yc - d if side == 0 else yc + d
             if (side == 0 and y_t <= y_e) or (side == 1 and y_t >= y_e):
                 continue
+            hk = {(0, 0): 1, (0, 1): 2, (1, 1): 3, (1, 0): 4}[(side, int(x > rx1))]
+            ct = hip_side(hk, (x, y_e))
         n += 1
-        steel(f'RF-RAF{n:03d}', (x, y_e, zroof(x, y_e) - RAF_C), (x, y_t, zroof(x, y_t) - RAF_C), 'C100', False, 'จันทัน', 'H')
+        steel(f'RF-RAF{n:03d}', (x, y_e, zface(face, x, y_e) - RAF_C), (x, y_t, zface(face, x, y_t) - RAF_C), 'C100', False,
+              'จันทัน', 'H', cuts=(cut((x, y_e + (FI if side == 0 else -FI), 0), YP), ct))
 ys = []
 y = ey0 + 0.477
 while y < ey1 - 0.2:
@@ -778,12 +923,15 @@ while y < ey1 - 0.2:
 for y in ys:
     for side in (0, 1):
         x_e = ex0 if side == 0 else ex1
+        face = '1' if side == 0 else '10'
         d = abs(y - yc)
         x_t = rx0 - d if side == 0 else rx1 + d
         if (side == 0 and x_t <= x_e + 0.05) or (side == 1 and x_t >= x_e - 0.05):
             continue
+        hk = {(0, 0): 1, (0, 1): 4, (1, 0): 2, (1, 1): 3}[(side, int(y > yc))]
         n += 1
-        steel(f'RF-RAF{n:03d}', (x_e, y, zroof(x_e, y) - RAF_C), (x_t, y, zroof(x_t, y) - RAF_C), 'C100', False, 'จันทันพราง', 'H')
+        steel(f'RF-RAF{n:03d}', (x_e, y, zface(face, x_e, y) - RAF_C), (x_t, y, zface(face, x_t, y) - RAF_C), 'C100', False,
+              'จันทันพราง', 'H', cuts=(cut((x_e + (FI if side == 0 else -FI), y, 0), XP), hip_side(hk, (x_e, y))))
 
 # แปเหล็กกัลวาไนซ์ SCG บนจันทัน (A03.3) ตามคู่มือติดตั้งกระเบื้องคอนกรีต SCG:
 # แปตัวแรกขอบบนห่างขอบนอกเชิงชาย 0.34 ม., แปคู่ที่สันห่างกัน 4–6 ซม. (ขอบนอก), แปที่เหลือแบ่งเท่ากัน 0.32–0.34 ม.
@@ -846,8 +994,24 @@ for k, pts in faces.items():
         qty=dict(area=round(tri_area(pts), 3), model='SCG เพรสทีจ เอ็กซ์ชิลด์ สีดีพ ฟอร์เรสท์ (กระเบื้องหลังคาคอนกรีต)'))
 for k, (p0, p1) in enumerate((((ex0, ey0), (ex1, ey0)), ((ex1, ey0), (ex1, ey1)),
                                ((ex1, ey1), (ex0, ey1)), ((ex0, ey1), (ex0, ey0)))):
-    add(f'RF-FASCIA{k+1}', 'หลังคา', 5, 'A03.3', member((*p0, z_eave - 0.10), (*p1, z_eave - 0.10), 0.025, 0.20),
-        name='เชิงชาย', assumed=True, qty=dict(length=round(math.dist(p0, p1), 3)))
+    # ผิวนอกบนแนวชายคา หลังเชิงชายแตะท้องกระเบื้องที่ขอบ ต่อมุมตัดองศา (45°) สร้างด้วย Profile Builder
+    _P = [(ex0, ey0), (ex1, ey0), (ex1, ey1), (ex0, ey1)]
+    dv = _unit((p1[0] - p0[0], p1[1] - p0[1], 0)); n_in = (-dv[1], dv[0], 0)
+    zc = z_eave - SKIN_T * _SEC - FASCIA_H / 2
+    a0 = (p0[0] + n_in[0] * FASCIA_T / 2, p0[1] + n_in[1] * FASCIA_T / 2, zc)
+    a1 = (p1[0] + n_in[0] * FASCIA_T / 2, p1[1] + n_in[1] * FASCIA_T / 2, zc)
+    def _miter(c, d_in, d_out):
+        b = _unit((d_out[0] - d_in[0], d_out[1] - d_in[1], 0))
+        return cut((c[0], c[1], 0), (b[1], -b[0], 0))
+    dprev = _unit((p0[0] - _P[(k - 1) % 4][0], p0[1] - _P[(k - 1) % 4][1], 0))
+    dnext = _unit((_P[(k + 2) % 4][0] - p1[0], _P[(k + 2) % 4][1] - p1[1], 0))
+    fg = member(a0, a1, FASCIA_T, FASCIA_H); fg['pb'] = True
+    fg['trim'] = [_miter(p0, dprev, dv), _miter(p1, dv, dnext)]
+    add(f'RF-FASCIA{k+1}', 'หลังคา', 5, 'A03.3', fg,
+        name='เชิงชาย DURAONE Fascia 23x300x1.6 ซม. สีซีเมนต์', assumed=True,
+        qty=dict(length=round(math.dist(p0, p1), 3), model='DURAONE Fascia 23x300x1.6 ซม. สีซีเมนต์ (ผู้ใช้กำหนด 11 พ.ย. 2569)',
+                 pieces_3m=math.ceil(round(math.dist(p0, p1) / 3.0, 6))))
+    elements[-1]['material'] = 'BIM-เชิงชายสีซีเมนต์'
 
 
 # =====================================================================
@@ -1653,6 +1817,9 @@ def mirror_y(g):
     elif t == 'member':
         for k in ('p0', 'p1'):
             g[k][1] = round(Y - g[k][1], 4)
+        for c in g.get('trim') or []:
+            if c:
+                c[1], c[4] = round(Y - c[1], 5), round(-c[4], 5) + 0.0
     elif t == 'prism':
         g['poly'] = [[x, round(Y - y, 4)] for x, y in g['poly']][::-1]
         if g.get('holes'):

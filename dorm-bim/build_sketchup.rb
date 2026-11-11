@@ -46,6 +46,63 @@ module DormBIM
     pm.instance
   end
 
+
+  # ---------- Profile Builder: เหล็กรูปตัวซี / ชิ้นแนวเส้นที่ต้องตัดปลาย (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+  # หน้าตัด C จากหน้า (face) เพื่อให้ได้ profile 2 มิติ (ตัน); mirror = ปากหันไปทาง -a
+  def self.pb_c_profile(model, sec, mirror, cache)
+    key = format('C%dx%dx%dx%.1f%s', sec['h'] * 1000, sec['b'] * 1000, sec['c'] * 1000, sec['t'] * 1000, mirror ? 'M' : '')
+    cache[key] ||= begin
+      tmp = model.entities.add_group
+      pts = c_section(sec, 0, mirror).map { |a, b| Geom::Point3d.new(a.m, b.m, 0) }
+      f = tmp.entities.add_face(pts)
+      prof = pb_api::Profile.new(f, "เหล็กรูปตัวซี #{key}")
+      tmp.erase!
+      prof
+    end
+  end
+
+  def self.pb_plane(c)
+    [Geom::Point3d.new(c[0].m, c[1].m, c[2].m), Geom::Vector3d.new(c[3], c[4], c[5])]
+  end
+
+  # สร้าง PB member หนึ่งเส้น (profile, x_offset) แล้วตัดปลายตามระนาบ trim
+  def self.pb_line(ents, m, prof, xoff, mat_name)
+    api = pb_api
+    pm = api::ProfileMember.add(ents, api::Chain.new([pt(m['p0']), pt(m['p1'])]))
+    pm.profile = prof
+    pm.x_offset = xoff.m if xoff != 0
+    pm.material_name = mat_name
+    pm.draw
+    (m['trim'] || []).each_with_index { |c, i| pm.trim_to_plane(pb_plane(c), i) if c }
+    pm.instance
+  end
+
+  # ชิ้นส่วน member (หรือ multi ของ member) ที่ geom มี shape C/2C หรือ pb=true: ใส่ PB ทุกชิ้นในกลุ่มของ element
+  def self.pb_shape_group(ents, e, mat_name, cache)
+    model = Sketchup.active_model
+    g = ents.add_group
+    geo = e['geom']
+    (geo['type'] == 'multi' ? geo['parts'] : [geo]).each do |m|
+      if m['shape'] == '2C'
+        b = m['sec']['b']
+        pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), -b / 2.0, mat_name)
+        pb_line(g.entities, m, pb_c_profile(model, m['sec'], true, cache), b / 2.0, mat_name)
+      elsif m['shape'] == 'C'
+        pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), 0, mat_name)
+      else
+        pname = format('%s %dx%d', e['category'], (m['w'] * 1000).round, (m['d'] * 1000).round)
+        prof = (cache[pname] ||= pb_api::Profile.rectangle(m['w'].m, m['d'].m, pname))
+        pb_line(g.entities, m, prof, 0, mat_name)
+      end
+    end
+    g
+  end
+
+  def self.pb_shape?(geo)
+    ms = geo['type'] == 'multi' ? geo['parts'] : [geo]
+    ms.all? { |m| m['type'] == 'member' && (%w[C 2C].include?(m['shape']) || m['pb']) }
+  end
+
   def self.pt(a)
     Geom::Point3d.new(a[0].m, a[1].m, a[2].m)
   end
@@ -223,7 +280,7 @@ module DormBIM
                    'BIM-คาน-B4' => [140, 70, 180], 'BIM-คาน-B5' => [235, 205, 40], 'BIM-คาน-BST1' => [40, 190, 200],
                    'BIM-คาน-BST2' => [230, 90, 170], 'BIM-คาน-BST3' => [130, 85, 50],
                    # คอนกรีตเททับหน้า + พื้นหล่อในที่ ชนิดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
-                   'BIM-คอนกรีตเทพื้น' => [196, 192, 182] }.freeze
+                   'BIM-คอนกรีตเทพื้น' => [196, 192, 182], 'BIM-เชิงชายสีซีเมนต์' => [168, 168, 163] }.freeze
   def self.named_material(model, name)
     model.materials[name] || model.materials.add(name).tap { |m| m.color = Sketchup::Color.new(*(NAMED_COLORS[name] || [200, 200, 200])) }
   end
@@ -297,9 +354,12 @@ module DormBIM
       end
       geo = e['geom']
       mat = e['material'] ? named_material(model, e['material']) : material(model, e['category'])
-      by_pb = use_pb && PB_CATS.include?(e['category'])
+      by_pbs = use_pb && pb_shape?(geo)
+      by_pb = by_pbs || (use_pb && PB_CATS.include?(e['category']))
       by_comp = geo['type'] == 'xprofile'
-      g = if by_pb
+      g = if by_pbs
+            pb_shape_group(cg.entities, e, mat.name, pb_cache)
+          elsif by_pb
             pb_member(cg.entities, e, mat.name, pb_cache)
           elsif by_comp
             xprofile_instance(cg.entities, geo, comp_cache)
