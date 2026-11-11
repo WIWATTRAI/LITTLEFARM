@@ -441,6 +441,15 @@ for k in (3, 4):
                 prism([(GX[k] - 0.10, GY['A']), (GX[k] + 0.10, GY['A']), (GX[k] + 0.10, GY['A'] + 0.20), (GX[k] - 0.10, GY['A'] + 0.20)], z0_, round(z1_ - z0_, 3)),
                 name=f'CX 200x200 รับปลายคาน BST2 กริด {k+1} ใต้ชานพักชั้น {j+1}' + ({'a': ' ท่อนล่าง (ใต้คาน B3)', 'b': ' ท่อนบน (เหนือคาน B3)'}.get(sx, '')), assumed=True,
                 qty=dict(height=round(z1_ - z0_, 3), concrete=round(0.04 * (z1_ - z0_), 4), section='0.20x0.20'))
+# เสา CX2 200x200 ชั้น 5 แนว A และ F ทุกกริด 1–10 (ผู้ใช้สั่ง 11 พ.ย. 2569): รับโครงหลังคา ขึ้นถึงระดับเดียวกับเสาอาคาร (+16.30)
+# ผิวนอกเสาเสมอแนวกริด A/F และขอบนอกคาน B4; ตั้งบนหลังคาน B3/B4 ชั้น 5 (แถบยื่นลดระดับ DROP)
+_zcx2 = FL[5] - SLAB_T - DROP
+for r, (ya_, yb_) in (('A', (GY['A'], GY['A'] + 0.20)), ('F', (GY['F'] - 0.20, GY['F']))):
+    for i in range(10):
+        add(f'CX2-{i+1}{r}-F5', 'เสา', 5, 'A01',
+            prism([(GX[i] - 0.10, ya_), (GX[i] + 0.10, ya_), (GX[i] + 0.10, yb_), (GX[i] - 0.10, yb_)], _zcx2, round(ROOF_BEAM - _zcx2, 3)),
+            name=f'CX2 200x200 ชั้น 5 กริด {i+1}/{r} รับโครงหลังคา', assumed=True,
+            qty=dict(height=round(ROOF_BEAM - _zcx2, 3), concrete=round(0.04 * (ROOF_BEAM - _zcx2), 4), section='0.20x0.20'))
 # คานรับแม่บันไดชั้น 1 เป็นคานคอดิน GB1 200x500 (เพิ่มจากแบบ ผู้ใช้สั่ง 11 พ.ย. 2569): ใต้ปลายล่างช่วงบันได 1
 # พาดแนว x ระหว่างคานคอดิน GB1 กริด 4–5, ขอบหน้าคานเสมอลูกตั้งแรก (y = ST_RUN_Y1), หลังคานเสมอหลังคานคอดิน (+0.20) ใต้พื้น GS
 _L = (GX[4] - 0.10) - (GX[3] + 0.10)
@@ -1620,6 +1629,16 @@ for e in elements:
     if m_:
         xk = GX[3] if m_.group(2) == '3' else GX[4]
         tile_cut_box(e, xk - 0.10 - PL_COL, xk + 0.10 + PL_COL, GY['A'], GY['A'] + 0.20 + PL_COL, TILE_WC)
+
+# กระเบื้องแถบยื่นชั้น 5 (ห้องน้ำ/ระเบียง) ตัดรอบเสา CX2 (รวมฉาบเสา 1 ซม.)
+for e in elements:
+    m_ = re.match(r'^TL-F5-([NS])\d-(WC|BL)$', e['id'])
+    if not m_:
+        continue
+    spec = TILE_WC if m_.group(2) == 'WC' else TILE_TARA_WOOD
+    ya_, yb_ = (GY['A'], GY['A'] + 0.20 + PL_COL) if m_.group(1) == 'N' else (GY['F'] - 0.20 - PL_COL, GY['F'])
+    for i in range(10):
+        tile_cut_box(e, GX[i] - 0.10 - PL_COL, GX[i] + 0.10 + PL_COL, ya_, yb_, spec)
 
 # ---------- สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569) ----------
 for e in elements:
