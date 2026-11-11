@@ -221,7 +221,9 @@ module DormBIM
                    # สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569)
                    'BIM-คาน-B1' => [40, 100, 200], 'BIM-คาน-B2' => [60, 160, 80], 'BIM-คาน-B3' => [240, 140, 30],
                    'BIM-คาน-B4' => [140, 70, 180], 'BIM-คาน-B5' => [235, 205, 40], 'BIM-คาน-BST1' => [40, 190, 200],
-                   'BIM-คาน-BST2' => [230, 90, 170], 'BIM-คาน-BST3' => [130, 85, 50] }.freeze
+                   'BIM-คาน-BST2' => [230, 90, 170], 'BIM-คาน-BST3' => [130, 85, 50],
+                   # คอนกรีตเททับหน้า + พื้นหล่อในที่ ชนิดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+                   'BIM-คอนกรีตเทพื้น' => [196, 192, 182] }.freeze
   def self.named_material(model, name)
     model.materials[name] || model.materials.add(name).tap { |m| m.color = Sketchup::Color.new(*(NAMED_COLORS[name] || [200, 200, 200])) }
   end

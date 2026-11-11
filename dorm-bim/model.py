@@ -1761,6 +1761,9 @@ for e in elements:
 for e in elements:
     if e['category'] == 'คาน':
         e['material'] = 'BIM-คาน-' + e['id'].split('-')[0]
+    # คอนกรีตเททับหน้า (topping) และพื้นหล่อในที่ (S1 ห้องน้ำ/ระเบียง, GS ชั้น 1) ใช้คอนกรีตชนิดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+    if e['category'] in ('พื้นทับหน้า', 'พื้น'):
+        e['material'] = 'BIM-คอนกรีตเทพื้น'
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
