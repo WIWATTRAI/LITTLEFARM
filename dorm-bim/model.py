@@ -2532,7 +2532,7 @@ for f in (1, 2, 3, 4):
     X0, X1 = xb_, xo
     yn = FS_YL1 - (R + ST_T + (0.010 + SG_TF) / cth) * FS_G / R       # บากขอบหน้าช่วงที่ปีกบนแม่บันไดตัวกลางช่วง B (จมูกขั้นแรก zm+R) โผล่พ้นผิวชานพัก
     _steel_add(f'FS-ML-F{f}', 'บันได', f,
-               prism([(X0, yL), (X1, yL), (X1, FS_YL1), (LANE_OUT[0], FS_YL1), (LANE_OUT[0], yn), (LANE_IN[1], yn), (LANE_IN[1], FS_YL1), (X0, FS_YL1)], zt, ST_T),
+               prism([(X0, yL), (X1, yL), (X1, FS_YL1), (LANE_IN[1] + SG_B, FS_YL1), (LANE_IN[1] + SG_B, yn), (LANE_IN[1], yn), (LANE_IN[1], FS_YL1), (X0, FS_YL1)], zt, ST_T),
                f'ชานพักกลางบันไดหนีไฟ เหล็กลาย 4 มม. ชั้น {f}→{f+1}', dict(area=round((X1 - X0) * (FS_YL1 - yL), 3), thickness=ST_T))
     zc1, zc2 = zt - 0.0625, zt - 0.05
     fr = [_box((a, FS_YL1 - 0.0375, zc1), (b, FS_YL1 - 0.0375, zc1), 0.075, 0.125)
