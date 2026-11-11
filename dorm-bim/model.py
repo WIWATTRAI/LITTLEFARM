@@ -8,6 +8,7 @@ import json, math, re
 
 # ---------- กริดและระดับ ----------
 GX = [i * 3.5 for i in range(10)]                     # กริด 1..10
+GX11 = GX[-1] + 1.48                                  # กริด 11 สำหรับโครงสร้างบันไดหนีไฟ ห่างกริด 10 1.48 ม. (ผู้ใช้สั่ง 11 พ.ย. 2569)
 GY = {'A': 0.0, 'B': 1.65, 'C': 6.75, 'CX': 7.75, 'D': 8.75, 'E': 13.85, 'F': 15.5}
 FL = {1: 0.30, 2: 3.50, 3: 6.70, 4: 9.90, 5: 13.10}    # ระดับพื้นสำเร็จ
 ROOF_BEAM = 16.30
@@ -504,8 +505,9 @@ for f in (1, 2, 3, 4):
         qty=dict(width=1.50, risers=10, treads=NSTEP, concrete=c))
     # คานชานพัก BST3 (ขอบนอก) และ BST2 (กริด 4, 5) ระดับชานพัก
     zc = zm - 0.20
-    add(f'BST3-M{f}', 'คาน', f, 'DONE', member((GX[3] + 0.125, GY['A'] + 0.10, zc), (GX[4] - 0.125, GY['A'] + 0.10, zc), 0.20, 0.40),
-        name=f'BST3 คานชานพักชั้น {f}', qty=dict(length=3.25, concrete=round(3.25 * 0.2 * 0.4, 4)))
+    # ปลายชนผิวฉาบข้างคาน BST2 (เดิมเว้น 2.5 ซม. ตามเสา C1 ทำให้เป็นช่องแสง, ผู้ใช้แจ้ง 11 พ.ย. 2569)
+    add(f'BST3-M{f}', 'คาน', f, 'DONE', member((GX[3] + 0.105, GY['A'] + 0.10, zc), (GX[4] - 0.105, GY['A'] + 0.10, zc), 0.20, 0.40),
+        name=f'BST3 คานชานพักชั้น {f}', qty=dict(length=3.29, concrete=round(3.29 * 0.2 * 0.4, 4)))
     # BST1 แนว B เลื่อนไปทางแนว A 0.10 ให้ผิวคานเสมอขอบชานพัก ไม่โผล่เหนือขั้นบนสุดช่วง 1 (ผู้ใช้เลือก 11 พ.ย. 2569)
     add(f'BST1-B-M{f}', 'คาน', f, 'DONE', member((sx0, GY['B'] - 0.10, zc), (sx1, GY['B'] - 0.10, zc), 0.20, 0.40),
         name=f'BST1 คานขอบชานพักแนว B ชั้น {f}', qty=dict(length=round(sx1 - sx0, 3), concrete=round((sx1 - sx0) * 0.08, 4)))
@@ -1294,7 +1296,8 @@ for f in (2, 3, 4, 5):
                 # ผนังข้างห้องน้ำ (แนว B5) ประตูห้องน้ำ
                 ya, yb = lo(y_out, y_rm)
                 # ผนังกั้นห้องน้ำกับระเบียง (แนว B5) ผนังทึบ: เข้าห้องน้ำจากในห้องพัก (ผู้ใช้แจ้ง 10 พ.ย. 2569)
-                wa, wb = (ya + OUT_C, yb - 0.125) if side == 'N' else (ya + 0.125, yb - OUT_C)
+                # ปลายผนังถึงผิวนอกแนว A/F ไม่เหลือร่องระหว่างผนังนอก 2 ช่วง (ผู้ใช้สั่ง 11 พ.ย. 2569); ฉาบผนังนี้ตัดออกช่วงความหนาผนังนอก (ด้านล่าง)
+                wa, wb = (ya, yb - 0.125) if side == 'N' else (ya + 0.125, yb)
                 add_wall(f'W-{tag}-WC', f, 'y', b5x(i, side), wa, wb, zs, beam_soffit(f, 'edge', True), tw, tp,
                          name=f'ผนังห้องน้ำด้านระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ผนังนอกห้องน้ำ: หน้าต่าง W1 KPA 0.60x0.40 ขอบล่าง 1.80 ชิดเสา (ศูนย์กลางห่างกริด 0.47 ตาม A106)
@@ -1335,7 +1338,8 @@ for f in (2, 3, 4, 5):
             ya, yb = lo(y_out, y_rm)
             # ฝั่ง N เสาอยู่ที่ yb (แนว B), ฝั่ง S เสาอยู่ที่ ya (แนว E): เว้นระยะเสาด้านที่ชนเสา (เดิมฝั่ง S ล้ำเข้าเนื้อเสา, ผู้ใช้แจ้ง 10 พ.ย. 2569)
             # กริดริม (1, 10): เริ่มที่ผิวในผนังนอกแนว A/F (ผนังนอกวิ่งผ่านถึงมุมอาคาร); กริดใน: ชนศูนย์ผนังนอก
-            eo = WALL_T if k in (0, 9) else OUT_C
+            # กริดใน: ปลายผนังถึงผิวนอกแนว A/F ไม่เหลือร่อง (ผู้ใช้สั่ง 11 พ.ย. 2569)
+            eo = WALL_T if k in (0, 9) else 0.0
             ba, bb = (ya + eo, yb - cd) if side == 'N' else (ya + cd, yb - eo)
             add_wall(f'W-F{f}-{side}G{k+1}-BL', f, 'y', gw(GX[k]), ba, bb, zs, beam_soffit(f, 'main', True), tw, tp,
                      name=f'ผนังกั้นระเบียงกริด {k+1} ชั้น {f} ฝั่ง {side}')
@@ -1379,7 +1383,8 @@ for n, (za, zb, f, zland) in enumerate(_segs):
     tw = wall_task[fl]
     tp = 'A12' if fl == 1 else plaster_task[fl]
     win = [((GX[3] + GX[4]) / 2, 1.20, 1.50, 0.60)] if zland is not None else []
-    add_wall(f'W-ST-OUT-{n}', fl, 'x', OUT_C, GX[3] + col_w(fl), GX[4] - col_w(fl), za, zb, tw, tp, win,
+    # ก่อชนผิวฉาบเสา CX 200x200 ที่แนว A กริด 4/5 (เดิมเว้นตามเสา C1 ทำให้มีช่องแสงข้างเสา, ผู้ใช้แจ้ง 11 พ.ย. 2569); ช่วงคาน B3 ตัดรอบคานด้านล่าง
+    add_wall(f'W-ST-OUT-{n}', fl, 'x', OUT_C, GX[3] + 0.10 + 0.010, GX[4] - 0.10 - 0.010, za, zb, tw, tp, win,
              name=f'ผนังนอกโถงบันได ช่วง {n}' + (f' หน้าต่างบานกระทุ้ง 1.20x0.60 (ชานพัก +{zland:.2f})' if win else ''))
 ASSUMPTIONS.append('ผนังนอกโถงบันไดแนว A ก่อระหว่างคาน BST3 ชานพัก; ช่วงบนสุดก่อจากชานพักชั้น 4 ถึง +16.30; หน้าต่างบานกระทุ้ง 1.20x0.60 สูง 1.50 จากพื้นชานพัก')
 # ร้านค้า 3 ห้อง (กริด 5–8) หน้าร้านแนว B ด้านหลังแนว C
@@ -1894,11 +1899,25 @@ for e in elements:
         g = e['geom']; x, z = g['p0'][0], g['p0'][2]
         hw = g['w'] / 2 + PL_BEAM
         _BST2_END.append([x - hw, x + hw, GY['A'], GY['A'] + 0.20, z - g['d'] / 2 - PL_BEAM, z + g['d'] / 2])
+# คาน B3 ที่แนวกริด 4/5 (รวมฉาบคาน): ผนังนอกโถงบันไดแนว A ที่ก่อชนเสา CX ตัดรอบปลายคาน (ผู้ใช้แจ้ง 11 พ.ย. 2569)
+_B3_ST = []
+for e in elements:
+    if re.match(r'^B3-[45]-AB-L\d$', e['id']):
+        g = e['geom']; x, z = g['p0'][0], g['p0'][2]
+        hw = g['w'] / 2 + PL_BEAM
+        _B3_ST.append([x - hw, x + hw, GY['A'], GY['B'], z - g['d'] / 2 - PL_BEAM, z + g['d'] / 2])
+# ฉาบผนังกั้นที่ก่อถึงผิวนอกแนว A/F: ตัดช่วงที่อยู่ในความหนาผนังนอก (ผนังนอกก่อชนผิวผนังกั้น)
+_OUTER_BAND = [[-1, 33, GY['A'] - 0.1, GY['A'] + WALL_T, -1, 20], [-1, 33, GY['F'] - WALL_T, GY['F'] + 0.1, -1, 20]]
 CLIPPED = []
 for e in elements:
     if not (e['category'] in ('ผนัง', 'เสาเอ็นคานเอ็น') or (e['category'] == 'งานฉาบ' and e['id'].startswith('W-'))):
         continue
-    ng, rem = _clip_geom(e['geom'], _cols + (_BST2_END if '-OWC' in e['id'] else []))   # เฉพาะผนังนอกห้องน้ำที่ปลาย BST2
+    extra = _BST2_END if '-OWC' in e['id'] else []                                        # เฉพาะผนังนอกห้องน้ำที่ปลาย BST2
+    if e['id'].startswith('W-ST-OUT'):
+        extra = _B3_ST
+    if e['category'] == 'งานฉาบ' and re.match(r'^W-F\d-([NS]\d-WC|[NS]G[2-9]-BL)-PL$', e['id']):
+        extra = _OUTER_BAND
+    ng, rem = _clip_geom(e['geom'], _cols + extra)
     if ng is None:
         continue
     e['geom'] = ng
@@ -2088,6 +2107,76 @@ for f in (2, 3, 4, 5):
         else:
             e['name'] += ' (หักเสา/คาน)'
 
+# ---------- ปิดผิวฉาบภายนอกให้ต่อเนื่อง (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# ผิวโครงสร้าง/งานก่อที่อยู่บนระนาบผิวนอกอาคาร (แนว A, F, กริด 1, 10) แต่ยังไม่มีงานฉาบปิด เช่น ขอบพื้นหล่อในที่/ทับหน้า,
+# ปลายคานที่ชนผิวนอก, ปลายผนังกั้นและปลายผนังนอกที่มุมอาคาร: เพิ่มแผ่นฉาบปิดเฉพาะส่วนที่ยังเปิด (ไม่ทับฉาบเดิม)
+# หนาตามชนิดผิว: ผนัง/พื้น 1.5 ซม., เสา 1 ซม., คาน 0.5 ซม.; ตั้งแต่ระดับพื้นชั้น 1 ขึ้นไป
+def _aabb(p):
+    t = p['type']
+    if t == 'prism':
+        return _box(p)
+    if t == 'member':
+        a, b = p['p0'], p['p1']
+        if p.get('shape') or p.get('pb'):
+            return None
+        w, d = p['w'] / 2, p['d'] / 2
+        if abs(a[0] - b[0]) < 1e-6 and abs(a[1] - b[1]) < 1e-6:
+            return [a[0] - w, a[0] + w, a[1] - d, a[1] + d, min(a[2], b[2]), max(a[2], b[2])]
+        if abs(a[2] - b[2]) > 1e-6:
+            return None
+        if abs(a[0] - b[0]) < 1e-6:
+            return [a[0] - w, a[0] + w, min(a[1], b[1]), max(a[1], b[1]), a[2] - d, a[2] + d]
+        if abs(a[1] - b[1]) < 1e-6:
+            return [min(a[0], b[0]), max(a[0], b[0]), a[1] - w, a[1] + w, a[2] - d, a[2] + d]
+    return None
+
+
+_EXT_SKIP = ('ไฟฟ้า', 'ประตูหน้าต่าง', 'ราวบันได', 'สุขภัณฑ์', 'โครงหลังคาเหล็ก', 'หลังคา', 'จมูกบันได', 'กระเบื้อง', 'บันได')
+_ext_boxes = []
+for e in elements:
+    if e['category'] in _EXT_SKIP:
+        continue
+    for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]):
+        b = _aabb(p)
+        if b:
+            _ext_boxes.append((b, e['category']))
+_X_OUT0, _X_OUT1 = GX[0] - COL_SEC[1][0] / 2, GX[-1] + COL_SEC[1][0] / 2
+_EXT_FACES = [('A', 1, GY['A'], -1), ('F', 1, GY['F'], 1), ('G1', 0, _X_OUT0, -1), ('G10', 0, _X_OUT1, 1)]
+_EXT_T = {'คาน': PL_BEAM, 'เสา': PL_COL}
+EXT_PATCH = {}
+for fname, ax, P, s_ in _EXT_FACES:
+    lo_, hi_ = (2, 3) if ax == 1 else (0, 1)
+    u0_, u1_ = (0, 1) if ax == 1 else (2, 3)
+    on_face = lambda b: (b[lo_] if s_ < 0 else -b[hi_]) <= (P if s_ < 0 else -P) + 0.002 and ((b[hi_] - P) if s_ < 0 else (P - b[lo_])) > 0.002
+    covers = [(b[u0_], b[u1_], b[4], b[5]) for b, c in _ext_boxes if c == 'งานฉาบ'
+              and ((b[lo_] < P - 0.0005) if s_ < 0 else (b[hi_] > P + 0.0005)) and ((b[hi_] > P - 0.03) if s_ < 0 else (b[lo_] < P + 0.03))]
+    solids = [((b[u0_], b[u1_], max(b[4], FL[1]), b[5]), c) for b, c in _ext_boxes if c != 'งานฉาบ' and on_face(b) and b[5] > FL[1] + 1e-6]
+    solids.sort(key=lambda t: -_EXT_T.get(t[1], PL_T))
+    done = []
+    for r, c in solids:
+        rs = [r]
+        for cv in covers + done:
+            rs = _rects_minus(rs, *cv)
+        rs = [q for q in rs if q[1] - q[0] > 0.002 and q[3] - q[2] > 0.002]
+        done += rs
+        for q in rs:
+            zc = (q[2] + q[3]) / 2
+            f = max(ff for ff in FL if FL[ff] <= zc + 1e-6)
+            EXT_PATCH.setdefault((fname, f), []).append((q, _EXT_T.get(c, PL_T), c))
+for (fname, f), lst in sorted(EXT_PATCH.items()):
+    ax, P, s_ = next((a, p, s) for n, a, p, s in _EXT_FACES if n == fname)
+    parts, area = [], 0.0
+    for (a0, a1, z0, z1), t, c in lst:
+        o0, o1 = (P - t, P) if s_ < 0 else (P, P + t)
+        poly = [(a0, o0), (a1, o0), (a1, o1), (a0, o1)] if ax == 1 else [(o0, a0), (o1, a0), (o1, a1), (o0, a1)]
+        parts.append(prism(poly, round(z0, 4), round(z1 - z0, 4)))
+        area += (a1 - a0) * (z1 - z0)
+    add(f'PL-EXT-{fname}-F{f}', 'งานฉาบ', f, 'A12' if f == 1 else plaster_task[f],
+        parts[0] if len(parts) == 1 else dict(type='multi', parts=parts),
+        name=f'ฉาบปิดผิวภายนอกด้าน {fname} ชั้น {f} (ขอบพื้น ปลายคาน ปลายผนัง ที่ยังไม่มีฉาบ)', assumed=True,
+        qty=dict(area=round(area, 3), pieces=len(parts)))
+ASSUMPTIONS.append('ฉาบปิดผิวภายนอกเพิ่ม (PL-EXT-*): ขอบพื้น ปลายคาน ปลายผนังที่อยู่บนระนาบผิวนอกอาคารแต่ยังไม่มีฉาบ หนา ผนัง/พื้น 1.5 ซม. เสา 1 ซม. คาน 0.5 ซม.')
+
 # ---------- สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569) ----------
 for e in elements:
     if e['category'] == 'คาน':
@@ -2108,7 +2197,7 @@ if __name__ == '__main__':
             e['component_mount']['box_dir'] = -e['component_mount'].get('box_dir', 1)
     GYM = {k: round(GY['F'] - v, 4) for k, v in GY.items()}
     model = dict(project='หอพักคนงาน 5 ชั้น อาคาร A (ชัยเสรี หนองแค)', units='m', axes='x=กริด1→10, y=กริดF(0)→A(15.5), z=ระดับ',
-                 grid=dict(x={str(i + 1): v for i, v in enumerate(GX)}, y=GYM), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
+                 grid=dict(x={**{str(i + 1): v for i, v in enumerate(GX)}, '11': GX11}, y=GYM), levels=dict(FL=FL, roof_beam=ROOF_BEAM, ridge=RIDGE),
                  assumptions=ASSUMPTIONS, elements=elements)
     json.dump(model, open('elements.json', 'w'), ensure_ascii=False)
     for k, v in sorted(summary().items()):
