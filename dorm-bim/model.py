@@ -2446,7 +2446,7 @@ for f in (1, 2, 3, 4):
             q0 = _on_plane(a0, a1, c_start); q1 = _on_plane(a0, a1, c_end)
             g = member(q0, q1, SG_B, SG_H)
             g['shape'] = 'POLY'; g['poly2d'] = _chan_poly(dirx * s_sign)
-            g['trim'] = [c_start, c_end]
+            g['trim'] = [list(c_start), list(c_end)]       # สำเนาแยกต่อชิ้น (mirror_y แก้ค่าในที่)
             _steel_add(f'FS-SG-F{f}-{fl}-{side}', 'บันได', f, g,
                        f'แม่บันไดหนีไฟ เหล็กรางน้ำ C200x100x7.5x11 ชั้น {f}→{f+1} ช่วง {fl} ด้าน{"ซ้าย" if side == "L" else "ขวา"}',
                        dict(length=round(mlen(q0, q1), 3), section='C200x100x7.5x11'))
