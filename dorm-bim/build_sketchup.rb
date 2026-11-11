@@ -282,18 +282,21 @@ module DormBIM
 
   # ผิวกระเบื้องที่มี texture (เช่น Tara เจด้าไวท์ 60x60 ยาแนว 3 มม.): จัดร่องยาแนวให้ตรง origin ทุก pitch บนหน้าบน
   # ต้องมี material ชื่อนี้ในโมเดลก่อน (ภาพ texture ขนาด 1 ช่อง = pitch); ถ้าไม่มีจะข้าม
-  def self.apply_finish(model, g, fin)
+  def self.apply_finish(model, g, fin, tr = Geom::Transformation.new)
     m = model.materials[fin['material']]
     return unless m && m.texture
     ox, oy = fin['origin']; p = fin['pitch']
+    inv = tr.inverse
     g.entities.grep(Sketchup::Face).each do |f|
-      next unless f.normal.z > 0.99
-      z = f.vertices.first.position.z
-      pts = [Geom::Point3d.new(ox.m, oy.m, z), Geom::Point3d.new(0, 0, 0),
-             Geom::Point3d.new((ox + p).m, oy.m, z), Geom::Point3d.new(1, 0, 0),
-             Geom::Point3d.new(ox.m, (oy + p).m, z), Geom::Point3d.new(0, 1, 0)]
+      next unless f.normal.transform(tr).z > 0.99
+      z = f.vertices.first.position.transform(tr).z
+      pts = [Geom::Point3d.new(ox.m, oy.m, z).transform(inv), Geom::Point3d.new(0, 0, 0),
+             Geom::Point3d.new((ox + p).m, oy.m, z).transform(inv), Geom::Point3d.new(1, 0, 0),
+             Geom::Point3d.new(ox.m, (oy + p).m, z).transform(inv), Geom::Point3d.new(0, 1, 0)]
       f.position_material(m, pts, true)
     end
+    # ชิ้นแบบ multi: หน้าผิวอยู่ในกลุ่มย่อย
+    g.entities.grep(Sketchup::Group).each { |sg| apply_finish(model, sg, fin, tr * sg.transformation) }
   end
 
   # วัสดุเฉพาะชิ้น (e['material']) เช่น แปกัลวาไนซ์; ถ้ายังไม่มีในโมเดลสร้างเป็นสีล้วน (texture ใส่ในโมเดลภายหลัง)
