@@ -295,10 +295,85 @@ def plank_qty(rects):
     return n, '; '.join(runs)
 
 
-ASSUMPTIONS.append('แผ่นพื้นสำเร็จรูป PS 350x50 พาดช่วงสั้นระหว่างคาน (แบบไม่ระบุทิศทาง) จำนวนแผ่นคิดจากความกว้างช่วง/0.35 ปัดขึ้น ความยาวคิดระยะศูนย์คาน')
+ASSUMPTIONS.append('แผ่นพื้นสำเร็จรูปท้องเรียบ 350x50 ทุกพื้นที่ (ห้องพัก โถงหน้าบันได ระเบียง ทางเดิน) พาดแนว x ทิศกริด 1→2 (ผู้ใช้สั่ง 11 พ.ย. 2569) ร่อง 3 มม. บากมุมชนเสา')
 ASSUMPTIONS.append('พื้นระเบียงหลังห้องและห้องน้ำชั้น 2–5 ต่ำกว่าห้องพัก/ทางเดิน 0.075 ม.: หลังคาน B3/B4/B5 ในแถบยื่นลดลง 0.075 ม.; คาน B2 แนว B/E คงระดับเดิม พื้นห้องพักวางทับเต็มหลังคาน')
 
-PLANK_GAP = 0.005       # ร่องระหว่างแผ่นพื้นสำเร็จรูปทางเดิน 5 มม. (ผู้ใช้สั่ง 11 พ.ย. 2569)
+PLANK_BEAR = 0.05       # ระยะพาดแผ่นพื้นบนคาน 5 ซม. จากขอบคาน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+PLANK_GAP = 0.003       # ร่องระหว่างแผ่นพื้นสำเร็จรูป 3 มม. ทุกพื้นที่ (ผู้ใช้สั่ง 11 พ.ย. 2569 เดิม 5 มม.)
+
+
+def planks_x(f, rects, top):
+    """แผ่นพื้นสำเร็จรูปท้องเรียบกว้าง 0.35 หนา 0.05 พาดแนว x (ทิศกริด 1→2 ทุกแนว, ผู้ใช้สั่ง 11 พ.ย. 2569)
+    วางเรียงแนว y เว้นร่อง 5 มม. แผ่นสุดท้ายตัดตามความกว้างที่เหลือ; ปลายแผ่นที่ชนเสาบากออกเสมอผิวเสา"""
+    w, d = COL_SEC[f - 1]
+    cols = [(GX[i] - w / 2, GX[i] + w / 2, GY[r] - d / 2, GY[r] + d / 2) for i in range(10) for r in COL_ROWS]
+    if f == 5:                                   # เสา CX2 แนว A/F ตั้งบนหลังคานชั้น 5
+        cols += [(GX[i] - 0.10, GX[i] + 0.10, ya_, yb_) for i in range(10) for ya_, yb_ in ((GY['A'], GY['A'] + 0.20), (GY['F'] - 0.20, GY['F']))]
+    parts, n_cut, n_full, lens = [], 0, 0, []
+    # คานรองรับปลายแผ่น (แนว y): B1/B3 บนกริด (กริด 1, 10 เลื่อนตาม edge_dx) กว้าง 0.25, B5 กว้าง 0.15
+    sups = [(GX[i] + edge_dx(i, 0.25, f - 1), 0.125) for i in range(10)] + \
+           [(b5x(j, sd), 0.075) for j in range(len(B5_X)) for sd in ('N', 'S')]
+
+    def bear(xe, inward):
+        """ปลายแผ่น: วางบนคานลึกจากขอบคาน PLANK_BEAR (ผู้ใช้สั่ง 11 พ.ย. 2569) inward=+1 ปลายซ้าย, -1 ปลายขวา"""
+        c = [(abs(xc - xe), xc, hw) for xc, hw in sups if abs(xc - xe) <= hw + 0.011]
+        if not c:
+            return xe
+        _, xc, hw = min(c)
+        return xc + inward * hw - inward * PLANK_BEAR
+
+    for x0, x1, y0, y1 in rects:
+        if x1 - x0 < 0.30:                       # แถบแคบบนหลังคาน (ข้างช่องบันได) เทพร้อมคอนกรีตทับหน้า ไม่วางแผ่น
+            continue
+        x0, x1 = bear(x0, 1), bear(x1, -1)
+        ys, y = [], y0
+        while y < y1 - 1e-6:
+            room = y1 - y
+            if room < 0.02:
+                break
+            pw = min(PLANK_W, room)
+            ys.append((y, y + pw))
+            y += pw + PLANK_GAP
+        for py0, py1 in ys:
+            hit = [c for c in cols if min(py1, c[3]) - max(py0, c[2]) > 1e-6 and min(x1, c[1]) - max(x0, c[0]) > 1e-6]
+            brk = sorted({py0, py1} | {v for c in hit for v in (c[2], c[3]) if py0 < v < py1})
+            segs = []
+            for a, b in zip(brk, brk[1:]):
+                m = (a + b) / 2
+                xm = (x0 + x1) / 2                   # เสาใกล้ปลายไหนบากปลายนั้น (รวมเสาที่อยู่ในช่วงปลายแผ่น เช่น CX2 ที่มุมอาคาร)
+                xl = max([x0] + [c[1] for c in hit if c[2] < m < c[3] and (c[0] + c[1]) / 2 < xm])
+                xr = min([x1] + [c[0] for c in hit if c[2] < m < c[3] and (c[0] + c[1]) / 2 >= xm])
+                segs.append((a, b, xl, xr))
+            if any(xr - xl < 0.02 for _, _, xl, xr in segs):
+                segs = [sg for sg in segs if sg[3] - sg[2] >= 0.02]
+                if not segs:
+                    continue
+            pts = []
+            for a, b, xl, xr in segs:
+                pts += [(xr, a), (xr, b)]
+            for a, b, xl, xr in reversed(segs):
+                pts += [(xl, b), (xl, a)]
+            dd = []
+            for p in pts:
+                if not dd or abs(p[0] - dd[-1][0]) > 1e-6 or abs(p[1] - dd[-1][1]) > 1e-6:
+                    dd.append(p)
+            if len(dd) > 1 and abs(dd[0][0] - dd[-1][0]) < 1e-6 and abs(dd[0][1] - dd[-1][1]) < 1e-6:
+                dd.pop()
+            cl = []                                  # ตัดจุดกลางเส้นตรง
+            for k, p in enumerate(dd):
+                a_, c_ = dd[k - 1], dd[(k + 1) % len(dd)]
+                if abs((p[0] - a_[0]) * (c_[1] - p[1]) - (p[1] - a_[1]) * (c_[0] - p[0])) > 1e-9:
+                    cl.append(p)
+            parts.append(prism(cl, top - SLAB_T, 0.05))
+            notched = len(cl) > 4
+            full = abs((py1 - py0) - PLANK_W) < 1e-6
+            n_full += full
+            n_cut += (notched or not full)
+            lens.append(round(x1 - x0, 2))
+    qc = dict(planks=len(parts), planks_full_width=n_full, planks_cut=n_cut, plank_size='กว้าง 0.35 หนา 0.05 ม. ท้องเรียบ',
+              plank_length=max(lens) if lens else 0, gap_mm=round(PLANK_GAP * 1000),
+              plank_layout=f'{len(parts)} แผ่น ยาว {"/".join(f"{v:.2f}" for v in sorted(set(lens)))} ม. พาดแนว x (กริด 1→2) (กว้างเต็ม {n_full}; ตัดกว้าง/บากชนเสา {n_cut})')
+    return (parts[0] if len(parts) == 1 else dict(type='multi', parts=parts)), qc
 
 
 def cor_planks(f, sfx, rect, top):
@@ -349,7 +424,7 @@ def cor_planks(f, sfx, rect, top):
         lens.append(round(px1 - px0, 3))
     full = sum(1 for L in lens if abs(L - PLANK_W) < 1e-6)
     qc = dict(planks=len(parts), planks_full_width=full, planks_cut=n_cut, plank_size='กว้าง 0.35 หนา 0.05 ม. ท้องเรียบ',
-              plank_length=round(y1 - y0, 3), gap_mm=5,
+              plank_length=round(y1 - y0, 3), gap_mm=round(PLANK_GAP * 1000),
               plank_layout=f'{len(parts)} แผ่น ยาว {y1 - y0:.2f} ม. พาดแนว y (กว้างเต็ม {full}, ตัดกว้าง {len(parts) - full}; บาก/ตัดชนเสา {n_cut})')
     return (parts[0] if len(parts) == 1 else dict(type='multi', parts=parts)), qc
 
@@ -364,20 +439,12 @@ for f in (2, 3, 4, 5):
                 name=f'พื้นหล่อในที่ S1 หนา 0.10 {where} ชั้น {f} {sfx[:-3]} (ต่ำกว่าพื้นห้อง 0.075)',
                 qty=dict(area=A, concrete=round(A * S1_T, 4), thickness=S1_T, top_level=round(top, 3)))
             continue
-        if kind == 'COR':   # ทางเดิน: แผ่นพื้นสำเร็จรูปท้องเรียบรายแผ่น (ผู้ใช้สั่ง 11 พ.ย. 2569)
-            geo, qc = cor_planks(f, sfx, rects[0], top)
-            add(f'PS-F{f}-{sfx}', 'พื้นสำเร็จรูป', f, 'DONE', geo,
-                name=f'แผ่นพื้นสำเร็จรูปท้องเรียบ 0.35 ม. ทางเดิน ชั้น {f} {sfx} (ร่อง 5 มม. ตัดชนเสา)', assumed=True,
-                qty=dict(area=A, top_level=round(top - 0.05, 3), **qc))
-            add(f'TP-F{f}-{sfx}', 'พื้นทับหน้า', f, 'DONE', rects_geom(rects, top - 0.05, 0.05),
-                name=f'คอนกรีตทับหน้า ทางเดิน ชั้น {f} {sfx} หนา 0.05',
-                qty=dict(area=A, concrete=round(A * 0.05, 4), top_level=round(top, 3)))
-            continue
-        n, runs = plank_qty(rects)
+        # ห้องพัก โถงหน้าบันได ระเบียง ทางเดิน: แผ่นพื้นสำเร็จรูปท้องเรียบรายแผ่น พาดแนว x (กริด 1→2) ทุกแนว (ผู้ใช้สั่ง 11 พ.ย. 2569)
+        geo, qc = planks_x(f, rects, top)
         lvl = '' if kind in ('RM', 'COR') else ' (ต่ำกว่าพื้นห้อง 0.075)'
-        add(f'PS-F{f}-{sfx}', 'พื้นสำเร็จรูป', f, 'DONE', rects_geom(rects, top - SLAB_T, 0.05),
-            name=f'แผ่นพื้นสำเร็จรูป PS {where} ชั้น {f} {sfx}{lvl}', assumed=True,
-            qty=dict(area=A, planks=n, plank_layout=runs, top_level=round(top - 0.05, 3)))
+        add(f'PS-F{f}-{sfx}', 'พื้นสำเร็จรูป', f, 'DONE', geo,
+            name=f'แผ่นพื้นสำเร็จรูปท้องเรียบ 0.35 ม. {where} ชั้น {f} {sfx} (พาดแนวกริด 1→2 ร่อง 3 มม. บากมุมชนเสา){lvl}', assumed=True,
+            qty=dict(area=A, top_level=round(top - 0.05, 3), **qc))
         add(f'TP-F{f}-{sfx}', 'พื้นทับหน้า', f, 'DONE', rects_geom(rects, top - 0.05, 0.05),
             name=f'คอนกรีตทับหน้า {where} ชั้น {f} {sfx} หนา 0.05{lvl}',
             qty=dict(area=A, concrete=round(A * 0.05, 4), top_level=round(top, 3)))
