@@ -80,6 +80,7 @@ module DormBIM
   # ชิ้นส่วน member (หรือ multi ของ member) ที่ geom มี shape C/2C หรือ pb=true: ใส่ PB ทุกชิ้นในกลุ่มของ element
   def self.pb_shape_group(ents, e, mat_name, cache)
     model = Sketchup.active_model
+    before = ents.to_a
     g = ents.add_group
     geo = e['geom']
     (geo['type'] == 'multi' ? geo['parts'] : [geo]).each do |m|
@@ -105,6 +106,8 @@ module DormBIM
         pb_line(g.entities, m, prof, 0, mat_name)
       end
     end
+    # trim_to_plane ของ PB ทิ้งเศษที่ตัดออกเป็นกลุ่มชื่อหน้าตัดไว้ในกลุ่มแม่: ลบทิ้ง (ไม่ใช่ชิ้นงาน)
+    (ents.to_a - before - [g]).each { |x| x.erase! if x.valid? && x.is_a?(Sketchup::Group) && x.get_attribute(DICT, 'id').nil? }
     g
   end
 
