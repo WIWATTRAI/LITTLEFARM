@@ -867,6 +867,16 @@ for gi in range(2, 8):
                 for j in range(0, len(ys_), 2)]
         steel(f'RF-DG{n:02d}', None, None, 'C100', False, 'เหล็กทะแยง' + (f' ({len(segs)} ท่อน)' if len(segs) > 1 else ''), 'I', segs=segs)
 
+# J คานค้ำแนวระดับ 2C100 ระหว่างเสารับจันทันที่อยู่ติดกัน (เสาปลายสะพานช่วงตะเข้ ↔ เสากลางช่วง) กริด 3, 8 (ผู้ใช้สั่ง 11 พ.ย. 2569)
+# ปลายตัดชนผิวข้างเสา; ระดับกึ่งกลางความสูงเสาต้นที่เตี้ยกว่า (เสาใต้สะพานช่วงตะเข้)
+n = 0
+for x in (GX[2], GX[7]):
+    for ya, yb in ((Y_MID_N, Y_HIP_N), (Y_MID_S, Y_HIP_S)):
+        n += 1
+        zc = (ZB_TOP + BR_BOT[yb]) / 2
+        sg = 1 if yb > ya else -1
+        steel(f'RF-PB{n}', (x, ya + sg * 0.05, zc), (x, yb - sg * 0.05, zc), 'C100', True, 'คานค้ำเสารับจันทัน', 'J')
+
 # G อกไก่: ใต้ท้องจันทันที่สัน (แตะขอบท้องจันทันสองด้าน) ปลายเลยแกนเสารับอกไก่ปลายสัน 0.05
 RIDGE_TOP = RIDGE - HB * slope - RAF_BOT
 steel('RF-RIDGE', (rx0 - HB, yc, RIDGE_TOP - 0.0625), (rx1 + HB, yc, RIDGE_TOP - 0.0625), 'C125', True, 'อกไก่', 'G')
