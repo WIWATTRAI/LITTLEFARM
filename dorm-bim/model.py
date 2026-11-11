@@ -2360,7 +2360,7 @@ for r in ('C', 'D'):
         g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in LB_POLY]
         add(f'SC-LB-{r}-F{f}', 'คาน', f, 'DONE', g,
             name=f'คานเหล็กรับชานพักบันไดหนีไฟ H200x100x7x11 แนว {r}/10–{r}/11 ชั้น {f}', assumed=True,
-            qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * 21.3, 2)))
+            qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
         elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
