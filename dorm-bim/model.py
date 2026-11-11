@@ -2499,6 +2499,81 @@ for f in (2, 3, 4, 5):
         y += 0.40
     _steel_add(f'FS-LDF-F{f}', 'บันได', f, dict(type='multi', parts=fr),
                f'โครงชานพักชั้น {f} เหล็กกล่อง 125x75x3.2 ซอย 100x50x3.2 @0.40', dict(pieces=len(fr)))
+# ---------- ราวจับบันไดหนีไฟ (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# ท่อเหล็กดำ หนา 2.3 มม. ทาสีน้ำเงิน ขึ้นด้วย Profile Builder: เสาและราวบนสุด 1.5" (OD 48.6), ราวกลาง 1" (OD 34.0)
+# (ผมกำหนด) ราวบนสูง 0.90 จากแนวจมูกขั้น/ผิวชานพัก, ราวกลาง 2 เส้นที่ 0.30 และ 0.60, เสาตั้งบนปีกบนแม่บันได (ห่างผิวหลังเอว 30 มม.)
+# ทุกด้านของแต่ละช่วงบันได และขอบเปิดของชานพัก; ระยะเสาไม่เกิน 1.20 ม.
+P15, P10, PT = 0.0486, 0.0340, 0.0023
+
+
+def _pipe_poly(od, t, n=24):
+    r, ri = od / 2, od / 2 - t
+    o = [[round(r * math.cos(2 * math.pi * k / n), 5), round(r * math.sin(2 * math.pi * k / n), 5)] for k in range(n)]
+    i = [[round(ri * math.cos(2 * math.pi * k / n), 5), round(ri * math.sin(2 * math.pi * k / n), 5)] for k in range(n)]
+    return o, i
+
+
+def _pipe(p0, p1, od):
+    g = member(p0, p1, od, od)
+    g['shape'] = 'POLY'; g['poly2d'], g['hole2d'] = _pipe_poly(od, PT)
+    return g
+
+
+def _rail_set(eid, f, name, posts, top_of):
+    """posts: [(x, y, z_base)], top_of(x, y) -> ระดับผิวอ้างอิง (จมูกขั้น/ผิวชานพัก) ณ ตำแหน่งนั้น"""
+    parts, l15, l10 = [], 0.0, 0.0
+    tops = [(x, y, top_of(x, y)) for x, y, _ in posts]
+    for (x, y, zb), (_, _, zr) in zip(posts, tops):
+        parts.append(_pipe((x, y, zb), (x, y, zr + 0.90), P15)); l15 += zr + 0.90 - zb
+    for h, od in ((0.90, P15), (0.60, P10), (0.30, P10)):
+        for (xa, ya, za), (xb, yb, zb) in zip(tops, tops[1:]):
+            d = math.hypot(xb - xa, yb - ya); ux, uy = (xb - xa) / d, (yb - ya) / d
+            e0 = P15 / 2 if h < 0.90 else 0.0                       # ราวกลางชนผิวเสา, ราวบนต่อเนื่องผ่านหัวเสา
+            sl = (zb - za) / d
+            q0 = (xa + ux * e0, ya + uy * e0, za + h + sl * e0)
+            q1 = (xb - ux * e0, yb - uy * e0, zb + h - sl * e0)
+            parts.append(_pipe(q0, q1, od))
+            if od == P15:
+                l15 += mlen(q0, q1)
+            else:
+                l10 += mlen(q0, q1)
+    add(eid, 'ราวบันได', f, 'DONE', dict(type='multi', parts=parts), name=name, assumed=True,
+        qty={'pipe_1.5in_m': round(l15, 3), 'pipe_1in_m': round(l10, 3), 'posts': len(posts), 'spec': 'ท่อเหล็กดำหนา 2.3 มม. ทาสีน้ำเงิน'})
+    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
+
+def _spaced(a, b, maxs=1.20):
+    n = max(1, math.ceil(abs(b - a) / maxs - 1e-9))
+    return [a + (b - a) * k / n for k in range(n + 1)]
+
+
+_FL_TOP = 0.010 + SG_TF                                            # ปีกบนแม่บันไดเหนือแนวจมูกขั้น (ตั้งฉากแนวลาด)
+for f in (1, 2, 3, 4):
+    z0 = LT[f]; R = (LT[f + 1] - z0) / FS_N; zm = z0 + R * (FS_N // 2)
+    cth = FS_G / math.hypot(FS_G, R)
+    for fl, lane, sgn, yb, zb, ye in (('A', LANE_OUT, -1, FS_YT, z0, FS_YL1), ('B', LANE_IN, 1, FS_YL1, zm, FS_YT)):
+        nose = lambda x, y, yb=yb, zb=zb, sgn=sgn, R=R: zb + R + sgn * (y - yb) * R / FS_G
+        for side, xw, dirx in (('L', lane[0], 1), ('R', lane[1], -1)):
+            xp = xw + dirx * 0.030
+            ys = _spaced(yb + sgn * 0.06, ye - sgn * 0.06)
+            posts = [(xp, y, nose(xp, y) + _FL_TOP / cth) for y in ys]
+            _rail_set(f'FS-HR-F{f}-{fl}-{side}', f, f'ราวจับบันไดหนีไฟ ชั้น {f}→{f+1} ช่วง {fl} ด้าน{"ซ้าย" if side == "L" else "ขวา"} ท่อเหล็กดำ 1.5"/1"', posts, nose)
+    # ชานพักกลาง: ขอบหลัง (แนวเสา M, ระหว่างเสา 10/M กับขอบนอก) และขอบนอกด้านกริด 11
+    zl = zm
+    xi, yi = FS_X1 - 0.03, FS_YL0 + 0.03
+    pts = [(x, yi) for x in _spaced(FS_X0 + SC_D + 0.03, xi)] + [(xi, y) for y in _spaced(yi, FS_YL1 - 0.03)][1:]
+    _rail_set(f'FS-HR-ML-F{f}', f, f'ราวกันตกชานพักกลางบันไดหนีไฟ ชั้น {f}→{f+1} ท่อเหล็กดำ 1.5"/1"', [(x, y, zl) for x, y in pts], lambda x, y, zl=zl: zl)
+for f in (2, 3, 4, 5):
+    zl = LT[f]
+    xi = FS_X1 - 0.03
+    y0, y1 = GY['C'] + SC_B / 2 + 0.03, GY['D'] + 0.05 - 0.03
+    pts = [(xi, y) for y in _spaced(y0, y1)] + [(x, y1) for x in _spaced(xi, FS_X0 + 0.03)][1:]
+    if f == 5:                                                      # ชั้นบนสุด: ขอบด้านแนว C เหนือช่วงบันไดขาขึ้น (ไม่มีช่วงต่อขึ้น)
+        yc = GY['C'] - 0.05 + 0.03
+        pts = [(x, yc) for x in _spaced(LANE_OUT[0] + 0.03, xi)] + [(xi, y) for y in _spaced(yc, y1)][1:] + [(x, y1) for x in _spaced(xi, FS_X0 + 0.03)][1:]
+    _rail_set(f'FS-HR-LD-F{f}', f, f'ราวกันตกชานพักชั้น {f} บันไดหนีไฟ ท่อเหล็กดำ 1.5"/1"', [(x, y, zl) for x, y in pts], lambda x, y, zl=zl: zl)
+ASSUMPTIONS.append('ราวบันไดหนีไฟ: สูง 0.90 ราวกลาง 0.30/0.60 เสาห่างไม่เกิน 1.20 ม. (ผมกำหนด); ท่อเหล็กดำหนา 2.3 มม. เสา/ราวบน 1.5" อื่นๆ 1" (ผู้ใช้กำหนด)')
+
 ASSUMPTIONS.append('บันไดหนีไฟ: แม่บันได C200x100 ใช้ tw 7.5 tf 11 มม. (ผู้ใช้ไม่ระบุความหนา); 18 ลูกตั้งต่อชั้น; ผิวชานพักเหล็กลาย FL-0.096')
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
