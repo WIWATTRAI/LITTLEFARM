@@ -160,13 +160,16 @@ add('GB1-10-11-M', 'คานคอดิน', 1, 'DONE', member((_x0, FS_YM, _G
 
 # ---------- เสาเหล็กบันไดหนีไฟ C/11, D/11 (ผู้ใช้สั่ง 11 พ.ย. 2569) ขึ้นด้วย Profile Builder ----------
 # H 175x175x11x16 ยาวท่อนละ 6 ม. รอยต่อเว้น 3 มม. (งานเชื่อม) แผ่นประกับ PL8x120x120 ที่เอวทั้งสองด้าน
-# เพลทฐาน PL20x200x200 บนหลังคาน GB1 (+0.20), สลัก M16x200 จำนวน 4 ตัว ระยะ 125x125
+# เพลทฐาน PL20x200x200 บนหลังคาน GB1 (+0.20), สลัก M16x200 จำนวน 4 ตัว ระยะ 75x130 (เดิม 125x125, ปรับให้ขันน็อตได้)
 # แนวเอวขนานแกน x (ปีกหันเข้าหาอาคาร/ออกนอก) (ผมกำหนด)
 SC_D, SC_B, SC_TW, SC_TF = 0.175, 0.175, 0.011, 0.016
 _hd, _hb, _hw, _ti = SC_D / 2, SC_B / 2, SC_TW / 2, SC_D / 2 - SC_TF
 SC_POLY = [(-_hd, -_hb), (-_ti, -_hb), (-_ti, -_hw), (_ti, -_hw), (_ti, -_hb), (_hd, -_hb),
            (_hd, _hb), (_ti, _hb), (_ti, _hw), (-_ti, _hw), (-_ti, _hb), (-_hd, _hb)]
 BOLT_POLY = [(0.008 * math.cos(2 * math.pi * k / 16), 0.008 * math.sin(2 * math.pi * k / 16)) for k in range(16)]
+WASHER_POLY = [(0.015 * math.cos(2 * math.pi * k / 16), 0.015 * math.sin(2 * math.pi * k / 16)) for k in range(16)]
+NUT_POLY = [(0.012 / math.cos(math.pi / 6) * math.cos(math.pi / 3 * k), 0.012 / math.cos(math.pi / 6) * math.sin(math.pi / 3 * k)) for k in range(6)]
+AB_DX, AB_DY, AB_WT, AB_NT = 0.0375, 0.065, 0.003, 0.013
 SC_BASE = 0.20                       # หลังคาน GB1
 SC_TOP = FL[5] + 1.50                # ปลายบนท่อนสุดท้ายเหนือระดับพื้นชั้น 5 1.50 ม. (ผู้ใช้สั่ง)
 SC_LEN, SC_GAP = 6.0, 0.003
@@ -186,11 +189,21 @@ for tag, cx, cy, lab in _SC_SET:
     add(f'SC-{tag}-BP', 'เสา', 1, 'DONE', sq(0.10, 0.10, SC_BASE, 0.020),
         name=f'เพลทฐานเสาเหล็ก PL20x200x200 กริด {lab}', assumed=True, qty=dict(count=1, size='PL20x200x200', weight_kg=round(0.2 * 0.2 * 0.02 * 7850, 2)))
     elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+    # ระยะสลักใหม่ (ผู้ใช้สั่ง 11 พ.ย. 2569: เดิม 125x125 ชิดปีกเสา ขันน็อตไม่ได้): อยู่ในช่องระหว่างปีกเสาสองข้างเอว
+    # x ±0.0375 (ห่างผิวในปีก 34 มม.), y ±0.065 (ห่างผิวเอว 59.5 มม., ห่างขอบเพลท 35 มม.) => ระยะ 75x130
+    # ชุดสลัก: แกน M16 + แหวน M16 (OD30 หนา 3 มม.) + น็อตหกเหลี่ยม M16 (ปากประแจ 24 หนา 13 มม.) บนเพลทฐาน
     for k, (dx, dy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
-        bx, by = cx + dx * 0.0625, cy + dy * 0.0625
+        bx, by = cx + dx * AB_DX, cy + dy * AB_DY
         g = member((bx, by, SC_BASE + 0.06 - 0.20), (bx, by, SC_BASE + 0.06), 0.016, 0.016)
         g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in BOLT_POLY]
-        add(f'SC-{tag}-AB{k+1}', 'เสา', 1, 'DONE', g, name=f'สลักยึดเสา M16x200 กริด {lab}', assumed=True, qty=dict(count=1, size='M16x200'))
+        zp = SC_BASE + 0.020
+        wsh = member((bx, by, zp), (bx, by, zp + AB_WT), 0.030, 0.030)
+        wsh['shape'] = 'POLY'; wsh['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in WASHER_POLY]
+        nut = member((bx, by, zp + AB_WT), (bx, by, zp + AB_WT + AB_NT), 0.028, 0.028)
+        nut['shape'] = 'POLY'; nut['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in NUT_POLY]
+        add(f'SC-{tag}-AB{k+1}', 'เสา', 1, 'DONE', dict(type='multi', parts=[g, wsh, nut]),
+            name=f'สลักยึดเสา M16x200 พร้อมแหวนและน็อต กริด {lab}', assumed=True,
+            qty=dict(count=1, size='M16x200', washer='M16 OD30x3', nut='M16 hex 24x13'))
         elements[-1]['material'] = 'BIM-สลักเหล็ก'
     z, n, joints = SC_BASE + 0.020, 0, []
     while z < SC_TOP - 1e-6:
