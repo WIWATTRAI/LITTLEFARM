@@ -299,6 +299,7 @@ ASSUMPTIONS.append('แผ่นพื้นสำเร็จรูปท้อ
 ASSUMPTIONS.append('พื้นระเบียงหลังห้องและห้องน้ำชั้น 2–5 ต่ำกว่าห้องพัก/ทางเดิน 0.075 ม.: หลังคาน B3/B4/B5 ในแถบยื่นลดลง 0.075 ม.; คาน B2 แนว B/E คงระดับเดิม พื้นห้องพักวางทับเต็มหลังคาน')
 
 PLANK_BEAR = 0.05       # ระยะพาดแผ่นพื้นบนคาน 5 ซม. จากขอบคาน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+PLANK_EDGE_MAX = 0.025   # ช่องขนานคานจากการวางแผ่น ไม่เกิน 2.5 ซม. เททับหน้าปิด (ผู้ใช้สั่ง 11 พ.ย. 2569)
 PLANK_GAP = 0.003       # ร่องระหว่างแผ่นพื้นสำเร็จรูป 3 มม. ทุกพื้นที่ (ผู้ใช้สั่ง 11 พ.ย. 2569 เดิม 5 มม.)
 
 
@@ -326,14 +327,20 @@ def planks_x(f, rects, top):
         if x1 - x0 < 0.30:                       # แถบแคบบนหลังคาน (ข้างช่องบันได) เทพร้อมคอนกรีตทับหน้า ไม่วางแผ่น
             continue
         x0, x1 = bear(x0, 1), bear(x1, -1)
-        ys, y = [], y0
-        while y < y1 - 1e-6:
-            room = y1 - y
-            if room < 0.02:
-                break
-            pw = min(PLANK_W, room)
-            ys.append((y, y + pw))
-            y += pw + PLANK_GAP
+        # ไม่วางแผ่นทับแนวคานแนว x (B2 แนวเสา, BST1 ขอบช่องบันได): เริ่ม/จบที่ผิวคาน (ผู้ใช้สั่ง 11 พ.ย. 2569)
+        for lo_, hi_ in [(GY[r] - 0.125, GY[r] + 0.125) for r in COL_ROWS] + [(ST_RUN_Y1, ST_RUN_Y1 + 0.20)]:
+            if lo_ - 1e-6 <= y0 < hi_ - 1e-6:
+                y0 = hi_
+            if lo_ + 1e-6 < y1 <= hi_ + 1e-6:
+                y1 = lo_
+        # ใช้เฉพาะแผ่นเต็มกว้าง 0.35 ม. ร่อง 3 มม. (ผู้ใช้สั่ง 11 พ.ย. 2569)
+        # ช่องขนานคานเหลือได้ไม่เกิน PLANK_EDGE_MAX (เททับหน้าปิด); ถ้าเกิน เพิ่ม 1 แผ่นแล้ววางกึ่งกลาง ขอบแผ่นริมวางบนหลังคานเท่ากันสองข้าง
+        k = int((y1 - y0 + PLANK_GAP) // (PLANK_W + PLANK_GAP) + 1e-9)
+        left = (y1 - y0) - (k * PLANK_W + (k - 1) * PLANK_GAP)
+        if left > PLANK_EDGE_MAX + 1e-6:
+            k += 1
+            left = (y1 - y0) - (k * PLANK_W + (k - 1) * PLANK_GAP)
+        ys = [(y0 + left / 2 + j * (PLANK_W + PLANK_GAP), y0 + left / 2 + j * (PLANK_W + PLANK_GAP) + PLANK_W) for j in range(k)]
         for py0, py1 in ys:
             hit = [c for c in cols if min(py1, c[3]) - max(py0, c[2]) > 1e-6 and min(x1, c[1]) - max(x0, c[0]) > 1e-6]
             brk = sorted({py0, py1} | {v for c in hit for v in (c[2], c[3]) if py0 < v < py1})
