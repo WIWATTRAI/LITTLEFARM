@@ -1817,6 +1817,8 @@ def mirror_y(g):
     elif t == 'member':
         for k in ('p0', 'p1'):
             g[k][1] = round(Y - g[k][1], 4)
+        if g.get('shape') == 'POLY':             # หน้าตัดไม่สมมาตร: กลับทิศ chain ให้ด้านหน้าหน้าตัดยังหันทิศเดิมหลังกลับแกน y
+            g['p0'], g['p1'] = g['p1'], g['p0']
         for c in g.get('trim') or []:
             if c:
                 c[1], c[4] = round(Y - c[1], 5), round(-c[4], 5) + 0.0
@@ -1923,6 +1925,88 @@ for e in elements:
     ya_, yb_ = (GY['A'], GY['A'] + 0.20 + PL_COL) if m_.group(1) == 'N' else (GY['F'] - 0.20 - PL_COL, GY['F'])
     for i in range(10):
         tile_cut_box(e, GX[i] - 0.10 - PL_COL, GX[i] + 0.10 + PL_COL, ya_, yb_, spec)
+
+# ---------- งานผิวบันได (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# ลูกนอน + ลูกตั้ง: ปูนกาว + กระเบื้อง Tara เจด้าไวท์ (ชนิดเดียวกับโถงหน้าห้อง) หนารวม 0.02 เท่ากระเบื้องพื้น
+# ชานพัก: กระเบื้องชนิดเดียวกัน; จมูกบันได PVC MAC DF38-20G1 สีเทาเข้ม 3.8x1.5x200 ซม. ฝังที่ขอบทุกขั้น (รวมขอบชานพัก/ขอบพื้นชั้นบน)
+ST_TILE_T = 0.02
+NOSE_W, NOSE_H, NOSE_L = 0.038, 0.015, 2.00
+# หน้าตัดจมูกบันได (มม., x = 0 ด้านใน → 38 ด้านหน้า, y = 0 ผิวบน ↓ -15) ตามรูปที่ผู้ใช้ส่ง; ความหนาแผ่น 3 มม. ขาหน้า 2.5 มม. ครีบยึด 2x5 มม. เป็นค่าสมมติ (ไม่ขึ้นร่องกันลื่น)
+NOSE_POLY = [(0, 0), (38, 0), (38, -15), (33, -15), (33, -13), (35.5, -13), (35.5, -3), (20, -3), (20, -8), (18, -8), (18, -3), (0, -3)]
+_np_area = abs(sum(NOSE_POLY[i - 1][0] * NOSE_POLY[i][1] - NOSE_POLY[i][0] * NOSE_POLY[i - 1][1] for i in range(len(NOSE_POLY)))) / 2 / 1e6
+ST_TILE_MAT = 'Tara เจด้าไวท์ 60x60 ยาแนว 3 มม.'
+
+
+def _strip_tiles(w, h, n, spec=TILE_TARA):
+    """จำนวนแผ่น 60x60 ที่ตัดเป็นแถบกว้าง w x สูง h จำนวน n แถบ (ตัดแถบตามยาวแผ่น)"""
+    pitch = spec['w']
+    per_tile = max(1, int((pitch + 1e-9) // (h + 0.003)))         # แถบต่อแผ่น (เผื่อรอยตัด 3 มม.)
+    pieces = n * math.ceil(round(w / (pitch + spec['joint']), 6))  # ชิ้นตามความกว้างบันได
+    return pieces, math.ceil(pieces / per_tile)
+
+
+for f in (1, 2, 3, 4):
+    z0 = FL[f]
+    zm = z0 + 10 * RISER
+    for fl_id, (x0, x1, y_start, d, zs) in (('1', (FX0, FX1, ST_RUN_Y1, -1, z0)), ('2', (GX0, GX1, LY1, +1, zm))):
+        base = (z0 + (ST_TILE_T if f >= 2 else 0.0)) if fl_id == '1' else zm + ST_TILE_T   # ผิวที่ลูกตั้งแรกตั้งอยู่
+        treads, risers, noses = [], [], []
+        for k in range(10):
+            yk = y_start + d * k * TREAD                  # ผิวคอนกรีตลูกตั้ง k
+            top = zs + (k + 1) * RISER + ST_TILE_T       # ผิวกระเบื้องลูกนอน k (k = 9 คือผิวชานพัก/พื้นชั้นบน)
+            yf = yk - d * ST_TILE_T                      # หน้ากระเบื้องลูกตั้ง = หน้าจมูกบันได
+            zb = base if k == 0 else zs + k * RISER + ST_TILE_T
+            risers.append(prism([(x0, min(yf, yk)), (x1, min(yf, yk)), (x1, max(yf, yk)), (x0, max(yf, yk))], zb, round(top - NOSE_H - zb, 4)))
+            # จมูกบันได: แกนที่กึ่งกลางกรอบหน้าตัด ทิศ chain = d*x ให้ด้านหน้า (x หน้าตัด +) หันลงบันได
+            yc_ = yf + d * NOSE_W / 2
+            pa, pb_ = ((x0, yc_, top - NOSE_H / 2), (x1, yc_, top - NOSE_H / 2)) if d > 0 else ((x1, yc_, top - NOSE_H / 2), (x0, yc_, top - NOSE_H / 2))
+            ng = member(pa, pb_, NOSE_W, NOSE_H)
+            ng['shape'] = 'POLY'; ng['poly2d'] = [[round(a / 1000, 4), round(b / 1000, 4)] for a, b in NOSE_POLY]
+            noses.append(ng)
+            if k < 9:
+                ya, yb = yf + d * NOSE_W, yk + d * TREAD
+                treads.append(prism([(x0, min(ya, yb)), (x1, min(ya, yb)), (x1, max(ya, yb)), (x0, max(ya, yb))], top - ST_TILE_T, ST_TILE_T))
+        W = x1 - x0
+        tr_d = TREAD - (NOSE_W - ST_TILE_T)
+        pcs, nt = _strip_tiles(W, tr_d, 9)
+        add(f'TL-ST-F{f}-{fl_id}-T', 'กระเบื้อง', f, 'A16', dict(type='multi', parts=treads),
+            name=f'ปูนกาว+กระเบื้องลูกนอน บันไดชั้น {f}→{f+1} ช่วง {fl_id} Tara เจด้าไวท์ 60x60 (ชนิดเดียวกับโถงหน้าห้อง)', assumed=True,
+            qty=dict(area=round(W * tr_d * 9, 3), treads=9, tread_tile_depth=round(tr_d, 3), pieces=pcs, tiles=nt,
+                     tile_model=TILE_TARA['model'], thickness=ST_TILE_T, note='ปูนกาว + กระเบื้อง หนารวม 0.02 ม.'))
+        elements[-1]['material'] = 'BIM-กระเบื้องบันได'
+        rh = [p['t'] for p in risers]
+        pcs, nt = _strip_tiles(W, max(rh), 10)
+        add(f'TL-ST-F{f}-{fl_id}-R', 'กระเบื้อง', f, 'A16', dict(type='multi', parts=risers),
+            name=f'ปูนกาว+กระเบื้องลูกตั้ง บันไดชั้น {f}→{f+1} ช่วง {fl_id} Tara เจด้าไวท์ 60x60', assumed=True,
+            qty=dict(area=round(W * sum(rh), 3), risers=10, riser_tile_height=round(rh[1], 3), first_riser_tile_height=round(rh[0], 3),
+                     pieces=pcs, tiles=nt, tile_model=TILE_TARA['model'], thickness=ST_TILE_T))
+        elements[-1]['material'] = 'BIM-กระเบื้องบันได'
+        add(f'NS-ST-F{f}-{fl_id}', 'จมูกบันได', f, 'A16', dict(type='multi', parts=noses),
+            name=f'จมูกบันได PVC MAC DF38-20G1 สีเทาเข้ม 3.8x1.5 ซม. บันไดชั้น {f}→{f+1} ช่วง {fl_id} (10 ขอบ)', assumed=True,
+            qty=dict(count=10, length=round(10 * W, 3), bars_2m=10 * math.ceil(round(W / NOSE_L, 6)),
+                     model='MAC PVC Stair Nosing DF38-20G1 Dark Gray 3.8x200x1.5 ซม. (ผู้ใช้กำหนด 11 พ.ย. 2569)'))
+        elements[-1]['material'] = 'BIM-จมูกบันไดเทาเข้ม'
+    # ชานพัก: กระเบื้องบนผิวชานพัก เว้นแถบจมูกบันไดขอบชานพัก (ช่วง 1)
+    rects = _rects_minus([(FX0, GX1, LY0, LY1)], FX0, FX1, LY1 - (NOSE_W - ST_TILE_T), LY1 + 1)
+    add(f'TL-ST-F{f}-L', 'กระเบื้อง', f, 'A16', rects_geom(rects, zm, ST_TILE_T),
+        name=f'ปูนกาว+กระเบื้องชานพักบันไดชั้น {f} Tara เจด้าไวท์ 60x60 (ชนิดเดียวกับโถงหน้าห้อง)', assumed=True,
+        qty=dict(area=round(rect_area(rects), 3), tiles=math.ceil(rect_area(rects) / 0.36), tile_model=TILE_TARA['model'], thickness=ST_TILE_T))
+    elements[-1]['material'] = 'BIM-กระเบื้องบันได'
+    # ฉาบผิวข้างคาน BST1 ขอบช่องบันได (ด้านบันได) หยุดใต้กระเบื้องลูกตั้งขั้นสุดท้ายของช่วง 2 (กระเบื้องปูทับแทนฉาบ)
+    plb = next((e for e in elements if e['id'] == f'PL-BST1-L{f+1}'), None)
+    if plb:
+        z_cut = zm + 9 * RISER + ST_TILE_T
+        for q in plb['geom']['parts']:
+            if q['w'] < 0.01 and q['p0'][1] < ST_RUN_Y1:
+                zb_, zt_ = q['p0'][2] - q['d'] / 2, q['p0'][2] + q['d'] / 2
+                if zt_ > z_cut:
+                    q['d'] = round(z_cut - zb_, 4)
+                    q['p0'][2] = q['p1'][2] = round((zb_ + z_cut) / 2, 4)
+    # ขอบพื้นชั้นบนที่ปลายช่วง 2: ตัดกระเบื้องโถงหน้าบันไดเว้นแถบจมูกบันได
+    hall = next((e for e in elements if e['id'] == f'TL-F{f+1}-ST-HALL'), None)
+    if hall:
+        tile_cut_box(hall, GX0, GX1, ST_RUN_Y1 - ST_TILE_T, ST_RUN_Y1 - ST_TILE_T + NOSE_W, TILE_TARA)
+ASSUMPTIONS.append('บันได: ปูนกาว+กระเบื้องหนารวม 0.02 ม. (เท่ากระเบื้องพื้น) ลูกตั้งตั้งบนกระเบื้องลูกนอน, จมูกบันไดหน้าเสมอผิวกระเบื้องลูกตั้ง ผิวบนเสมอกระเบื้องลูกนอน; ชั้น 1 ไม่มีกระเบื้องพื้นที่ต้นบันได ลูกตั้งแรกจึงสูงกว่าขั้นอื่น 0.02 ม.')
 
 # ---------- งานเทคอนกรีตพื้น: เติมเต็มช่อง + ตัดหลบเสา/คาน (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
 # topping เทเต็มชั้นแผ่นพื้นด้วย: ช่องขนานคาน (<= 2.5 ซม.) หลังคานที่แผ่นพาด (เลยระยะพาด 5 ซม.) ร่องแผ่น 3 มม. แถบแคบ

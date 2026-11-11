@@ -87,6 +87,16 @@ module DormBIM
         b = m['sec']['b']
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), -b / 2.0, mat_name)
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], true, cache), b / 2.0, mat_name)
+      elsif m['shape'] == 'POLY'
+        key = 'POLY ' + m['poly2d'].to_s
+        prof = (cache[key] ||= begin
+          tmp = model.entities.add_group
+          f = tmp.entities.add_face(m['poly2d'].map { |a, b| Geom::Point3d.new(a.m, b.m, 0) })
+          pr = pb_api::Profile.new(f, "#{e['category']} #{(m['w'] * 1000).round}x#{(m['d'] * 1000).round}")
+          tmp.erase!
+          pr
+        end)
+        pb_line(g.entities, m, prof, 0, mat_name)
       elsif m['shape'] == 'C'
         pb_line(g.entities, m, pb_c_profile(model, m['sec'], false, cache), 0, mat_name)
       else
@@ -100,7 +110,7 @@ module DormBIM
 
   def self.pb_shape?(geo)
     ms = geo['type'] == 'multi' ? geo['parts'] : [geo]
-    ms.all? { |m| m['type'] == 'member' && (%w[C 2C].include?(m['shape']) || m['pb']) }
+    ms.all? { |m| m['type'] == 'member' && (%w[C 2C POLY].include?(m['shape']) || m['pb']) }
   end
 
   def self.pt(a)
@@ -280,7 +290,7 @@ module DormBIM
                    'BIM-คาน-B4' => [140, 70, 180], 'BIM-คาน-B5' => [235, 205, 40], 'BIM-คาน-BST1' => [40, 190, 200],
                    'BIM-คาน-BST2' => [230, 90, 170], 'BIM-คาน-BST3' => [130, 85, 50],
                    # คอนกรีตเททับหน้า + พื้นหล่อในที่ ชนิดเดียวกัน (ผู้ใช้สั่ง 11 พ.ย. 2569)
-                   'BIM-คอนกรีตเทพื้น' => [196, 192, 182], 'BIM-เชิงชายสีซีเมนต์' => [168, 168, 163] }.freeze
+                   'BIM-คอนกรีตเทพื้น' => [196, 192, 182], 'BIM-เชิงชายสีซีเมนต์' => [168, 168, 163], 'BIM-กระเบื้องบันได' => [236, 234, 228], 'BIM-จมูกบันไดเทาเข้ม' => [70, 72, 74] }.freeze
   def self.named_material(model, name)
     model.materials[name] || model.materials.add(name).tap { |m| m.color = Sketchup::Color.new(*(NAMED_COLORS[name] || [200, 200, 200])) }
   end
