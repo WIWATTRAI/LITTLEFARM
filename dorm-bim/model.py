@@ -422,6 +422,25 @@ for f in (1, 2, 3, 4):
     for k in (3, 4):
         add(f'BST2-{k+1}-M{f}', 'คาน', f, 'DONE', member((GX[k], GY['A'], zc), (GX[k], GY['B'] - 0.25, zc), 0.20, 0.40),   # ปลายนอกเสมอขอบนอก BST3 (แนว A) (ผู้ใช้สั่ง 11 พ.ย. 2569)
             name=f'BST2 คานชานพักกริด {k+1} ชั้น {f}', qty=dict(length=1.40, concrete=round(1.4 * 0.2 * 0.4, 4)))
+# เสา CX 200x200 รับปลายคาน BST2 (กริด 4, 5 แนว A) (ผู้ใช้สั่ง 11 พ.ย. 2569): ต่อเป็นช่วงจากคานชานพักแต่ละชั้น
+# ช่วงล่างสุดเริ่มระดับหัวตอม่อ (FOOT_TOP) เหมือนเสาอื่น; ช่วงบนสุดจบใต้ BST2 ชั้น 4 (ไม่มีชานพักชั้น 5)
+_zms = [FL[f] + 10 * RISER for f in (1, 2, 3, 4)]
+# ช่วงที่ผ่านระดับพื้นชั้น 2–4 แบ่งเป็นสองท่อนที่คาน B3 (คาน B3 ยาวต่อเนื่องถึงแนว A ตามที่แก้ไว้)
+_b3z = {(e['id'].split('-')[1], e['id'].split('-')[3]): (e['geom']['p0'][2] - e['geom']['d'] / 2, e['geom']['p0'][2] + e['geom']['d'] / 2)
+        for e in elements if re.match(r'^B3-\d+-AB-L\d$', e['id'])}
+for k in (3, 4):
+    for j, zm in enumerate(_zms):
+        za = FOOT_TOP if j == 0 else _zms[j - 1]
+        zb = zm - 0.40
+        segs = [(za, zb, '')]
+        b3 = _b3z.get((str(k + 1), f'L{j + 1}'))
+        if j > 0 and b3 and za < b3[0] < zb:
+            segs = [(za, b3[0], 'a'), (b3[1], zb, 'b')]
+        for z0_, z1_, sx in segs:
+            add(f'CX-{k+1}A-M{j+1}{sx}', 'เสา', j + 1, 'DONE',
+                prism([(GX[k] - 0.10, GY['A']), (GX[k] + 0.10, GY['A']), (GX[k] + 0.10, GY['A'] + 0.20), (GX[k] - 0.10, GY['A'] + 0.20)], z0_, round(z1_ - z0_, 3)),
+                name=f'CX 200x200 รับปลายคาน BST2 กริด {k+1} ใต้ชานพักชั้น {j+1}' + ({'a': ' ท่อนล่าง (ใต้คาน B3)', 'b': ' ท่อนบน (เหนือคาน B3)'}.get(sx, '')), assumed=True,
+                qty=dict(height=round(z1_ - z0_, 3), concrete=round(0.04 * (z1_ - z0_), 4), section='0.20x0.20'))
 # คานรับแม่บันไดชั้น 1 เป็นคานคอดิน GB1 200x500 (เพิ่มจากแบบ ผู้ใช้สั่ง 11 พ.ย. 2569): ใต้ปลายล่างช่วงบันได 1
 # พาดแนว x ระหว่างคานคอดิน GB1 กริด 4–5, ขอบหน้าคานเสมอลูกตั้งแรก (y = ST_RUN_Y1), หลังคานเสมอหลังคานคอดิน (+0.20) ใต้พื้น GS
 _L = (GX[4] - 0.10) - (GX[3] + 0.10)
@@ -1594,6 +1613,13 @@ for e in elements:
     elif e['category'] == 'สุขภัณฑ์' and e['name'].startswith('อ่างล้างหน้า'):
         e['qty']['model'] = 'กะรัต K1225'
 
+
+# กระเบื้องห้องน้ำ N3/N5 ชั้น 2–4 ตัดรอบเสา CX (รวมฉาบเสา 1 ซม.)
+for e in elements:
+    m_ = re.match(r'^TL-F([234])-N([35])-WC$', e['id'])
+    if m_:
+        xk = GX[3] if m_.group(2) == '3' else GX[4]
+        tile_cut_box(e, xk - 0.10 - PL_COL, xk + 0.10 + PL_COL, GY['A'], GY['A'] + 0.20 + PL_COL, TILE_WC)
 
 # ---------- สีคานตามเบอร์คาน (ผู้ใช้เลือก 11 พ.ย. 2569) ----------
 for e in elements:
