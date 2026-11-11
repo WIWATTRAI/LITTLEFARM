@@ -2034,6 +2034,7 @@ def _conduit(segs, boxes):
     trim = {'bend': BEND_R, 'short': 0.012, 'tee': 0.015}
     parts, cnt = [], collections.Counter()
     plen = 0.0
+    pipe_runs = []
     for a, b in runs:
         u = unit(a, b); L = math.dist(a, b)
         ta, tb = trim.get(kind[a], 0.0), trim.get(kind[b], 0.0)
@@ -2044,6 +2045,8 @@ def _conduit(segs, boxes):
         # ท่อยาวเกิน 4 ม.: ท่อนละ 4 ม. ต่อด้วยข้อต่อตรง
         n = max(1, math.ceil(Lp / STICK - 1e-9))
         parts.append(_cd_mem([pa, pb], _CD_PIPE)); plen += Lp
+        isbox = lambda p: kind[p] == 'box' and node[p][1] is not None and node[p][1][0] in ('JB', 'SW', 'SO', 'CU')
+        pipe_runs.append((pa, pb, u, isbox(a), isbox(b)))
         for k_ in range(1, n):
             c = _v(pa, u, k_ * STICK)
             parts.append(_cd_mem([_v(c, u, -CPL_L / 2), _v(c, u, CPL_L / 2)], _CD_FIT)); cnt['coupling'] += 1
@@ -2077,12 +2080,14 @@ def _conduit(segs, boxes):
             parts.append(g); cnt['tee'] += 1
         elif t == 'cross':
             cnt['cross'] += 1
+    cnt['_runs'] = pipe_runs
     qty = dict(length=round(plen, 3), size='PVC ขาว 20 มม.', pipe_pieces=cnt['pieces'], sticks_4m=math.ceil(plen / STICK), bend_90=cnt['bend'], short_elbow=cnt['short'],
                tee_cover=cnt['tee'], coupling=cnt['coupling'], box_connector=cnt['connector'])
     return parts, qty, cnt
 
 
 _CD_WARN = collections.Counter()
+_CD_RUNS = {}
 _E = {e['id']: e for e in elements}
 for e in list(elements):
     m_ = re.match(r'^EL-(F\d-[NS]\d)-JB\d$', e['id'])
@@ -2113,6 +2118,82 @@ for e in elements:
     e['qty'] = qty
     e['name'] = e['name'].replace('PVC ขาว Ø1/2"', 'PVC ขาว 20 มม. (Profile Builder) พร้อมข้อต่อ')
     _CD_WARN.update({k: v for k, v in cnt.items() if k in ('tight', 'odd_tee', 'cross')})
+    _CD_RUNS[e['id']] = cnt['_runs']
+# ก้ามปูยึดท่อ (ผู้ใช้สั่ง 12 พ.ย. 2569): ตัวแรกห่างกล่องไม่เกิน 1 ม. (วาง 0.30), ระยะระหว่างตัวไม่เกิน 3 ม.;
+# ท่อตรงทุกช่วงที่ยาวตั้งแต่ 0.25 ม. มีอย่างน้อย 1 ตัว; แผ่นฐานติดผิวผนัง/ท้องพื้นที่ใกล้ท่อที่สุด (ถ้าไม่มีผิวใกล้ เช่น เหนือฝ้าชั้น 5 มีแต่แถบรัด)
+CLIP_FROM_BOX, CLIP_MAX, CLIP_W = 0.30, 3.0, 0.015
+_SURF = collections.defaultdict(list)                     # ชั้น -> กรอบผิวฉาบ/ผนัง
+for e in elements:
+    if e['category'] in ('งานฉาบ', 'ผนัง', 'เสาเอ็นคานเอ็น') or e['id'].startswith('PL-'):
+        for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]):
+            if p['type'] == 'prism':
+                xs = [q[0] for q in p['poly']]; ys = [q[1] for q in p['poly']]
+                _SURF[e['floor']].append((min(xs), min(ys), p['z0'], max(xs), max(ys), p['z0'] + p['t']))
+            elif p['type'] == 'member' and abs(p['p0'][2] - p['p1'][2]) < 1e-6 and 'shape' not in p:   # ฉาบคาน (ชิ้นแนวนอนตามแกน)
+                a0, a1 = p['p0'], p['p1']
+                ka = 0 if abs(a0[0] - a1[0]) > 1e-6 else 1
+                lo = [min(a0[0], a1[0]), min(a0[1], a1[1]), a0[2] - p['d'] / 2]
+                hi = [max(a0[0], a1[0]), max(a0[1], a1[1]), a0[2] + p['d'] / 2]
+                lo[1 - ka] -= p['w'] / 2; hi[1 - ka] += p['w'] / 2
+                _SURF[e['floor']].append(tuple(lo + hi))
+_SURF[6] = []
+
+
+def _clip_mount(P, k, fl):
+    best = None
+    for bb in _SURF.get(fl, []) + _SURF.get(fl + 1, []):
+        for j in range(3):
+            if j == k:
+                continue
+            o = [x for x in range(3) if x not in (j,)]
+            if not all(bb[x] - 1e-4 <= P[x] <= bb[x + 3] + 1e-4 for x in o):
+                continue
+            for sg in (1, -1):
+                face = bb[j] if sg > 0 else bb[j + 3]
+                dd = (face - P[j]) * sg
+                if 0.008 <= dd <= 0.045 and (best is None or dd < best[0]):          # ห่างผิวเกินปกติ: แผ่นฐานหนาขึ้นเป็นแท่นรอง
+                    best = (dd, j, sg, face)
+    return best
+
+
+for eid, runs in list(_CD_RUNS.items()):
+    src = next(e for e in elements if e['id'] == eid)
+    fl = src['floor']
+    parts, n_cl = [], 0
+    for pa, pb, u, ba, bb_ in runs:
+        L = math.dist(pa, pb)
+        ts = []
+        if ba: ts.append(min(CLIP_FROM_BOX, L / 2))
+        if bb_: ts.append(max(L - CLIP_FROM_BOX, L / 2))
+        ts = sorted(set(round(t, 4) for t in ts))
+        if not ts and L >= 0.25:
+            ts = [L / 2]
+        if ts:                                                # เติมให้ห่างไม่เกิน 3 ม. (รวมจากปลายท่อ)
+            full = [0.0] + ts + [L]
+            ts2 = []
+            for t0, t1 in zip(full, full[1:]):
+                nadd = math.ceil((t1 - t0) / CLIP_MAX - 1e-9) - 1
+                ts2 += [t0 + (t1 - t0) * q / (nadd + 1) for q in range(1, nadd + 1)]
+            ts = sorted(ts + ts2)
+        k = [x for x in range(3) if abs(u[x]) > 0.5][0]
+        for t in ts:
+            P = _v(pa, u, t)
+            parts.append(dict(type='member', p0=[round(v, 4) for v in _v(P, u, -CLIP_W / 2)], p1=[round(v, 4) for v in _v(P, u, CLIP_W / 2)],
+                              w=0.027, d=0.027, shape='O', sec=dict(d=0.027)))          # แถบรัดท่อ
+            mt = _clip_mount(P, k, fl)
+            if mt:                                            # แผ่นฐานก้ามปู 0.04 x 0.015 หนา 3 มม. บนผิวยึด
+                dd, j, sg, face = mt
+                lo_, hi_ = [0.0] * 3, [0.0] * 3
+                third = [x for x in range(3) if x not in (k, j)][0]
+                lo_[k], hi_[k] = P[k] - CLIP_W / 2, P[k] + CLIP_W / 2
+                lo_[third], hi_[third] = P[third] - 0.02, P[third] + 0.02
+                lo_[j], hi_[j] = sorted((face, face - sg * max(0.003, dd - 0.0135)))
+                parts.append(dict(type='prism', poly=[[round(lo_[0], 4), round(lo_[1], 4)], [round(hi_[0], 4), round(lo_[1], 4)], [round(hi_[0], 4), round(hi_[1], 4)], [round(lo_[0], 4), round(hi_[1], 4)]],
+                                  z0=round(lo_[2], 4), t=round(hi_[2] - lo_[2], 4)))
+            n_cl += 1
+    if parts:
+        add(eid + '-CL', 'ไฟฟ้า', fl, 'A21', dict(type='multi', parts=parts),
+            name=f'ก้ามปูยึดท่อร้อยสาย 20 มม. ({eid})', assumed=True, qty=dict(count=n_cl, size='20 มม.', type='ก้ามปู PVC ขาว'))
 ASSUMPTIONS.append('ท่อร้อยสาย: PVC ขาว 20 มม. หนา 1.2 มม.; ข้อต่อโตนอก 24.5 มม.; งอโค้งรัศมี 60 มม. ปากสวม 20 มม.; งอสั้นขา 30 มม.; สามทางมีฝา; ข้อต่อเข้ากล่องยาว 30 มม.; กล่องพักสาย 4x4 นิ้ว 0.10x0.10x0.05 (ขนาดประมาณจากสินค้าทั่วไป)')
 
 # บานประตูห้องพัก: ใช้คอมโพเนนต์ door2.dxf ที่ผู้ใช้ใส่ในโมเดล (ขนาดช่อง 0.90x2.00) แทนแผ่นตัวแทน
