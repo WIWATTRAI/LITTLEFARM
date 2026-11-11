@@ -2236,12 +2236,15 @@ def _aabb(p):
 _EXT_SKIP = ('ไฟฟ้า', 'ประตูหน้าต่าง', 'ราวบันได', 'สุขภัณฑ์', 'โครงหลังคาเหล็ก', 'หลังคา', 'จมูกบันได', 'กระเบื้อง', 'บันได')
 _ext_boxes = []
 for e in elements:
-    if e['category'] in _EXT_SKIP or e['id'].startswith('SC-'):      # เหล็กบันไดหนีไฟ/เพลทฝัง ไม่ฉาบ
+    if e['category'] in _EXT_SKIP or (e['id'].startswith('SC-') and not e['id'].startswith('SC-EP-')) or e['id'].endswith('-DW'):
         continue
     for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]):
         b = _aabb(p)
         if b:
-            _ext_boxes.append((b, e['category']))
+            # เพลทฝังผิวเสา (SC-EP) ไม่ฉาบ: นับเป็นผิวปิดแล้ว (เหมือนงานฉาบ) ไม่เติมฉาบทับ
+            if e['id'].startswith('SC-EP-'):
+                b = [b[0] - 0.002, b[1] + 0.002, b[2] - 0.002, b[3] + 0.002, b[4], b[5]]
+            _ext_boxes.append((b, 'งานฉาบ' if e['id'].startswith('SC-EP-') else e['category']))
 _X_OUT0, _X_OUT1 = GX[0] - COL_SEC[1][0] / 2, GX[-1] + COL_SEC[1][0] / 2
 _EXT_FACES = [('A', 1, GY['A'], -1), ('F', 1, GY['F'], 1), ('G1', 0, _X_OUT0, -1), ('G10', 0, _X_OUT1, 1)]
 _EXT_T = {'คาน': PL_BEAM, 'เสา': PL_COL}
