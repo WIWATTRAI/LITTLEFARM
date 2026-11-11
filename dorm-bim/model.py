@@ -2345,6 +2345,24 @@ for e in elements:
     if e['category'] in ('พื้นทับหน้า', 'พื้น'):
         e['material'] = 'BIM-คอนกรีตเทพื้น'
 
+# ---------- คานรับชานพักบันไดหนีไฟ แนว C/10–C/11 และ D/10–D/11 ชั้น 2–5 (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
+# เหล็ก H200x100x7x11 (อ่านจาก "H100X2007*11" ที่ผู้ใช้ให้) ขึ้นด้วย Profile Builder, หลังคานต่ำกว่าระดับพื้นโถงทางเดิน 0.10 (FL - 0.10)
+# ปลายกริด 10: แนว C ชนหน้าเพลทฝัง SC-EP-10C (ผิวคอนกรีตเสา), แนว D ชนผิวฉาบเสา D/10 (ยังไม่มีเพลทฝัง); ปลายกริด 11: ชนผิวปีกเสา SC-11C/D
+LB_D, LB_B, LB_TW, LB_TF = 0.200, 0.100, 0.007, 0.011
+_a, _b, _w, _t = LB_D / 2, LB_B / 2, LB_TW / 2, LB_D / 2 - LB_TF
+LB_POLY = [(-_b, -_a), (_b, -_a), (_b, -_t), (_w, -_t), (_w, _t), (_b, _t), (_b, _a), (-_b, _a), (-_b, _t), (-_w, _t), (-_w, -_t), (-_b, -_t)]
+for r in ('C', 'D'):
+    x0 = _xf if r == 'C' else _xf + PL_COL
+    x1 = GX11 - SC_D / 2
+    for f in (2, 3, 4, 5):
+        zc = FL[f] - 0.10 - LB_D / 2
+        g = member((x0, GY[r], zc), (x1, GY[r], zc), LB_B, LB_D)
+        g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in LB_POLY]
+        add(f'SC-LB-{r}-F{f}', 'คาน', f, 'DONE', g,
+            name=f'คานเหล็กรับชานพักบันไดหนีไฟ H200x100x7x11 แนว {r}/10–{r}/11 ชั้น {f}', assumed=True,
+            qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * 21.3, 2)))
+        elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 if __name__ == '__main__':
