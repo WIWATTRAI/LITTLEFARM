@@ -2985,6 +2985,150 @@ for e in elements:
         e['material'] = '[Checker Plate]'
 ASSUMPTIONS.append('บันไดหนีไฟ: แม่บันได C200x100 ใช้ tw 7.5 tf 11 มม. (ผู้ใช้ไม่ระบุความหนา); 16 ลูกตั้งต่อชั้น (20 ซม.) ลูกนอน 27.5 ซม.; ผิวชานพักเหล็กลาย FL-0.096')
 
+# ช่องชาร์ฟห้องน้ำ: ตัดฉาบผิวเสา ข้างคาน และท้องคานส่วนที่อยู่ภายในช่องชาร์ฟออก ผิวในช่องไม่ฉาบ (ผู้ใช้สั่ง 12 พ.ย. 2569)
+def _shaft_boxes():
+    out = []
+    for f in (2, 3, 4, 5):
+        zs = FL[f] - DROP
+        zt = (FL[f + 1] - DROP - S1_T) if f < 5 else beam_soffit(f, 'edge', True)
+        for side in ('N', 'S'):
+            for i in range(9):
+                if side == 'N' and i == STAIR_BAY[0]:
+                    continue
+                g = wc_geo(i, side, f)
+                xa, xb = sorted((g['xg'], g['xg'] + g['dr'] * (SH_W - WALL_T)))
+                ya, yb = sorted((g['yr'], g['yr'] - g['s'] * (SH_D - WALL_T)))
+                out.append((f'F{f}-{side}{i+1}', xa, xb, ya, yb, zs, zt))
+    return out
+
+
+def _iv_minus(a0, a1, b0, b1):
+    """ช่วง [a0,a1] ลบช่วง [b0,b1]"""
+    r = []
+    if b0 > a0 + 1e-6:
+        r.append((a0, min(a1, b0)))
+    if b1 < a1 - 1e-6:
+        r.append((max(a0, b1), a1))
+    return [q for q in r if q[1] - q[0] > 1e-6]
+
+
+def _rect_minus_boxes(r, boxes):
+    """สี่เหลี่ยม r (x0,x1,y0,y1) ลบกล่อง boxes [(x0,x1,y0,y1)] คืนรายการรูปปิดทวนเข็ม (แตกเป็นช่องตาราง แล้วไล่ขอบรวม)"""
+    X = sorted({r[0], r[1], *[min(max(v, r[0]), r[1]) for b in boxes for v in b[:2]]})
+    Y = sorted({r[2], r[3], *[min(max(v, r[2]), r[3]) for b in boxes for v in b[2:4]]})
+    keep = set()
+    for i in range(len(X) - 1):
+        for j in range(len(Y) - 1):
+            cx, cy = (X[i] + X[i + 1]) / 2, (Y[j] + Y[j + 1]) / 2
+            if not any(b[0] < cx < b[1] and b[2] < cy < b[3] for b in boxes):
+                keep.add((i, j))
+    edges = {}                                       # ขอบทวนเข็มของแต่ละช่อง ตัดขอบที่ใช้ร่วมกันออก
+    for i, j in keep:
+        for p, q in (((i, j), (i + 1, j)), ((i + 1, j), (i + 1, j + 1)), ((i + 1, j + 1), (i, j + 1)), ((i, j + 1), (i, j))):
+            if (q, p) in edges:
+                del edges[(q, p)]
+            else:
+                edges[(p, q)] = True
+    nxt = {}
+    for p, q in edges:
+        nxt.setdefault(p, []).append(q)
+    loops = []
+    while nxt:
+        s = next(iter(nxt)); loop = [s]; p = s
+        while True:
+            q = nxt[p].pop()
+            if not nxt[p]:
+                del nxt[p]
+            if q == s:
+                break
+            loop.append(q); p = q
+        pts = [(X[i], Y[j]) for i, j in loop]
+        pts = [pts[k] for k in range(len(pts))                      # ตัดจุดกลางแนวตรง
+               if not ((pts[k - 1][0] == pts[k][0] == pts[(k + 1) % len(pts)][0]) or (pts[k - 1][1] == pts[k][1] == pts[(k + 1) % len(pts)][1]))]
+        loops.append(pts)
+    return loops
+
+
+def _cut_plaster_boxes(e, boxes):
+    """ตัดชิ้นฉาบของ e ส่วนที่อยู่ในกล่อง boxes [(tag,x0,x1,y0,y1,z0,z1)] คืน (พื้นที่ฉาบที่ตัดออก ม.2, tags ที่ตัด)"""
+    g = e['geom']
+    parts = g['parts'] if g['type'] == 'multi' else [g]
+    removed, tags = 0.0, set()
+    for box in boxes:                                # คาน: ชิ้นฉาบเป็น member ตัดทีละกล่อง (ชิ้นที่เหลือยังเป็น member)
+        _, X0, X1, Y0, Y1, Z0, Z1 = box
+        new = []
+        for p in parts:
+            if p['type'] == 'member' and not p.get('shape') and not p.get('trim'):
+                a, b = p['p0'], p['p1']
+                ax = 0 if abs(a[1] - b[1]) < 1e-6 and abs(a[2] - b[2]) < 1e-6 else (1 if abs(a[0] - b[0]) < 1e-6 and abs(a[2] - b[2]) < 1e-6 else None)
+                if ax is not None:
+                    cx = 1 - ax
+                    L0, L1 = sorted((a[ax], b[ax]))
+                    c, zc, w, d = a[cx], a[2], p['w'], p['d']
+                    BL = (X0, X1) if ax == 0 else (Y0, Y1)
+                    BC = (Y0, Y1) if ax == 0 else (X0, X1)
+                    if L1 > BL[0] + 1e-6 and L0 < BL[1] - 1e-6 and c + w / 2 > BC[0] + 1e-6 and c - w / 2 < BC[1] - 1e-6 \
+                            and zc + d / 2 > Z0 + 1e-6 and zc - d / 2 < Z1 - 1e-6:
+                        tags.add(box[0])
+                        def seg(l0, l1, cc, ww, p=p, a=a, ax=ax, cx=cx):
+                            q0, q1 = list(a), list(a)
+                            q0[ax], q1[ax] = round(l0, 4), round(l1, 4)
+                            q0[cx] = q1[cx] = round(cc, 4)
+                            return dict(p, p0=q0, p1=q1, w=round(ww, 4))
+                        for l0, l1 in _iv_minus(L0, L1, *BL):
+                            new.append(seg(l0, l1, c, w))
+                        la, lb = max(L0, BL[0]), min(L1, BL[1])
+                        keep = _iv_minus(c - w / 2, c + w / 2, *BC)
+                        for c0, c1 in keep:
+                            new.append(seg(la, lb, (c0 + c1) / 2, c1 - c0))
+                        # ข้างคาน (แผ่นตั้ง) ตัดทั้งแผ่น; ท้องคาน (แผ่นนอน) ตัดเฉพาะความกว้างส่วนที่อยู่ในช่อง
+                        removed += (lb - la) * (d if d > w else (w - sum(c1 - c0 for c0, c1 in keep)))
+                        continue
+            new.append(p)
+        parts = new
+    new = []
+    for p in parts:                                  # เสา: ชิ้นฉาบเป็น prism สี่เหลี่ยม ตัดทุกกล่องพร้อมกัน แยกเป็นช่วงระดับ z
+        if p['type'] == 'prism' and len(p['poly']) == 4 and not p.get('holes'):
+            xs = [q[0] for q in p['poly']]; ys = [q[1] for q in p['poly']]
+            r = (min(xs), max(xs), min(ys), max(ys))
+            z0, z1 = p['z0'], p['z0'] + p['t']
+            hb = [bx for bx in boxes if r[1] > bx[1] + 1e-6 and r[0] < bx[2] - 1e-6 and r[3] > bx[3] + 1e-6 and r[2] < bx[4] - 1e-6
+                  and z1 > bx[5] + 1e-6 and z0 < bx[6] - 1e-6]
+            if hb:
+                zz = sorted({z0, z1, *[min(max(v, z0), z1) for bx in hb for v in bx[5:7]]})
+                bands = []
+                for za, zb in zip(zz, zz[1:]):
+                    act = tuple(sorted(bx[1:5] for bx in hb if bx[5] < (za + zb) / 2 < bx[6]))
+                    if bands and bands[-1][2] == act:
+                        bands[-1][1] = zb
+                    else:
+                        bands.append([za, zb, act])
+                for za, zb, act in bands:
+                    if not act:
+                        new.append(dict(p, z0=round(za, 4), t=round(zb - za, 4)))
+                        continue
+                    for poly in _rect_minus_boxes(r, act):
+                        new.append(dict(type='prism', poly=[[round(x, 4), round(y, 4)] for x, y in poly], z0=round(za, 4), t=round(zb - za, 4)))
+                    for bx in act:                   # ผิวฉาบรอบเสาส่วนที่อยู่ในช่อง (2 ด้านที่หันเข้าช่อง)
+                        removed += ((min(r[1], bx[1]) - max(r[0], bx[0])) + (min(r[3], bx[3]) - max(r[2], bx[2]))) * (zb - za)
+                tags.update(bx[0] for bx in hb)
+                continue
+        new.append(p)
+    if tags:
+        e['geom'] = new[0] if len(new) == 1 else dict(type='multi', parts=new)
+    return removed, tags
+
+
+_SHAFT_BOXES = _shaft_boxes()
+for _e in elements:
+    if _e['category'] != 'งานฉาบ' or not re.match(r'^PL-(C\d|B)', _e['id']):
+        continue
+    _rm, _tags = _cut_plaster_boxes(_e, _SHAFT_BOXES)
+    if _tags:
+        _e['qty']['area'] = round(max(0.0, _e['qty']['area'] - _rm), 3)
+        _e['shaft_cut'] = sorted(_tags)
+ASSUMPTIONS.append('ช่องชาร์ฟห้องน้ำ: ไม่ฉาบผิวเสา ข้างคาน และท้องคานส่วนที่อยู่ภายในช่องชาร์ฟ (ผู้ใช้สั่ง 12 พ.ย. 2569)')
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 if __name__ == '__main__':
