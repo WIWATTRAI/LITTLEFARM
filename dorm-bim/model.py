@@ -2384,18 +2384,6 @@ for r in ('C', 'D'):
             qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
         elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
 
-# คานแนวเสา 10/M–11/M (ห่างแนว C 3.25 ม.) ขนาดเดียวกับคานรับชานพัก H200x100x7x11 ชั้น 2–5 (ผู้ใช้สั่ง 11 พ.ย. 2569)
-# หลังคาน FL - 0.10 ปลายชนผิวปีกเสาด้านใน
-for f in (2, 3, 4, 5):
-    x0, x1 = SC_X10M + SC_D / 2, GX11 - SC_D / 2
-    zc = FL[f] - 0.10 - LB_D / 2
-    g = member((x0, FS_YM, zc), (x1, FS_YM, zc), LB_B, LB_D)
-    g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(b, 5)] for a, b in LB_POLY]
-    add(f'SC-LB-M-F{f}', 'คาน', f, 'DONE', g,
-        name=f'คานเหล็ก H200x100x7x11 แนวเสา 10/M–11/M (ห่างแนว C 3.25 ม.) ชั้น {f}', assumed=True,
-        qty=dict(length=round(x1 - x0, 3), section='H200x100x7x11', weight_kg=round((x1 - x0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
-    elements[-1]['material'] = 'BIM-เหล็กโครงสร้าง'
-
 # ---------- บันไดเหล็กหนีไฟ (ผู้ใช้สั่ง 11 พ.ย. 2569) ----------
 # บันไดพับกลับ 2 ช่วงต่อชั้น ระหว่างชานพักชั้น (แนว C–D บนคาน SC-LB) กับชานพักกลาง (ติดแนวเสา 10/M, 11/M)
 # แม่บันไดเหล็กรางน้ำ C200x100 (tw 7.5, tf 11 มม. ผมสมมติ) หันหน้าเรียบเข้าหาขั้น ขั้นเหล็กลาย 4 มม. พับรูป Z เชื่อมชนหน้าเรียบ
@@ -2548,6 +2536,16 @@ for f in (1, 2, 3, 4):
         x += 0.40
     _steel_add(f'FS-MLF-F{f}', 'บันได', f, dict(type='multi', parts=fr),
                f'โครงชานพักกลาง เหล็กกล่อง 125x75x3.2 ขอบหน้า ซอย 100x50x3.2 @0.40 ชั้น {f}→{f+1} (ขอบข้าง/หลังคือแม่บันได)', dict(pieces=len(fr)))
+    # คานรับพื้นชานพักครึ่งชั้น แนวเสา 10/M–11/M (ห่างแนว C 3.25 ม.) H200x100x7x11 ขนาดเดียวกับคานรับชานพักชั้น (ผู้ใช้สั่ง 11 พ.ย. 2569)
+    # หลังคานเสมอใต้เหล็กลาย (zm - 0.004) ปลายชนผิวปีกเสาด้านใน; ขอบปีกคานชนปลายปีกแม่บันไดขอบหลังชานพัก (เชื่อมรับ)
+    bx0, bx1 = SC_X10M + SC_D / 2, GX11 - SC_D / 2
+    by = FS_YL0 - LB_B / 2
+    bz = zm - ST_T - LB_D / 2
+    g = member((bx0, by, bz), (bx1, by, bz), LB_B, LB_D)
+    g['shape'] = 'POLY'; g['poly2d'] = [[round(a, 5), round(c, 5)] for a, c in LB_POLY]
+    _steel_add(f'SC-LB-M-F{f}', 'คาน', f, g,
+               f'คานเหล็กรับพื้นชานพักครึ่งชั้น H200x100x7x11 แนวเสา 10/M–11/M ชั้น {f}→{f+1}',
+               dict(length=round(bx1 - bx0, 3), section='H200x100x7x11', weight_kg=round((bx1 - bx0) * (2 * LB_B * LB_TF + (LB_D - 2 * LB_TF) * LB_TW) * 7850, 2)))
 
 # ชานพักชั้น 2–5 แนว C–D: เหล็กลายบนโครงกล่องระหว่างคาน SC-LB
 for f in (2, 3, 4, 5):
