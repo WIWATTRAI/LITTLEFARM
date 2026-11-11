@@ -196,9 +196,13 @@ def _gs_edge(y, dy):
     return pts
 
 
-_gs_poly = _gs_edge(GY['B'], _cd0) + _gs_edge(GY['E'], -_cd0)[::-1]
+# เสาแนว C/D ที่กริด 1 และ 10 อยู่ชิดขอบพื้นด้านสกัด: เป็นรอยบากที่ขอบ ไม่ใช่ช่องใน
+_xr, _xl = GX[-1] - _cw0, GX[0] + _cw0
+_gs_right = [p for r in ('C', 'D') for p in ((x_max, GY[r] - _cd0), (_xr, GY[r] - _cd0), (_xr, GY[r] + _cd0), (x_max, GY[r] + _cd0))]
+_gs_left = [p for r in ('D', 'C') for p in ((x_min, GY[r] + _cd0), (_xl, GY[r] + _cd0), (_xl, GY[r] - _cd0), (x_min, GY[r] - _cd0))]
+_gs_poly = _gs_edge(GY['B'], _cd0) + _gs_right + _gs_edge(GY['E'], -_cd0)[::-1] + _gs_left
 _gs_holes = [[(GX[i] - _cw0, GY[r] - _cd0), (GX[i] + _cw0, GY[r] - _cd0), (GX[i] + _cw0, GY[r] + _cd0), (GX[i] - _cw0, GY[r] + _cd0)]
-             for i in range(10) for r in ('C', 'D')]
+             for i in range(1, 9) for r in ('C', 'D')]
 _gs_geo = prism(_gs_poly, FL[1] - GS_T, GS_T)
 _gs_geo['holes'] = [[[round(x, 4), round(y, 4)] for x, y in h] for h in _gs_holes]
 _gs_area = (x_max - x_min) * (GY['E'] - GY['B']) - 20 * (2 * _cw0) * _cd0 - 20 * (2 * _cw0) * (2 * _cd0)   # หักรอยบากเสาขอบ 20 ต้น (ลึก cd) และช่องเสาใน 20 ต้น
