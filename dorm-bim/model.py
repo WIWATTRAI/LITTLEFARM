@@ -1801,6 +1801,9 @@ EL_LAMP = (0.63, 0.07, 0.05)     # โคมรางตัวยู T8 1x18 (�
 EL_SW_Z, EL_CU_Z = 1.20, 2.10    # ความสูงสวิตช์ / ขอบล่างตู้ จากพื้น (ผู้ใช้กำหนด)
 EL_SO_Z = 0.30                   # ความสูงเต้ารับ (ผู้ใช้กำหนด)
 EL_WL = (0.30, 0.08, 0.08)       # โคมติดผนังห้องน้ำ/หลังห้อง (ยาว, ยื่น, สูง) ค่าสมมติ รอรุ่น
+BEND_R, SOCK = 0.06, 0.02               # งอโค้ง: รัศมีแนวศูนย์ 60 มม. ปากสวม 20 มม. (ค่าสมมติจากรูป)
+JB_SQ = (0.10, 0.10, 0.05)              # กล่องพักสาย 4x4 นิ้ว (กว้าง, สูง, ลึก)
+JB_DROP = 0.17                   # ลดระดับ JB1/JB2 ผนังหน้าห้องจากแนวท่อใต้คาน ให้ท่อออกบนกล่องแล้วหักเข้าห้องด้วยงอโค้งได้ (ผู้ใช้สั่ง 12 พ.ย. 2569)
 CEIL5 = 2.60                     # ฝ้าชั้น 5 สูงจากพื้น (ผู้ใช้กำหนด)
 ASSUMPTIONS.append('วงจรหลังห้อง: สวิตช์ 2 ตัวอยู่กึ่งกลางผนังกลางระหว่าง D3 กับ D2; เต้ารับคู่บนผนังกั้นห้องฝั่ง D2 ถัดผิวเสา 0.15 ม.; ท่อแยกจากโคมกลางห้องไปตามท้องพื้นถึงผนังห้อง–ระเบียง ลอดผนังที่แนว B5 ไปโคมห้องน้ำ/หลังห้อง (ตำแหน่งตีความจากคำสั่งผู้ใช้); โคมติดผนัง 0.30x0.08x0.08 ม. ยังไม่ระบุรุ่น')
 ASSUMPTIONS.append('งานไฟฟ้าห้องพัก: ท่อ PVC Ø1/2" เดินลอยบนผนังที่ระดับใต้ท้องคาน 0.03 ม. (ชั้น 5 เหนือฝ้า +0.05), ลอดใต้คานแล้วขึ้นข้างคานไปตามท้องพื้นถึงโคมกลางห้อง; ขนาดบล็อก 2x4 นิ้ว ตู้ 0.25x0.22x0.10 และ junction box Ø0.08 เป็นค่าสมมติ; ฝั่งมือจับประตูตรวจจากบานประตูในโมเดล (ฝั่ง +x ของช่องประตูทุกห้อง)')
@@ -1843,10 +1846,13 @@ for f in (2, 3, 4, 5):
             x_l = (GX[i] + GX[i + 1]) / 2
             y_rmface = (yB if side == 'N' else yE) - dn * (WALL_T / 2 + PL_T)
             y_l = (y_rmface + yface) / 2
-            # ท่อเข้าที่ปลายโคม โคมคงทิศเดิม (เดิมท่อเข้ากลางด้านยาว) (ผู้ใช้เลือก 12 พ.ย. 2569): CD1 เข้าปลาย +x, CD2 ออกปลาย -x
-            # ชั้น 2–4 ท่อตามท้องพื้นเลยปลายโคม 0.10 แล้วหักเข้าหน้าปลายโคม; ชั้น 5 เหนือฝ้าลงเข้าหลังโคมห่างปลาย 0.05
-            x_e1, x_e2 = x_l + EL_LAMP[0] / 2, x_l - EL_LAMP[0] / 2
-            x_a, x_b = (x_e1 + 0.10, x_e2 - 0.10) if f < 5 else (x_e1 - 0.05, x_e2 + 0.05)
+            # แนวท่อ (ผู้ใช้สั่ง 12 พ.ย. 2569): JB1/JB2 ผนังหน้าห้องลดระดับลง ท่อออกบนกล่องตรงขึ้นแล้วหักเข้าห้อง;
+            # ท่อเพดานแนวตรงจาก JB2 (เหนือสวิตช์) ถึงผนังหลังห้อง มี JB4 บนเพดานก่อนถึงแนวโคม แยกท่อไฟแสงสว่างเข้าโคมด้านใกล้แนวท่อด้านเดียว
+            x_ln = x_sw
+            zj = zr - JB_DROP if f < 5 else zr                                  # ศูนย์กล่อง JB1/JB2 (ชั้น 5 กล่องอยู่เหนือฝ้า)
+            zh = zr if f < 5 else zr + JB_DROP                                   # แนวท่อแนวนอนออกจากหน้าห้อง
+            x_bq = x_ln + JB_SQ[0] / 2 + BEND_R + SOCK                           # แนวท่อแยกเข้าโคม (ใกล้ปลายโคมด้านแนวท่อ)
+            y4 = y_l - dn * (0.13 if f < 5 else 0.0)                             # JB4: ชั้น 2–4 ก่อนถึงแนวโคม, ชั้น 5 เหนือฝ้าตรงแนวโคม
             cu_top = fl + EL_CU_Z + EL_CU[1]
             el_add(f'EL-{tag}-CU', f, el_box_on_x_wall(x_cu, yface, dn, fl + EL_CU_Z + EL_CU[1] / 2, *EL_CU),
                    f'ตู้คอนซูมเมอร์ 4 วงจร เหนือประตูเข้า {room}', dict(count=1, model='RACER เมน+4 ช่อง', bottom=EL_CU_Z))
@@ -1857,18 +1863,26 @@ for f in (2, 3, 4, 5):
                                              ceil - EL_LAMP[2], EL_LAMP[2]),
                    f'โคมรางตัวยู T8 1x18W กลางห้อง {room}', dict(count=1, model='T8 1x18 หลอดเดี่ยว'))
             for k, xj in ((1, x_cu), (2, x_sw)):
-                el_add(f'EL-{tag}-JB{k}', f, el_pipe((xj, yface, zr), (xj, yface + dn * EL_JB[1], zr)) | dict(w=EL_JB[0], d=EL_JB[0], sec=dict(d=EL_JB[0])),
+                el_add(f'EL-{tag}-JB{k}', f, el_pipe((xj, yface, zj), (xj, yface + dn * EL_JB[1], zj)) | dict(w=EL_JB[0], d=EL_JB[0], sec=dict(d=EL_JB[0])),
                        f'Junction box {k} {room}', dict(count=1, size='Ø0.08'))
-            # ท่อ: ตู้→JB1 (ขึ้น), JB1→JB2 (ตามผนัง), JB2→สวิตช์ (ลง), JB2→โคมกลางห้อง
-            yb = (yC + B2_DY['C'] - 0.125 - 0.03) if side == 'N' else (yD + B2_DY['D'] + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
-            runs = [((x_cu, yp, cu_top), (x_cu, yp, zr)), ((x_cu, yp, zr), (x_sw, yp, zr)),
-                    ((x_sw, yp, zr), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zr), (x_a, yp, zr))]
-            ye = y_l - dn * EL_LAMP[1] / 2
             if f < 5:
                 zc = ceil - EL_PIPE / 2
-                runs += [((x_a, yp, zr), (x_a, yb, zr)), ((x_a, yb, zr), (x_a, yb, zc)), ((x_a, yb, zc), (x_a, y_l, zc)), ((x_a, y_l, zc), (x_e1, y_l, zc))]
+                j4z0 = ceil - JB_SQ[2]                                           # กล่องติดท้องพื้น
             else:
-                runs += [((x_a, yp, zr), (x_a, y_l, zr)), ((x_a, y_l, zr), (x_a, y_l, ceil))]
+                j4z0 = zh - JB_SQ[2] / 2                                         # กล่องเหนือฝ้า
+            el_add(f'EL-{tag}-JB4', f, prism([(x_ln - JB_SQ[0] / 2, y4 - JB_SQ[1] / 2), (x_ln + JB_SQ[0] / 2, y4 - JB_SQ[1] / 2), (x_ln + JB_SQ[0] / 2, y4 + JB_SQ[1] / 2),
+                                              (x_ln - JB_SQ[0] / 2, y4 + JB_SQ[1] / 2)], j4z0, JB_SQ[2]),
+                   f'กล่องพักสายสี่เหลี่ยม 4x4 นิ้ว (junction box) บนเพดาน แยกท่อเข้าโคมกลางห้อง {room}',
+                   dict(count=1, size='4x4 นิ้ว 0.10x0.10x0.05', type='กล่องพักสาย PVC ขาว สี่เหลี่ยม'))
+            # ท่อ: ตู้→JB1 (ขึ้น), JB1→JB2 (ตามผนัง), JB2→สวิตช์ (ลง), JB2→โคมกลางห้อง
+            yb = (yC + B2_DY['C'] - 0.125 - 0.03) if side == 'N' else (yD + B2_DY['D'] + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
+            runs = [((x_cu, yp, cu_top), (x_cu, yp, zj)), ((x_cu, yp, zj), (x_sw, yp, zj)),
+                    ((x_sw, yp, zj), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zj), (x_ln, yp, zh))]
+            if f < 5:
+                runs += [((x_ln, yp, zh), (x_ln, yb, zh)), ((x_ln, yb, zh), (x_ln, yb, zc)), ((x_ln, yb, zc), (x_ln, y4, zc)),
+                         ((x_ln, y4, zc), (x_bq, y4, zc)), ((x_bq, y4, zc), (x_bq, y_l - dn * EL_LAMP[1] / 2, zc))]       # JB4 -> ด้านข้างโคมใกล้ปลาย
+            else:
+                runs += [((x_ln, yp, zh), (x_ln, y4, zh)), ((x_ln, y4, zh), (x_bq, y4, zh)), ((x_bq, y4, zh), (x_bq, y4, ceil))]  # JB4 -> ลงหลังโคม
             L = sum(math.dist(a, b) for a, b in runs)
             el_add(f'EL-{tag}-CD1', f, dict(type='multi', parts=[el_pipe(a, b) for a, b in runs]),
                    f'ท่อร้อยสาย PVC ขาว Ø1/2" ตู้–สวิตช์–โคมกลางห้อง {room}', dict(length=round(L, 3), size='PVC 1/2"'))
@@ -1908,10 +1922,10 @@ for f in (2, 3, 4, 5):
             # ท่อ: โคมกลางห้อง → ตามท้องพื้น/เหนือฝ้า ถึงผนังห้อง–ระเบียง → JB3 → สวิตช์ 2 ตัว / เต้ารับคู่ / โคมห้องน้ำ / โคมหลังห้อง
             if f < 5:
                 yb2 = y_bal + sr * (0.125 + 0.03)                                # พ้นผิวคานแนว B/E ด้านในห้อง
-                r2 = [((x_e2, y_l, zc), (x_b, y_l, zc)), ((x_b, y_l, zc), (x_b, yb2, zc)), ((x_b, yb2, zc), (x_b, yb2, zr)), ((x_b, yb2, zr), (x_b, yq, zr))]
+                r2 = [((x_ln, y4, zc), (x_ln, yb2, zc)), ((x_ln, yb2, zc), (x_ln, yb2, zr)), ((x_ln, yb2, zr), (x_ln, yq, zr))]
             else:
-                r2 = [((x_b, y_l, ceil), (x_b, y_l, zr)), ((x_b, y_l, zr), (x_b, yq, zr))]
-            r2 += [((x_b, yq, zr), (x_s2, yq, zr)),                                                   # ตามผนังถึง JB3
+                r2 = [((x_ln, y4, zh), (x_ln, yq, zh)), ((x_ln, yq, zh), (x_ln, yq, zr))]
+            r2 += [((x_ln, yq, zr), (x_s2, yq, zr)),                                                   # ตามผนังถึง JB3
                    ((x_s2, yq, zr), (x_s2, yq, fl + EL_SW_Z + EL_BOX[1] / 2))]                         # ลงสวิตช์ 2 ตัว
             xcp = xb - dr * (cwf + COL_PL + off)                                 # อ้อมผิวฉาบเสาฝั่ง D2
             ycp = y_bal + sr * (cdf + COL_PL + off)
@@ -1935,9 +1949,7 @@ for f in (2, 3, 4, 5):
 # ท่อเข้ากล่องใช้ข้อต่อเข้ากล่อง, ท่อยาวเกิน 4 ม. ใส่ข้อต่อตรงทุก 4 ม. (ความยาวท่อต่อเส้น)
 CD_OD, CD_T = EL_PIPE, 0.0012            # ท่อ 20 มม. หนา 1.2 มม. (ค่าสมมติ)
 FT_OD, FT_T = 0.0245, 0.00225           # ตัวข้อต่อ (สวมนอกท่อ) โตนอก 24.5 มม.
-BEND_R, SOCK = 0.06, 0.02               # งอโค้ง: รัศมีแนวศูนย์ 60 มม. ปากสวม 20 มม. (ค่าสมมติจากรูป)
 SHORT_L, TEE_L, CON_L, CPL_L, STICK = 0.03, 0.035, 0.03, 0.045, 4.0
-JB_SQ = (0.10, 0.10, 0.05)              # กล่องพักสาย 4x4 นิ้ว (กว้าง, สูง, ลึก)
 def _cd_poly(od, t, n=24):
     r, ri = od / 2, od / 2 - t
     return ([[round(r * math.cos(2 * math.pi * k / n), 5), round(r * math.sin(2 * math.pi * k / n), 5)] for k in range(n)],
@@ -1993,13 +2005,14 @@ def _conduit(segs, boxes, obst=()):
                     s0, s1 = sorted((p[k], q[k])); p0_, q0_ = (p, q) if p[k] <= q[k] else (q, p)
                     if s1 <= lo[k] + 1e-6 or s0 >= hi[k] - 1e-6:
                         nxt.append((p, q)); continue
-                    mount = bx[7] == k
+                    # ออกทางผิวหลังกล่องที่ติดผนัง = ลอดเข้าผนัง (ไม่ใส่ข้อต่อเข้ากล่อง); ออกทางผิวหน้า/ข้าง = ใส่ข้อต่อเข้ากล่อง
+                    mnt = lambda v: bx[7] == k and (bx[8] is None and bx[6] == 'LP' or bx[8] is not None and abs(v - bx[8]) < 1e-6)
                     if s0 < lo[k]:
                         e_ = tuple(lo[k] if j == k else p0_[j] for j in range(3)); nxt.append((p0_, e_))
-                        ends[R4(e_)] = (bx[6], mount)
+                        ends[R4(e_)] = (bx[6], mnt(lo[k]))
                     if s1 > hi[k]:
                         e_ = tuple(hi[k] if j == k else p0_[j] for j in range(3)); nxt.append((e_, q0_))
-                        ends[R4(e_)] = (bx[6], mount)
+                        ends[R4(e_)] = (bx[6], mnt(hi[k]))
                 else:
                     nxt.append((p, q))
             pieces = nxt
@@ -2018,7 +2031,7 @@ def _conduit(segs, boxes, obst=()):
                 k = ax_of(p, ns[0])
                 for bx in boxes:
                     if all(bx[j] - 1e-4 <= p[j] <= bx[j + 3] + 1e-4 for j in range(3)):
-                        ends[p] = (bx[6], bx[7] == k); break
+                        ends[p] = (bx[6], bx[7] == k and (bx[8] is None and bx[6] == 'LP' or bx[8] is not None and abs(p[k] - bx[8]) < 1e-4)); break
             node[p] = ('box', ends.get(p)) if p in ends else ('end', None)
         elif len(ns) == 2:
             node[p] = ('pass', None) if colin(us[0], us[1]) else ('bend', us)
@@ -2107,8 +2120,9 @@ def _conduit(segs, boxes, obst=()):
             if run is None:
                 cnt['odd_tee'] += 1; continue
             i, j = run; br = [k_ for k_ in range(3) if k_ not in run][0]
-            parts.append(_cd_mem([_v(p, us[i], TEE_L), _v(p, us[j], TEE_L)], _CD_FIT))
-            parts.append(_cd_mem([p, _v(p, us[br], TEE_L)], _CD_FIT))
+            arm = lambda k_: min(TEE_L, min(math.dist(p, q) for q in adj[p] if math.dist(unit(p, q), us[k_]) < 1e-6))
+            parts.append(_cd_mem([_v(p, us[i], arm(i)), _v(p, us[j], arm(j))], _CD_FIT))
+            parts.append(_cd_mem([p, _v(p, us[br], arm(br))], _CD_FIT))
             g = member(_v(p, us[i], 0.022), _v(p, us[j], 0.022), 0.032, 0.032); g['pb'] = True      # ตัวสามทางมีฝา
             g['p0'] = [round(v, 4) for v in g['p0']]; g['p1'] = [round(v, 4) for v in g['p1']]
             parts.append(g); cnt['tee'] += 1
@@ -2130,34 +2144,84 @@ _CD_RUNS = {}
 _E = {e['id']: e for e in elements}
 for e in list(elements):
     m_ = re.match(r'^EL-(F\d-[NS]\d)-JB\d$', e['id'])
-    if m_:                                                       # กล่องกลม -> กล่องสี่เหลี่ยม 4x4 นิ้ว
+    if m_ and e['geom']['type'] == 'member':                                                       # กล่องกลม -> กล่องสี่เหลี่ยม 4x4 นิ้ว
         g = e['geom']; p0, p1 = g['p0'], g['p1']
         dn_ = 1 if p1[1] > p0[1] else -1
         e['geom'] = el_box_on_x_wall(p0[0], p0[1], dn_, p0[2], *JB_SQ)
         e['name'] = e['name'].replace('Junction box', 'กล่องพักสายสี่เหลี่ยม 4x4 นิ้ว (junction box)')
         e['qty'] = dict(count=1, size='4x4 นิ้ว 0.10x0.10x0.05', type='กล่องพักสาย PVC ขาว สี่เหลี่ยม')
+_WALLBB = collections.defaultdict(list)                   # ชั้น -> กรอบผนัง/ฉาบผนัง (หาผิวหลังกล่องที่ติดผนัง)
+for e in elements:
+    if e['category'] in ('ผนัง', 'งานฉาบ') and e['id'].startswith('W-'):
+        for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]):
+            if p['type'] == 'prism':
+                xs = [q[0] for q in p['poly']]; ys = [q[1] for q in p['poly']]
+                _WALLBB[e['floor']].append((min(xs), min(ys), p['z0'], max(xs), max(ys), p['z0'] + p['t']))
+
+
+def _seg_dist(q, a, b):
+    ab = [b[i] - a[i] for i in range(3)]; L2 = sum(v * v for v in ab)
+    t = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, sum((q[i] - a[i]) * ab[i] for i in range(3)) / L2))
+    return math.dist(q, [a[i] + t * ab[i] for i in range(3)])
+
+
+def _cd_qty(parts):
+    """นับปริมาณจากชิ้นท่อ/ข้อต่อ"""
+    pipes = [p for p in parts if p.get('w') == CD_OD and not p.get('path')]
+    plen = sum(math.dist(p['p0'], p['p1']) for p in pipes)
+    fit = [p for p in parts if p.get('w') == FT_OD and not p.get('path')]
+    return dict(length=round(plen, 3), size='PVC ขาว 20 มม.', pipe_pieces=sum(max(1, math.ceil(math.dist(p['p0'], p['p1']) / STICK - 1e-9)) for p in pipes),
+                sticks_4m=math.ceil(plen / STICK), bend_90=sum(1 for p in parts if p.get('path') and len(p['path']) > 3),
+                short_elbow=sum(1 for p in parts if p.get('path') and len(p['path']) == 3), tee_cover=sum(1 for p in parts if p.get('pb')),
+                coupling=sum(1 for p in fit if abs(math.dist(p['p0'], p['p1']) - CPL_L) < 1e-4),
+                box_connector=sum(1 for p in parts if p.get('w') and abs(p['w'] - 0.030) < 1e-6 and not p.get('pb')))
+
+
+_CD_GROUPS = collections.defaultdict(list)
 for e in elements:
     m_ = re.match(r'^EL-(F\d-[NS]\d)-CD\d$', e['id'])
-    if not m_:
-        continue
-    tag_ = m_.group(1)
+    if m_:
+        _CD_GROUPS[m_.group(1)].append(e)
+for tag_, els in _CD_GROUPS.items():                       # ท่อวงจรในห้องเดียวกันคิดรวม (จุดแยกสามทางระหว่าง CD1/CD2) แล้วแบ่งชิ้นคืนตามแนวเดิม
     boxes = []
-    for k_, kd in (('JB1', 'JB'), ('JB2', 'JB'), ('JB3', 'JB'), ('SW1', 'SW'), ('SW2', 'SW'), ('SO1', 'SO'), ('CU', 'CU'), ('LP1', 'LP'), ('LP2', 'LP'), ('LP3', 'LP')):
+    for k_, kd in (('JB1', 'JB'), ('JB2', 'JB'), ('JB3', 'JB'), ('JB4', 'JB'), ('SW1', 'SW'), ('SW2', 'SW'), ('SO1', 'SO'), ('CU', 'CU'), ('LP1', 'LP'), ('LP2', 'LP'), ('LP3', 'LP')):
         b_ = _E.get(f'EL-{tag_}-{k_}')
         if not b_:
             continue
         g = b_['geom']; xs = [q[0] for q in g['poly']]; ys = [q[1] for q in g['poly']]
         bb_ = (min(xs), min(ys), g['z0'], max(xs), max(ys), g['z0'] + g['t'])
-        # ผิวที่ยึดผนัง = ด้านความลึกกล่อง (แกนแนวนอนที่สั้นกว่า): ท่อที่ออกทางแกนนี้คือลอดเข้าผนัง ไม่ใส่ข้อต่อเข้ากล่อง
-        mount_ax, mount_v = (0 if (bb_[3] - bb_[0]) < (bb_[4] - bb_[1]) else 1), None
+        # ผิวที่ยึดผนัง = ด้านความลึกกล่อง (แกนแนวนอนที่สั้นกว่า) ฝั่งที่ชนผนัง: ท่อที่ออกทางผิวนี้คือลอดเข้าผนัง ไม่ใส่ข้อต่อเข้ากล่อง
+        mount_ax = 0 if (bb_[3] - bb_[0]) < (bb_[4] - bb_[1]) else 1
+        mount_v = None
+        if kd != 'LP':
+            zc_ = (bb_[2] + bb_[5]) / 2
+            for v_, dv in ((bb_[mount_ax], -0.005), (bb_[mount_ax + 3], 0.005)):
+                q_ = [(bb_[0] + bb_[3]) / 2, (bb_[1] + bb_[4]) / 2, zc_]; q_[mount_ax] = v_ + dv
+                if any(all(w[j] <= q_[j] <= w[j + 3] for j in range(3)) for w in _WALLBB[els[0]['floor']]):
+                    mount_v = v_
         boxes.append(bb_ + (kd, mount_ax, mount_v))
-    segs = [(p['p0'], p['p1']) for p in e['geom']['parts']]
-    parts, qty, cnt = _conduit(segs, boxes, _COL_OBST[e['floor']])
-    e['geom'] = dict(type='multi', parts=parts)
-    e['qty'] = qty
-    e['name'] = e['name'].replace('PVC ขาว Ø1/2"', 'PVC ขาว 20 มม. (Profile Builder) พร้อมข้อต่อ')
+    own = {e['id']: [(p['p0'], p['p1']) for p in e['geom']['parts']] for e in els}
+    segs = [sg for e in els for sg in own[e['id']]]
+    parts, qty, cnt = _conduit(segs, boxes, _COL_OBST[els[0]['floor']])
+    def owner(pt):
+        d = {k: min(_seg_dist(pt, a, b) for a, b in v) for k, v in own.items()}
+        return min(sorted(d), key=lambda k: d[k] - (1e-3 if k.endswith('CD1') else 0.0))
+    def refpt(p):
+        if p.get('path'):
+            return p['path'][len(p['path']) // 2]
+        return [(a + b) / 2 for a, b in zip(p['p0'], p['p1'])]
+    split = collections.defaultdict(list)
+    for p in parts:
+        split[owner(refpt(p))].append(p)
+    runs_ = collections.defaultdict(list)
+    for r_ in cnt['_runs']:
+        runs_[owner([(a + b) / 2 for a, b in zip(r_[0], r_[1])])].append(r_)
+    for e in els:
+        e['geom'] = dict(type='multi', parts=split[e['id']])
+        e['qty'] = _cd_qty(split[e['id']])
+        e['name'] = e['name'].replace('PVC ขาว Ø1/2"', 'PVC ขาว 20 มม. (Profile Builder) พร้อมข้อต่อ')
+        _CD_RUNS[e['id']] = runs_[e['id']]
     _CD_WARN.update({k: v for k, v in cnt.items() if k in ('tight', 'odd_tee', 'cross')})
-    _CD_RUNS[e['id']] = cnt['_runs']
 # ก้ามปูยึดท่อ (ผู้ใช้สั่ง 12 พ.ย. 2569): ตัวแรกห่างกล่องไม่เกิน 1 ม. (วาง 0.30), ระยะระหว่างตัวไม่เกิน 3 ม.;
 # ท่อตรงทุกช่วงที่ยาวตั้งแต่ 0.25 ม. มีอย่างน้อย 1 ตัว; แผ่นฐานติดผิวผนัง/ท้องพื้นที่ใกล้ท่อที่สุด (ถ้าไม่มีผิวใกล้ เช่น เหนือฝ้าชั้น 5 มีแต่แถบรัด)
 CLIP_FROM_BOX, CLIP_MAX, CLIP_W = 0.30, 3.0, 0.015
