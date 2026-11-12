@@ -1346,6 +1346,8 @@ wall_task = {1: 'A04', 2: 'A04', 3: 'A04', 4: 'A05', 5: 'A06'}
 D2_W = 1.25                 # ประตูบานเลื่อนออกระเบียง D2 (A106)
 D2_H = 1.80                 # ความสูงประตูด้านหลังคงไว้ 1.80 ม. (ผู้ใช้กำหนด 10 พ.ย. 2569)
 SH_W, SH_D = 0.475, 0.65    # ช่องชาร์ฟห้องน้ำ ขนาดนอก (แนว x จากผิวผนังกริด, แนว y จากผิวผนังห้อง) ตาม A106
+WC_CEIL = 2.50                # ฝ้าทีบาร์ห้องน้ำสูงจากผิวกระเบื้อง (ผู้ใช้กำหนด 12 พ.ย. 2569)
+SV_W, SV_H, SV_SILL, SV_C, SV_FW = 0.40, 0.80, 1.60, 0.357, 0.03   # ช่อง service ผนังชาร์ฟ: กว้าง สูง ขอบล่างจากผิวกระเบื้อง ศูนย์จากผิวฉาบผนังห้อง วงกบไม้กว้าง (ผู้ใช้กำหนด 12 พ.ย. 2569; วงกบ 3 ซม. ผมกำหนด)
 W1_MODEL = 'KPA หน้าต่างบานกระจกซ้อน อะลูมิเนียม 60x40 ซม. สีขาว (HomePro 1310766)'
 
 
@@ -1423,10 +1425,31 @@ for f in (2, 3, 4, 5):
                          ox(bx0, 1), ox(bx1, -1), zs, beam_soffit(f, 'edge', True), tw, tp,
                          [((bx0 + bx1) / 2, 1.20, 0.90, 1.20)], name=f'ผนังนอกระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ช่องชาร์ฟท่อแนวดิ่งมุมห้องน้ำชิดเสาฝั่งแนวห้อง (A106 ขนาดนอก 0.475x0.65) ผนังบล็อก 2 ด้าน ก่อถึงใต้พื้นชั้นบน
-                zt = (FL[f + 1] - DROP - S1_T) if f < 5 else beam_soffit(f, 'edge', True)
+                # ก่อผนังชาร์ฟสูงกว่าฝ้าทีบาร์ห้องน้ำ 0.20 (ฝ้าสูง 2.50 จากผิวกระเบื้อง) ไม่ก่อถึงท้องพื้น (ผู้ใช้สั่ง 12 พ.ย. 2569)
+                zt = zs + 0.02 + WC_CEIL + 0.20
                 # ก่อชนผิวบล็อกผนังห้อง/ผนังกริด (เดิมหยุดที่ผิวฉาบ) (ตรวจ 12 พ.ย. 2569)
-                add_wall(f'W-{tag}-SH1', f, 'y', g['xg'] + g['dr'] * (SH_W - WALL_T / 2), *lo(g['yr'] + g['s'] * PL_T, g['yr'] - g['s'] * SH_D), zs, zt, tw, tp,
-                         name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านข้าง')
+                # ช่อง service 0.40x0.80 เข้าช่องชาร์ฟ ที่ผนัง SH1 ด้านห้องน้ำ ตามกรอบตัวอย่างผู้ใช้ (ศูนย์ห่างผิวฉาบผนังห้อง 0.357)
+                # ขอบล่าง 1.60 ขอบบน 2.40 จากผิวกระเบื้อง (ใต้ฝ้า 0.10) วงกบไม้ + บานไม้บานพับ (ผู้ใช้สั่ง 12 พ.ย. 2569)
+                sv_c, sv_sill = g['yr'] - g['s'] * SV_C, 0.02 + SV_SILL
+                x_sh1 = g['xg'] + g['dr'] * (SH_W - WALL_T / 2)
+                add_wall(f'W-{tag}-SH1', f, 'y', x_sh1, *lo(g['yr'] + g['s'] * PL_T, g['yr'] - g['s'] * SH_D), zs, zt, tw, tp,
+                         [(sv_c, SV_W, sv_sill, SV_H)], name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านข้าง (ช่อง service {SV_W:.2f}x{SV_H:.2f})')
+                _ov = next(e for e in elements if e['id'] == f'W-{tag}-SH1-O1')
+                ya_, yb_ = sv_c - SV_W / 2, sv_c + SV_W / 2
+                o0_, o1_ = zs + sv_sill, zs + sv_sill + SV_H
+                dr_ = g['dr']
+                _ov.update(name=f'บานเปิดช่อง service ไม้ บานพับ {SV_W - 2 * SV_FW:.2f}x{SV_H - 2 * SV_FW:.2f} ผนังชาร์ฟ ชั้น {f} ห้อง {side}{i+1}',
+                           geom=rect_prism('y', x_sh1, ya_ + SV_FW, yb_ - SV_FW, o0_ + SV_FW, o1_ - SV_FW, dr_ * (WALL_T / 2 + PL_T - 0.01), 0.02))
+                _ov['qty'] = dict(count=1, width=round(SV_W - 2 * SV_FW, 3), height=round(SV_H - 2 * SV_FW, 3), type='บานไม้เปิด บานพับ 2 ตัว', opening=f'{SV_W:.2f}x{SV_H:.2f}')
+                fd, fo = WALL_T + PL_T, dr_ * (PL_T / 2)                          # วงกบลึกจากผิวบล็อกด้านในช่องถึงผิวฉาบด้านห้องน้ำ
+                hz = dr_ * (WALL_T / 2 + PL_T + 0.003)
+                add(f'W-{tag}-SH1-SVF', 'ประตูหน้าต่าง', f, 'A18', dict(type='multi', parts=[
+                    rect_prism('y', x_sh1, ya_, ya_ + SV_FW, o0_, o1_, fo, fd), rect_prism('y', x_sh1, yb_ - SV_FW, yb_, o0_, o1_, fo, fd),
+                    rect_prism('y', x_sh1, ya_ + SV_FW, yb_ - SV_FW, o1_ - SV_FW, o1_, fo, fd), rect_prism('y', x_sh1, ya_ + SV_FW, yb_ - SV_FW, o0_, o0_ + SV_FW, fo, fd),
+                    rect_prism('y', x_sh1, ya_ + SV_FW - 0.006, ya_ + SV_FW + 0.006, o0_ + 0.12, o0_ + 0.18, hz, 0.006),
+                    rect_prism('y', x_sh1, ya_ + SV_FW - 0.006, ya_ + SV_FW + 0.006, o1_ - 0.18, o1_ - 0.12, hz, 0.006)]),
+                    name=f'วงกบไม้ช่อง service {SV_W:.2f}x{SV_H:.2f} + บานพับ 2 ตัว ผนังชาร์ฟ ชั้น {f} ห้อง {side}{i+1}', assumed=True,
+                    qty=dict(count=1, frame_length=round(2 * SV_H + 2 * (SV_W - 2 * SV_FW), 3), frame_section=f'{SV_FW:.2f}x{fd:.3f}', hinges=2))
                 add_wall(f'W-{tag}-SH2', f, 'x', g['yr'] - g['s'] * (SH_D - WALL_T / 2), *lo(g['xg'] - g['dr'] * PL_T, g['xg'] + g['dr'] * (SH_W - WALL_T)), zs, zt, tw, tp,
                          name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านหน้า')
                 # ฉาบผนังชาร์ฟเฉพาะด้านในห้องน้ำ ผิวด้านในช่องชาร์ฟไม่ฉาบ (ผู้ใช้สั่ง 12 พ.ย. 2569)
