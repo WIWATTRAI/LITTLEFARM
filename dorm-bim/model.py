@@ -1424,9 +1424,10 @@ for f in (2, 3, 4, 5):
                          [((bx0 + bx1) / 2, 1.20, 0.90, 1.20)], name=f'ผนังนอกระเบียง ชั้น {f} ห้อง {side}{i+1}')
                 # ช่องชาร์ฟท่อแนวดิ่งมุมห้องน้ำชิดเสาฝั่งแนวห้อง (A106 ขนาดนอก 0.475x0.65) ผนังบล็อก 2 ด้าน ก่อถึงใต้พื้นชั้นบน
                 zt = (FL[f + 1] - DROP - S1_T) if f < 5 else beam_soffit(f, 'edge', True)
-                add_wall(f'W-{tag}-SH1', f, 'y', g['xg'] + g['dr'] * (SH_W - WALL_T / 2), *lo(g['yr'], g['yr'] - g['s'] * SH_D), zs, zt, tw, tp,
+                # ก่อชนผิวบล็อกผนังห้อง/ผนังกริด (เดิมหยุดที่ผิวฉาบ) (ตรวจ 12 พ.ย. 2569)
+                add_wall(f'W-{tag}-SH1', f, 'y', g['xg'] + g['dr'] * (SH_W - WALL_T / 2), *lo(g['yr'] + g['s'] * PL_T, g['yr'] - g['s'] * SH_D), zs, zt, tw, tp,
                          name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านข้าง')
-                add_wall(f'W-{tag}-SH2', f, 'x', g['yr'] - g['s'] * (SH_D - WALL_T / 2), *lo(g['xg'], g['xg'] + g['dr'] * (SH_W - WALL_T)), zs, zt, tw, tp,
+                add_wall(f'W-{tag}-SH2', f, 'x', g['yr'] - g['s'] * (SH_D - WALL_T / 2), *lo(g['xg'] - g['dr'] * PL_T, g['xg'] + g['dr'] * (SH_W - WALL_T)), zs, zt, tw, tp,
                          name=f'ผนังช่องชาร์ฟห้องน้ำ ชั้น {f} ห้อง {side}{i+1} ด้านหน้า')
                 # ฉาบผนังชาร์ฟเฉพาะด้านในห้องน้ำ ผิวด้านในช่องชาร์ฟไม่ฉาบ (ผู้ใช้สั่ง 12 พ.ย. 2569)
                 for sid, ax, wc_dir in (('SH1', 0, g['dr']), ('SH2', 1, -g['s'])):
@@ -1435,7 +1436,14 @@ for f in (2, 3, 4, 5):
                     wcen = (min(p[ax] for p in wall['geom']['parts'][0]['poly']) + max(p[ax] for p in wall['geom']['parts'][0]['poly'])) / 2
                     pe['geom']['parts'] = [p for p in pe['geom']['parts']
                                            if (sum(q[ax] for q in p['poly']) / len(p['poly']) - wcen) * wc_dir > 0]
-                    pe['qty']['area'] = round(pe['qty']['area'] / 2, 3)
+                    # ฉาบด้านห้องน้ำ: SH1 เริ่มที่ผิวฉาบผนังห้อง, SH2 เริ่มที่ผิวฉาบผนังกริดและเลยไปปิดหัวผนัง SH1 ถึงผิวฉาบ SH1 (มุมต่อเนื่อง) (12 พ.ย. 2569)
+                    rng = lo(g['yr'], g['yr'] - g['s'] * SH_D) if sid == 'SH1' else lo(g['xg'], g['xg'] + g['dr'] * (SH_W + PL_T))
+                    for p_ in pe['geom']['parts']:
+                        p_['poly'] = [[min(max(q[0], rng[0]), rng[1]) if ax == 1 else q[0], min(max(q[1], rng[0]), rng[1]) if ax == 0 else q[1]] for q in p_['poly']]
+                        if ax == 1:
+                            xs_ = [q[0] for q in p_['poly']]
+                            p_['poly'] = [[rng[0] if q[0] == min(xs_) else rng[1], q[1]] for q in p_['poly']]
+                    pe['qty']['area'] = round(sum((max(q[1 - ax] for q in p_['poly']) - min(q[1 - ax] for q in p_['poly'])) * p_['t'] for p_ in pe['geom']['parts']), 3)
                     pe['name'] = f'ฉาบ W-{tag}-{sid} (เฉพาะด้านในห้องน้ำ)'
                 # สุขภัณฑ์: โถส้วมหลังชิดผนังกริดที่มุมผนังนอก, อ่างล้างหน้าติดผนังชาร์ฟ (A106)
                 wx0, wx1 = g['xg'], g['xg'] + g['dr'] * 0.70
@@ -1830,11 +1838,15 @@ for f in (2, 3, 4, 5):
             else:
                 ceil = fl + CEIL5
                 zr = ceil + 0.05                                         # ชั้น 5 เดินเหนือฝ้าทีบาร์
-            x_cu = GX[i] + 0.75                                          # กึ่งกลางประตูเข้า
+            x_cu = GX[i] + col_w(f) + 0.01 + EL_CU[0] / 2                # ชิดผิวฉาบเสาหน้าห้องฝั่งประตู (เดิมกึ่งกลางประตู) (ผู้ใช้สั่ง 12 พ.ย. 2569)
             x_sw = GX[i] + 1.20 + 0.15 + EL_BOX[0] / 2                   # ฝั่งมือจับ (+x) ห่างวงกบ 0.15
             x_l = (GX[i] + GX[i + 1]) / 2
             y_rmface = (yB if side == 'N' else yE) - dn * (WALL_T / 2 + PL_T)
             y_l = (y_rmface + yface) / 2
+            # ท่อเข้าที่ปลายโคม โคมคงทิศเดิม (เดิมท่อเข้ากลางด้านยาว) (ผู้ใช้เลือก 12 พ.ย. 2569): CD1 เข้าปลาย +x, CD2 ออกปลาย -x
+            # ชั้น 2–4 ท่อตามท้องพื้นเลยปลายโคม 0.10 แล้วหักเข้าหน้าปลายโคม; ชั้น 5 เหนือฝ้าลงเข้าหลังโคมห่างปลาย 0.05
+            x_e1, x_e2 = x_l + EL_LAMP[0] / 2, x_l - EL_LAMP[0] / 2
+            x_a, x_b = (x_e1 + 0.10, x_e2 - 0.10) if f < 5 else (x_e1 - 0.05, x_e2 + 0.05)
             cu_top = fl + EL_CU_Z + EL_CU[1]
             el_add(f'EL-{tag}-CU', f, el_box_on_x_wall(x_cu, yface, dn, fl + EL_CU_Z + EL_CU[1] / 2, *EL_CU),
                    f'ตู้คอนซูมเมอร์ 4 วงจร เหนือประตูเข้า {room}', dict(count=1, model='RACER เมน+4 ช่อง', bottom=EL_CU_Z))
@@ -1850,13 +1862,13 @@ for f in (2, 3, 4, 5):
             # ท่อ: ตู้→JB1 (ขึ้น), JB1→JB2 (ตามผนัง), JB2→สวิตช์ (ลง), JB2→โคมกลางห้อง
             yb = (yC + B2_DY['C'] - 0.125 - 0.03) if side == 'N' else (yD + B2_DY['D'] + 0.125 + 0.03)  # พ้นผิวคานแนว C/D ด้านในห้อง
             runs = [((x_cu, yp, cu_top), (x_cu, yp, zr)), ((x_cu, yp, zr), (x_sw, yp, zr)),
-                    ((x_sw, yp, zr), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zr), (x_l, yp, zr))]
+                    ((x_sw, yp, zr), (x_sw, yp, fl + EL_SW_Z + EL_BOX[1] / 2)), ((x_sw, yp, zr), (x_a, yp, zr))]
             ye = y_l - dn * EL_LAMP[1] / 2
             if f < 5:
                 zc = ceil - EL_PIPE / 2
-                runs += [((x_l, yp, zr), (x_l, yb, zr)), ((x_l, yb, zr), (x_l, yb, zc)), ((x_l, yb, zc), (x_l, ye, zc))]
+                runs += [((x_a, yp, zr), (x_a, yb, zr)), ((x_a, yb, zr), (x_a, yb, zc)), ((x_a, yb, zc), (x_a, y_l, zc)), ((x_a, y_l, zc), (x_e1, y_l, zc))]
             else:
-                runs += [((x_l, yp, zr), (x_l, y_l, zr)), ((x_l, y_l, zr), (x_l, y_l, ceil))]
+                runs += [((x_a, yp, zr), (x_a, y_l, zr)), ((x_a, y_l, zr), (x_a, y_l, ceil))]
             L = sum(math.dist(a, b) for a, b in runs)
             el_add(f'EL-{tag}-CD1', f, dict(type='multi', parts=[el_pipe(a, b) for a, b in runs]),
                    f'ท่อร้อยสาย PVC ขาว Ø1/2" ตู้–สวิตช์–โคมกลางห้อง {room}', dict(length=round(L, 3), size='PVC 1/2"'))
@@ -1896,10 +1908,10 @@ for f in (2, 3, 4, 5):
             # ท่อ: โคมกลางห้อง → ตามท้องพื้น/เหนือฝ้า ถึงผนังห้อง–ระเบียง → JB3 → สวิตช์ 2 ตัว / เต้ารับคู่ / โคมห้องน้ำ / โคมหลังห้อง
             if f < 5:
                 yb2 = y_bal + sr * (0.125 + 0.03)                                # พ้นผิวคานแนว B/E ด้านในห้อง
-                r2 = [((x_l, y_l + dn * EL_LAMP[1] / 2, zc), (x_l, yb2, zc)), ((x_l, yb2, zc), (x_l, yb2, zr)), ((x_l, yb2, zr), (x_l, yq, zr))]
+                r2 = [((x_e2, y_l, zc), (x_b, y_l, zc)), ((x_b, y_l, zc), (x_b, yb2, zc)), ((x_b, yb2, zc), (x_b, yb2, zr)), ((x_b, yb2, zr), (x_b, yq, zr))]
             else:
-                r2 = [((x_l, y_l, zr), (x_l, yq, zr))]
-            r2 += [((x_l, yq, zr), (x_s2, yq, zr)),                                                   # ตามผนังถึง JB3
+                r2 = [((x_b, y_l, ceil), (x_b, y_l, zr)), ((x_b, y_l, zr), (x_b, yq, zr))]
+            r2 += [((x_b, yq, zr), (x_s2, yq, zr)),                                                   # ตามผนังถึง JB3
                    ((x_s2, yq, zr), (x_s2, yq, fl + EL_SW_Z + EL_BOX[1] / 2))]                         # ลงสวิตช์ 2 ตัว
             xcp = xb - dr * (cwf + COL_PL + off)                                 # อ้อมผิวฉาบเสาฝั่ง D2
             ycp = y_bal + sr * (cdf + COL_PL + off)
@@ -1950,7 +1962,7 @@ def _v(a, b, t=1.0):
     return tuple(x + t * y for x, y in zip(a, b))
 
 
-def _conduit(segs, boxes):
+def _conduit(segs, boxes, obst=()):
     """segs: [(p, q)] แนวแกน; boxes: [(x0,y0,z0,x1,y1,z1, kind, mount_axis, mount_val)]
     คืน (parts, qty) ท่อ+ข้อต่อ"""
     R4 = lambda p: tuple(round(v, 4) for v in p)
@@ -2033,6 +2045,17 @@ def _conduit(segs, boxes):
         runs.append((chain[0], chain[-1]))
     ext = lambda t: {'bend': BEND_R + SOCK, 'short': SHORT_L, 'tee': TEE_L}.get(t, 0.0)
     kind = {p: ('bend' if v[0] == 'bend' else v[0]) for p, v in node.items()}
+    # งอโค้งที่แนวโค้งตัดเข้าผิวเสา (อ้อมมุมเสา) -> ใช้งอสั้นแทน (ตรวจ 12 พ.ย. 2569)
+    for p, v in node.items():
+        if v[0] != 'bend':
+            continue
+        ua, ub = v[1]
+        c = _v(_v(p, ua, BEND_R), ub, BEND_R)
+        arc = [tuple(cc - BEND_R * (math.cos(th) * b_ + math.sin(th) * a_) for cc, a_, b_ in zip(c, ua, ub))
+               for th in (math.pi / 2 * k_ / 16 for k_ in range(17))]
+        rr = FT_OD / 2
+        if any(all(ob[j] - rr < q[j] < ob[j + 3] + rr for j in range(3)) for q in arc for ob in obst):
+            kind[p] = 'short'
     for _ in range(6):                                           # ระยะไม่พอสำหรับงอโค้ง -> งอสั้น
         ch = False
         for a, b in runs:
@@ -2098,6 +2121,11 @@ def _conduit(segs, boxes):
 
 
 _CD_WARN = collections.Counter()
+_COL_OBST = collections.defaultdict(list)                   # ผิวฉาบเสาแต่ละชั้น (กรอบ) สำหรับตรวจงอโค้งชนมุมเสา
+for e in elements:
+    if e['category'] == 'งานฉาบ' and re.match(r'^PL-C\d', e['id']) and e['geom']['type'] == 'prism':
+        g = e['geom']; xs = [q[0] for q in g['poly']]; ys = [q[1] for q in g['poly']]
+        _COL_OBST[e['floor']].append((min(xs), min(ys), g['z0'], max(xs), max(ys), g['z0'] + g['t']))
 _CD_RUNS = {}
 _E = {e['id']: e for e in elements}
 for e in list(elements):
@@ -2124,7 +2152,7 @@ for e in elements:
         mount_ax, mount_v = (0 if (bb_[3] - bb_[0]) < (bb_[4] - bb_[1]) else 1), None
         boxes.append(bb_ + (kd, mount_ax, mount_v))
     segs = [(p['p0'], p['p1']) for p in e['geom']['parts']]
-    parts, qty, cnt = _conduit(segs, boxes)
+    parts, qty, cnt = _conduit(segs, boxes, _COL_OBST[e['floor']])
     e['geom'] = dict(type='multi', parts=parts)
     e['qty'] = qty
     e['name'] = e['name'].replace('PVC ขาว Ø1/2"', 'PVC ขาว 20 มม. (Profile Builder) พร้อมข้อต่อ')
@@ -3127,6 +3155,102 @@ for _e in elements:
     if _tags:
         _e['qty']['area'] = round(max(0.0, _e['qty']['area'] - _rm), 3)
         _e['shaft_cut'] = sorted(_tags)
+# ผนังห้องน้ำ (ผนังช่องชาร์ฟ SH1/SH2, ผนังนอก OWC, ผนัง B5 ช่วงต่อ WCX) พร้อมเสาเอ็น/คานเอ็น/ฉาบ: ตัดส่วนที่ชนคาน เสา พื้น ออก (ตรวจ 12 พ.ย. 2569)
+# และตัดฉาบผนังห้อง/ผนังกริดช่วงที่ผนังช่องชาร์ฟก่อชนเข้าไป
+def _bb3(p):
+    if p['type'] == 'prism':
+        xs = [q[0] for q in p['poly']]; ys = [q[1] for q in p['poly']]
+        return (min(xs), min(ys), p['z0'], max(xs), max(ys), p['z0'] + p['t'])
+    if p['type'] == 'member' and 'p0' in p and not p.get('shape') and not p.get('path'):
+        a, b = p['p0'], p['p1']; w, d = p.get('w', 0), p.get('d', 0)
+        if abs(a[1] - b[1]) < 1e-6 and abs(a[2] - b[2]) < 1e-6:
+            return (min(a[0], b[0]), a[1] - w / 2, a[2] - d / 2, max(a[0], b[0]), a[1] + w / 2, a[2] + d / 2)
+        if abs(a[0] - b[0]) < 1e-6 and abs(a[2] - b[2]) < 1e-6:
+            return (a[0] - w / 2, min(a[1], b[1]), a[2] - d / 2, a[0] + w / 2, max(a[1], b[1]), a[2] + d / 2)
+        if abs(a[0] - b[0]) < 1e-6 and abs(a[1] - b[1]) < 1e-6:
+            return (a[0] - w / 2, a[1] - d / 2, min(a[2], b[2]), a[0] + w / 2, a[1] + d / 2, max(a[2], b[2]))
+    return None
+
+
+def _box3_minus(b, c):
+    """กล่อง b ลบกล่อง c (x0,y0,z0,x1,y1,z1) คืนรายการกล่อง"""
+    if not all(min(b[j + 3], c[j + 3]) - max(b[j], c[j]) > 1e-6 for j in range(3)):
+        return [b]
+    out, cur = [], list(b)
+    for j in range(3):
+        if c[j] > cur[j] + 1e-6:
+            q = list(cur); q[j + 3] = c[j]; out.append(tuple(q)); cur[j] = c[j]
+        if c[j + 3] < cur[j + 3] - 1e-6:
+            q = list(cur); q[j] = c[j + 3]; out.append(tuple(q)); cur[j + 3] = c[j + 3]
+    return out
+
+
+def _vol(b):
+    return (b[3] - b[0]) * (b[4] - b[1]) * (b[5] - b[2])
+
+
+def _cut_elem_boxes(e, cut):
+    """ตัดชิ้น prism สี่เหลี่ยมของ e ด้วยกล่อง cut คืนสัดส่วนปริมาตรที่เหลือ (None = ไม่ชน)"""
+    g = e['geom']
+    parts = g['parts'] if g['type'] == 'multi' else [g]
+    new, v0, v1, hit = [], 0.0, 0.0, False
+    for p in parts:
+        b = _bb3(p) if p['type'] == 'prism' and len(p['poly']) == 4 else None
+        if b is None:
+            new.append(p); continue
+        v0 += _vol(b)
+        hs = [c for c in cut if all(min(b[j + 3], c[j + 3]) - max(b[j], c[j]) > 0.002 for j in range(3))]
+        if not hs:
+            new.append(p); v1 += _vol(b); continue
+        hit = True
+        pcs = [b]
+        for c in hs:
+            pcs = [r for q in pcs for r in _box3_minus(q, c)]
+        for q in pcs:
+            if min(q[3] - q[0], q[4] - q[1], q[5] - q[2]) < 1e-4:
+                continue
+            new.append(dict(type='prism', poly=[[round(q[0], 4), round(q[1], 4)], [round(q[3], 4), round(q[1], 4)], [round(q[3], 4), round(q[4], 4)], [round(q[0], 4), round(q[4], 4)]],
+                            z0=round(q[2], 4), t=round(q[5] - q[2], 4)))
+            v1 += _vol(q)
+    if not hit:
+        return None
+    e['geom'] = new[0] if len(new) == 1 else dict(type='multi', parts=new)
+    return v1 / v0 if v0 else 1.0
+
+
+_STR_BOX = collections.defaultdict(list)                  # ชั้น -> กรอบคาน/เสา/พื้น
+for _e in elements:
+    if _e['category'] in ('คาน', 'เสา', 'พื้น', 'พื้นสำเร็จรูป', 'พื้นทับหน้า'):
+        for _p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']]):
+            _b = _bb3(_p)
+            if _b:
+                for _f in (_e['floor'] - 1, _e['floor'], _e['floor'] + 1):
+                    _STR_BOX[_f].append(_b)
+_WC_FIX = collections.Counter()
+_SH_MAS = collections.defaultdict(list)
+for _e in elements:
+    _m = re.match(r'^W-F(\d)-[NS]\d-(SH1|SH2|OWC|WCX)(-PL|-TB\d+|-TC\d+)?$', _e['id'])
+    if not _m:
+        continue
+    if _m.group(2) in ('SH1', 'SH2') and _m.group(3) in (None, '-TB1', '-TB2', '-TC1', '-TC2') and not (_m.group(3) or '').startswith('-PL'):
+        _SH_MAS[_e['floor']] += [b for b in (_bb3(p) for p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']])) if b]
+    _r = _cut_elem_boxes(_e, _STR_BOX[_e['floor']])
+    if _r is not None:
+        _q = _e['qty']
+        for _k in ('area', 'concrete'):
+            if _k in _q:
+                _q[_k] = round(_q[_k] * _r, 4 if _k == 'concrete' else 3)
+        if 'blocks' in _q:
+            _q['blocks'] = round(_q['area'] * BLOCK_PER_M2)
+        _WC_FIX[_m.group(2) + (_m.group(3) or '')] += 1
+for _e in elements:                                          # ฉาบผนังห้อง/ผนังกริดช่วงหัวผนังช่องชาร์ฟ
+    if _e['category'] == 'งานฉาบ' and re.match(r'^W-F\d-', _e['id']) and not re.match(r'^W-F\d-[NS]\d-SH\d-PL$', _e['id']):
+        _r = _cut_elem_boxes(_e, _SH_MAS[_e['floor']])
+        if _r is not None:
+            _e['qty']['area'] = round(_e['qty']['area'] * _r, 3)
+            _WC_FIX['wallPL:' + re.sub(r'F\d-|\d', '', _e['id'])] += 1
+ASSUMPTIONS.append('ผนังห้องน้ำ/ช่องชาร์ฟ: ตัดผนังก่อ เสาเอ็น คานเอ็น และฉาบ ส่วนที่ชนคาน เสา พื้น ออก; ผนังช่องชาร์ฟก่อชนผิวบล็อกผนังห้องและผนังกริด; ฉาบด้านห้องน้ำปิดหัวผนังที่มุมช่องชาร์ฟต่อเนื่อง (12 พ.ย. 2569)')
+
 ASSUMPTIONS.append('ช่องชาร์ฟห้องน้ำ: ไม่ฉาบผิวเสา ข้างคาน และท้องคานส่วนที่อยู่ภายในช่องชาร์ฟ (ผู้ใช้สั่ง 12 พ.ย. 2569)')
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
