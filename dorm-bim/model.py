@@ -1926,11 +1926,12 @@ for f in (2, 3, 4, 5):
             x_pw = gw(xb) - dr * wf                                                  # ผิวผนังกั้นห้องฝั่ง D2
             cwf, cdf = col_w(f), col_d(f)
             COL_PL = 0.01                                                        # ฉาบเสา 1 ซม.
-            y_so = y_bal + sr * (cdf + 0.15 + EL_BOX[0] / 2)                     # ถัดผิวเสา 0.15
-            y0, y1 = y_so - EL_BOX[0] / 2, y_so + EL_BOX[0] / 2
-            xa, xz = sorted((x_pw, x_pw - dr * EL_BOX[2]))
-            el_add(f'EL-{tag}-SO1', f, prism([(xa, y0), (xz, y0), (xz, y1), (xa, y1)], fl + EL_SO_Z - EL_BOX[1] / 2, EL_BOX[1]),
-                   f'เต้ารับคู่ 1 กล่อง มุมห้องก่อนออกระเบียง {room}', dict(count=1, box='บล็อกลอย 2x4 นิ้ว', outlets=2, height=EL_SO_Z))
+            # เต้ารับคู่ย้ายมาติดผิวเสาด้านหน้า (หันเข้าห้อง) ชิดมุมเสาฝั่ง D2 ห่าง 0.02 ลดระยะท่อและข้อต่อ (ผู้ใช้สั่ง 12 พ.ย. 2569; เดิมอยู่ผนังกั้นห้องถัดเสา)
+            # ข้างเสาฝั่ง D2 มีผนังเหลือ 1 ซม. ถึงขอบประตู D2 จึงติดผิวเสาด้านหน้า
+            x_so = xb - dr * (cwf + COL_PL) + dr * (EL_BOX[0] / 2 + 0.02)
+            y_cf = y_bal + sr * (cdf + COL_PL)                                   # ผิวฉาบเสาด้านหน้า (ด้านห้อง)
+            el_add(f'EL-{tag}-SO1', f, el_box_on_x_wall(x_so, y_cf, sr, fl + EL_SO_Z, *EL_BOX),
+                   f'เต้ารับคู่ 1 กล่อง ผิวเสาหลังห้องฝั่งประตูระเบียง {room}', dict(count=1, box='บล็อกลอย 2x4 นิ้ว', outlets=2, height=EL_SO_Z))
             zs_ = fl - DROP
             y_lw = (g['yo'] + g['yr']) / 2                                       # กึ่งกลางผนัง B5 ในแถบห้องน้ำ/ระเบียง
             lamps = ((3, -1, 2.40, 'โคมห้องน้ำ ผนังกั้นห้องน้ำ–ระเบียง ฝั่งห้องน้ำ'), (4, 1, 2.50, 'โคมหลังห้อง ผนังกั้นห้องน้ำ–ระเบียง ฝั่งระเบียง'))
@@ -1952,9 +1953,8 @@ for f in (2, 3, 4, 5):
                    ((x_s2, yq, zr), (x_s2, yq, fl + EL_SW_Z + EL_BOX[1] / 2))]                         # ลงสวิตช์ 2 ตัว
             xcp = xb - dr * (cwf + COL_PL + off)                                 # อ้อมผิวฉาบเสาฝั่ง D2
             ycp = y_bal + sr * (cdf + COL_PL + off)
-            xpp = x_pw - dr * off
-            r2 += [((x_s2, yq, zr), (xcp, yq, zr)), ((xcp, yq, zr), (xcp, ycp, zr)), ((xcp, ycp, zr), (xpp, ycp, zr)),
-                   ((xpp, ycp, zr), (xpp, y_so, zr)), ((xpp, y_so, zr), (xpp, y_so, fl + EL_SO_Z + EL_BOX[1] / 2))]
+            r2 += [((x_s2, yq, zr), (xcp, yq, zr)), ((xcp, yq, zr), (xcp, ycp, zr)), ((xcp, ycp, zr), (x_so, ycp, zr)),
+                   ((x_so, ycp, zr), (x_so, ycp, fl + EL_SO_Z + EL_BOX[1] / 2))]
             for k, sgn, hz, nm in lamps:                                         # ลอดผนังที่แนว B5 แล้วตามผิวผนัง B5 ถึงโคม
                 xl_ = b5 + sgn * dr * (wf + off)                                 # แนวท่อบนผิวผนัง B5
                 xpen = xl_                                                       # จุดลอดผนังแนวเดียวกับท่อบนผิวผนัง B5 (พ้นเสาเอ็น 0.05) ไม่หักหลบ 18 มม. (12 พ.ย. 2569)
