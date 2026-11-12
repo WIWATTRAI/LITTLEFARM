@@ -2277,8 +2277,12 @@ def mirror_y(g):
     elif t == 'member':
         for k in ('p0', 'p1'):
             g[k][1] = round(Y - g[k][1], 4)
+        if g.get('path'):                        # แนว chain หลายจุด (ข้อต่องอ/งอสั้น) ต้องกลับแกน y ด้วย (แก้ 12 พ.ย. 2569: เดิมไม่กลับ ข้อต่อไปอยู่ผิดตำแหน่ง)
+            g['path'] = [[q[0], round(Y - q[1], 4), q[2]] for q in g['path']]
         if g.get('shape') == 'POLY':             # หน้าตัดไม่สมมาตร: กลับทิศ chain ให้ด้านหน้าหน้าตัดยังหันทิศเดิมหลังกลับแกน y
             g['p0'], g['p1'] = g['p1'], g['p0']
+            if g.get('path'):
+                g['path'] = g['path'][::-1]
             if g.get('trim'):
                 g['trim'] = g['trim'][::-1]
         for c in g.get('trim') or []:
