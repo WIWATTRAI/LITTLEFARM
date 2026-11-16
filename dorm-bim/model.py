@@ -3344,6 +3344,60 @@ ASSUMPTIONS.append('ผนังห้องน้ำ/ช่องชาร์�
 
 ASSUMPTIONS.append('ช่องชาร์ฟห้องน้ำ: ไม่ฉาบผิวเสา ข้างคาน และท้องคานส่วนที่อยู่ภายในช่องชาร์ฟ (ผู้ใช้สั่ง 12 พ.ย. 2569)')
 
+# ---- ระบบท่อน้ำเสียแนวดิ่งในช่องชาร์ฟห้องน้ำ (ผู้ใช้สั่ง 16 พ.ย. 2569) ----
+# PVC ชั้น 8.5 ต่อช่องชาร์ฟ: ท่อส้วม 4" ท่อน้ำทิ้ง 3" ท่ออากาศ 2" (ผู้ใช้เลือก)
+# ช่องเปิดพื้นห้องน้ำ 0.30x0.40 เว้นไว้ตอนเทพื้น ชิดข้างคานแนว B/E ทะลุตรงกันทุกชั้น (ผู้ใช้สั่ง); ด้าน 0.30 ชิดผิวในผนังชาร์ฟ SH1 (ผมกำหนด)
+# ปลายล่างลงตามข้างเสาถึงระดับดิน 0.00 หยุดรอต่อถังบำบัด (ผู้ใช้: ถังกำลังออกแบบ); ปลายบนจบเหนือฝ้าชั้น 5 0.30 (ผู้ใช้: จบเหนือฝ้า, ระยะ 0.30 ผมกำหนด)
+SAN_OPEN = (0.30, 0.40)
+SAN_PIPES = [('VENT', 'ท่ออากาศ 2"', 0.060, 0.0023), ('WASTE', 'ท่อน้ำทิ้ง 3"', 0.089, 0.0032), ('SOIL', 'ท่อส้วม 4"', 0.114, 0.0041)]   # OD, ความหนา (ชั้น 8.5 ค่าประมาณ)
+SAN_GAP, SAN_EDGE = 0.025, 0.03
+SAN_Z0, SAN_Z1 = 0.0, FL[5] + CEIL5 + 0.30
+
+
+def _circ(r, n=24):
+    return [[round(r * math.cos(2 * math.pi * k / n), 5), round(r * math.sin(2 * math.pi * k / n), 5)] for k in range(n)]
+
+
+_SAN_OPEN_BOX = collections.defaultdict(list)              # ชั้น -> กล่องช่องเปิดพื้น
+for side in ('N', 'S'):
+    for i in range(9):
+        if side == 'N' and i == STAIR_BAY[0]:
+            continue
+        g = wc_geo(i, side, 2)
+        y_rm = GY['B'] if side == 'N' else GY['E']
+        xi = g['xg'] + g['dr'] * (SH_W - WALL_T)           # ผิวในผนังชาร์ฟ SH1
+        yf = y_rm - g['s'] * 0.125                         # ผิวข้างคานแนว B/E ด้านห้องน้ำ
+        xa, xb = sorted((xi, xi - g['dr'] * SAN_OPEN[0]))
+        ya, yb = sorted((yf, yf - g['s'] * SAN_OPEN[1]))
+        for f in (2, 3, 4, 5):
+            zt = FL[f] - DROP
+            _SAN_OPEN_BOX[f].append((xa, ya, zt - S1_T - PL_T - 0.01, xb, yb, zt + 0.03))
+        xc = xi - g['dr'] * SAN_OPEN[0] / 2
+        off = SAN_EDGE
+        for key, nm, od, t in SAN_PIPES:
+            off += od / 2
+            yc = yf - g['s'] * off
+            off += od / 2 + SAN_GAP
+            L = SAN_Z1 - SAN_Z0
+            m = member((xc, yc, SAN_Z0), (xc, yc, SAN_Z1), od, od)
+            m.update(shape='POLY', poly2d=_circ(od / 2), hole2d=_circ(od / 2 - t))
+            add(f'PB-{side}{i+1}-{key}', 'สุขาภิบาล', 2, 'A07', m,
+                name=f'{nm} PVC ชั้น 8.5 แนวดิ่งในช่องชาร์ฟห้องน้ำ ห้อง {side}{i+1} ชั้น 2–5 (ดิน 0.00 ถึงเหนือฝ้าชั้น 5 0.30)', assumed=True,
+                qty=dict(length=round(L, 3), size=nm, od_mm=round(od * 1000), sticks_4m=math.ceil(L / 4.0), coupling=math.ceil(L / 4.0) - 1, cls='8.5'))
+# เจาะช่องพื้น S1 กระเบื้อง และฉาบใต้ท้องพื้นตามกล่องช่องเปิด
+for _e in elements:
+    _m = re.match(r'^(S1|TL)-F(\d)-[NS]\d-WC$', _e['id']) or re.match(r'^PL-CEIL-F(\d)$', _e['id'])
+    if not _m:
+        continue
+    _f = int(_m.group(_m.lastindex))
+    _r = _cut_elem_boxes(_e, _SAN_OPEN_BOX[_f])
+    if _r is not None:
+        _q = _e['qty']
+        for _k in ('area', 'concrete'):
+            if _k in _q:
+                _q[_k] = round(_q[_k] * _r, 4 if _k == 'concrete' else 3)
+ASSUMPTIONS.append('ท่อน้ำเสียแนวดิ่งในช่องชาร์ฟ: PVC ชั้น 8.5 ท่อส้วม 4" (OD 114) ท่อน้ำทิ้ง 3" (OD 89) ท่ออากาศ 2" (OD 60) เรียงในช่องเปิดพื้น 0.30x0.40 ชิดข้างคานแนว B/E ทุกชั้น; ปลายล่างระดับดิน 0.00 รอต่อถังบำบัด ปลายบนเหนือฝ้าชั้น 5 0.30; ความหนาท่อเป็นค่าประมาณ (16 พ.ย. 2569)')
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 if __name__ == '__main__':
