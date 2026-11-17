@@ -3344,6 +3344,169 @@ ASSUMPTIONS.append('ผนังห้องน้ำ/ช่องชาร์�
 
 ASSUMPTIONS.append('ช่องชาร์ฟห้องน้ำ: ไม่ฉาบผิวเสา ข้างคาน และท้องคานส่วนที่อยู่ภายในช่องชาร์ฟ (ผู้ใช้สั่ง 12 พ.ย. 2569)')
 
+# ---- ห้องน้ำชั้น 1: งานฉาบไม่ซ้อนเนื้อผนังที่มาชน และฉาบปิดผิวก่อที่โผล่ (วงกบ หัวผนัง ปลายผนัง ท้องทับหลัง) (ผู้ใช้สั่ง 17 พ.ย. 2569) ----
+_F1WC_RX = r'^W-F1-(WC|SH-G8)'
+_F1Z = (GX[7] - 0.6, yB - 0.6, GX[9] + 0.6, yC + 0.6)
+
+
+def _f1_base(i):
+    return re.sub(r'-(PL|TB\d+|TC\d+)$', '', i)
+
+
+def _box_mid(b):
+    return [(b[k] + b[k + 3]) / 2 for k in range(3)]
+
+
+_f1_els = [e for e in elements if re.match(_F1WC_RX, e['id']) and e['category'] in ('ผนัง', 'เสาเอ็นคานเอ็น', 'งานฉาบ')]
+_f1_mas = [(_f1_base(e['id']), b) for e in _f1_els if e['category'] != 'งานฉาบ'
+           for p in (e['geom']['parts'] if e['geom']['type'] == 'multi' else [e['geom']]) for b in [_bb3(p)] if b]
+# 1) ฉาบของผนังหนึ่งที่ทะลุเข้าเนื้อก่อของผนังที่มาชน: ตัดออก
+_F1_FIX = collections.Counter()
+for _e in [e for e in _f1_els if e['category'] == 'งานฉาบ']:
+    _bs = _f1_base(_e['id'])
+    _r = _cut_elem_boxes(_e, [b for k, b in _f1_mas if k != _bs])
+    if _r is not None:
+        _e['qty']['area'] = round(_e['qty']['area'] * _r, 3); _F1_FIX['cut_mas'] += 1
+# 2) ฉาบสองผนังซ้อนกันที่มุม: ตัดจากชิ้นที่ส่วนซ้อนอยู่ปลายชิ้น (ผนังที่มาชน) ให้ฉาบผนังหลักต่อเนื่อง
+_f1_pl = [e for e in _f1_els if e['category'] == 'งานฉาบ']
+for _e in _f1_pl:
+    _bs = _f1_base(_e['id'])
+    _others = [b for o in _f1_pl if _f1_base(o['id']) != _bs for p in (o['geom']['parts'] if o['geom']['type'] == 'multi' else [o['geom']]) for b in [_bb3(p)] if b]
+    _cuts = []
+    for p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']]):
+        b = _bb3(p)
+        if not b:
+            continue
+        ax = 0 if b[3] - b[0] >= b[4] - b[1] else 1      # แกนยาวของชิ้นฉาบ
+        for c in _others:
+            if all(min(b[j + 3], c[j + 3]) - max(b[j], c[j]) > 0.001 for j in range(3)):
+                lo, hi = max(b[ax], c[ax]), min(b[ax + 3], c[ax + 3])
+                if lo <= b[ax] + 0.002 or hi >= b[ax + 3] - 0.002:   # ซ้อนที่ปลายชิ้น
+                    cl = (c[ax + 3] - c[ax]) >= (b[ax + 3] - b[ax]) - 1e-6
+                    if not cl:
+                        _cuts.append(c)
+    if _cuts:
+        _r = _cut_elem_boxes(_e, _cuts)
+        if _r is not None:
+            _e['qty']['area'] = round(_e['qty']['area'] * _r, 3); _F1_FIX['cut_pl'] += 1
+# 3) ผิวก่อที่ยังโผล่: เพิ่มฉาบ 1.5 ซม. ปิดผิว (ขยายเลยขอบเท่าความหนาฉาบให้ชนฉาบด้านข้าง) แล้วหักส่วนที่ชนของแข็งอื่น
+_f1_sol = []
+for _e in elements:
+    if _e['category'] in ('ไฟฟ้า', 'สุขาภิบาล', 'ประตูหน้าต่าง'):
+        continue
+    for p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']]):
+        b = _bb3(p)
+        if b and b[0] < _F1Z[2] and b[3] > _F1Z[0] and b[1] < _F1Z[3] and b[4] > _F1Z[1] and b[2] < 4.0 and b[5] > 0.0:
+            _f1_sol.append(b)
+
+
+def _f1_in(pt):
+    return any(all(b[k] - 1e-4 <= pt[k] <= b[k + 3] + 1e-4 for k in range(3)) for b in _f1_sol)
+
+
+_f1_pl_by = {e['id']: e for e in _f1_pl}
+for _e in [e for e in _f1_els if e['category'] != 'งานฉาบ']:
+    _pe = _f1_pl_by.get(_f1_base(_e['id']) + '-PL')
+    if _pe is None:
+        continue
+    for p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']]):
+        b = _bb3(p)
+        if not b:
+            continue
+        for ax in (0, 1, 2):
+            for sg in (0, 1):
+                if ax == 2 and sg == 0 and b[2] <= FL[1] + 0.05:
+                    continue
+                v = b[ax + 3 * sg] + (0.003 if sg else -0.003)
+                o = [k for k in (0, 1, 2) if k != ax]
+                bad = 0
+                for s in range(1, 6):
+                    for t in range(1, 6):
+                        pt = [0.0, 0.0, 0.0]; pt[ax] = v
+                        pt[o[0]] = b[o[0]] + (b[o[0] + 3] - b[o[0]]) * s / 6
+                        pt[o[1]] = b[o[1]] + (b[o[1] + 3] - b[o[1]]) * t / 6
+                        bad += not _f1_in(pt)
+                if not bad:
+                    continue
+                nb = list(b)
+                if sg:
+                    nb[ax], nb[ax + 3] = b[ax + 3], b[ax + 3] + PL_T
+                else:
+                    nb[ax], nb[ax + 3] = b[ax] - PL_T, b[ax]
+                for k in o:
+                    nb[k] -= PL_T; nb[k + 3] += PL_T
+                nb[2] = max(nb[2], FL[1])
+                pcs = [tuple(nb)]
+                for c in _f1_sol:
+                    pcs = [r for q in pcs for r in _box3_minus(q, c)]
+                pcs = [q for q in pcs if min(q[3] - q[0], q[4] - q[1], q[5] - q[2]) > 0.002]
+                if not pcs:
+                    continue
+                g = _pe['geom']
+                if g['type'] != 'multi':
+                    _pe['geom'] = g = dict(type='multi', parts=[g])
+                for q in pcs:
+                    g['parts'].append(dict(type='prism', poly=[[round(q[0], 4), round(q[1], 4)], [round(q[3], 4), round(q[1], 4)], [round(q[3], 4), round(q[4], 4)], [round(q[0], 4), round(q[4], 4)]],
+                                           z0=round(q[2], 4), t=round(q[5] - q[2], 4)))
+                    _f1_sol.append(q)
+                    ar = sorted([q[3] - q[0], q[4] - q[1], q[5] - q[2]])
+                    _pe['qty']['area'] = round(_pe['qty']['area'] + ar[1] * ar[2], 3)
+                _F1_FIX['add_face'] += 1
+ASSUMPTIONS.append('ห้องน้ำชั้น 1: ตัดฉาบที่ซ้อนเข้าเนื้อผนังที่มาชน ฉาบผนังหลักวิ่งต่อเนื่องที่มุม; ฉาบปิดวงกบประตู/ช่องเปิด ปลายผนัง และหัวผนังกั้นห้องส้วม หนา 1.5 ซม. (17 พ.ย. 2569)')
+
+# ---- สุขภัณฑ์จากไฟล์ตัวอย่าง แทนกล่องตัวแทน (ผู้ใช้สั่ง 17 พ.ย. 2569) ----
+# ไฟล์ใน O:\\My Drive\\Work2027\\CSR-หนองแค\\แบบสำหรับขึ้นโมเดล: ชักโครกจาก "สำหรับอ่านข้อมูลสร้างชิ้นงาน...ระบบท่อและสุขาภิบาล.skp",
+# อ่างล้างหน้าตั้งพื้นพร้อมก๊อกจาก "HAND WASH BASIN.skp", โถปัสสาวะตั้งพื้นพร้อมแผงกั้นจาก "URINE-โถปัสสาวะ.skp"
+FIX_DEFS = {'โถส้วม': ('สุขภัณฑ์ ชักโครก (ไฟล์ตัวอย่าง)', 'xmin'),
+            'อ่างล้างหน้า': ('สุขภัณฑ์ อ่างล้างหน้าตั้งพื้น+ก๊อก (ไฟล์ตัวอย่าง)', 'xmin'),
+            'โถปัสสาวะ': ('สุขภัณฑ์ โถปัสสาวะ+แผงกั้น (ไฟล์ตัวอย่าง)', 'ymin')}
+_fx_wall = collections.defaultdict(list)
+for _e in elements:
+    if _e['category'] in ('ผนัง', 'งานฉาบ', 'เสา', 'เสาเอ็นคานเอ็น'):
+        for p in (_e['geom']['parts'] if _e['geom']['type'] == 'multi' else [_e['geom']]):
+            b = _bb3(p)
+            if b:
+                _fx_wall[_e['floor']].append(b)
+_FX_N = collections.Counter()
+for _e in elements:
+    if _e['category'] != 'สุขภัณฑ์' or _e['geom']['type'] != 'prism':
+        continue
+    _k = next((k for k in FIX_DEFS if _e['name'].startswith(k)), None)
+    if not _k:
+        continue
+    b = _bb3(_e['geom']); f = _e['floor']
+    zf = FL[1] + 0.02 if f == 1 else FL[f] - DROP + 0.02          # ผิวกระเบื้องพื้นห้องน้ำ
+    zm = b[2] + 0.05
+    cands = []
+    mid = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2]
+    for ax in (0, 1):
+        for sg in (0, 1):
+            # ระยะจากผิวกล่องถึงผิวผนัง/ฉาบ/เสาที่ใกล้ที่สุดในทิศนั้น (ไม่เกิน 0.30) วางชิดผิวผนังจริง
+            o = 1 - ax
+            best = None
+            for w in _fx_wall[f]:
+                if not (w[o] - 1e-4 <= mid[o] <= w[o + 3] + 1e-4 and w[2] - 1e-4 <= zm <= w[5] + 1e-4):
+                    continue
+                dist = (w[ax] - b[ax + 3]) if sg else (b[ax] - w[ax + 3])
+                if -0.006 <= dist <= 0.30 and (best is None or dist < best):
+                    best = dist
+            if best is not None:
+                cands.append((ax, sg, b[ax + 3] + max(best, 0) if sg else b[ax] - max(best, 0), best))
+    cands.sort(key=lambda c: c[3])
+    if _k == 'โถส้วม':
+        la = 0 if b[3] - b[0] >= b[4] - b[1] else 1
+        cands = [c for c in cands if c[0] == la] or cands
+    if not cands:
+        _FX_N['no_wall'] += 1
+        continue
+    ax, sg, v, _dist = cands[0]
+    pt = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, zf]; pt[ax] = v
+    d = [0, 0]; d[ax] = -1 if sg else 1
+    _e['component_place'] = dict(def_=FIX_DEFS[_k][0], back=FIX_DEFS[_k][1], pt=[round(q, 4) for q in pt], dir=d)
+    _e['component_place']['def'] = _e['component_place'].pop('def_')
+    _FX_N[_k] += 1
+ASSUMPTIONS.append('สุขภัณฑ์: ใช้คอมโพเนนต์จากไฟล์ตัวอย่างของผู้ใช้ (ชักโครก, อ่างล้างหน้าตั้งพื้นพร้อมก๊อก, โถปัสสาวะตั้งพื้นพร้อมแผงกั้น) วางชิดผนังด้านหลังกึ่งกลางกล่องเดิม ฐานที่ผิวกระเบื้อง; กล่องเดิมคงไว้เป็นข้อมูลปริมาณ (17 พ.ย. 2569)')
+
 # ---- ระบบท่อน้ำเสียแนวดิ่งในช่องชาร์ฟห้องน้ำ (ผู้ใช้สั่ง 16 พ.ย. 2569) ----
 # PVC ชั้น 8.5 ต่อช่องชาร์ฟ: ท่อส้วม 4" ท่อน้ำทิ้ง 3" ท่ออากาศ 2" (ผู้ใช้เลือก)
 # ช่องเปิดพื้นห้องน้ำ 0.30x0.40 เว้นไว้ตอนเทพื้น ชิดข้างคานแนว B/E ทะลุตรงกันทุกชั้น (ผู้ใช้สั่ง); ด้าน 0.30 ชิดผิวในผนังชาร์ฟ SH1 (ผมกำหนด)
@@ -3400,11 +3563,92 @@ ASSUMPTIONS.append('ท่อน้ำเสียแนวดิ่งในช
 
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
+def _merge_rects(parts):
+    """รวมสี่เหลี่ยมแกนตรงหลายชิ้น (z0/t เดียวกัน) เป็นรูปหลายเหลี่ยมเดียว (+รู) ต่อกลุ่มที่ต่อเนื่องกัน
+    ใช้กับกระเบื้องพื้น: ให้พื้นเดียวกันเป็นผืนเดียวเนื้อเดียว ไม่เห็นรอยต่อชิ้น (แก้ 17 พ.ย. 2569)"""
+    R = lambda v: round(v, 4)
+    rects = []
+    for p in parts:
+        xs = sorted({R(x) for x, _ in p['poly']}); ys = sorted({R(y) for _, y in p['poly']})
+        if len(p['poly']) != 4 or len(xs) != 2 or len(ys) != 2:
+            return None
+        rects.append((xs[0], ys[0], xs[1], ys[1]))
+    X = sorted({v for r in rects for v in (r[0], r[2])}); Y = sorted({v for r in rects for v in (r[1], r[3])})
+    full = set()
+    for i in range(len(X) - 1):
+        for j in range(len(Y) - 1):
+            cx, cy = (X[i] + X[i + 1]) / 2, (Y[j] + Y[j + 1]) / 2
+            if any(r[0] < cx < r[2] and r[1] < cy < r[3] for r in rects):
+                full.add((i, j))
+    # แยกกลุ่มเซลล์ที่ต่อกัน (ติดด้าน)
+    comps, seen = [], set()
+    for c in sorted(full):
+        if c in seen:
+            continue
+        st, comp = [c], set()
+        seen.add(c)
+        while st:
+            i, j = st.pop(); comp.add((i, j))
+            for n in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                if n in full and n not in seen:
+                    seen.add(n); st.append(n)
+        comps.append(comp)
+    out = []
+    for comp in comps:
+        # ขอบมีทิศ (ทวนเข็ม) ของเซลล์ที่ติดเซลล์ว่าง
+        E = {}
+        for i, j in comp:
+            a, b, c, d = (X[i], Y[j]), (X[i + 1], Y[j]), (X[i + 1], Y[j + 1]), (X[i], Y[j + 1])
+            if (i, j - 1) not in comp: E.setdefault(a, []).append(b)
+            if (i + 1, j) not in comp: E.setdefault(b, []).append(c)
+            if (i, j + 1) not in comp: E.setdefault(c, []).append(d)
+            if (i - 1, j) not in comp: E.setdefault(d, []).append(a)
+        loops = []
+        while E:
+            s = next(iter(E)); loop = [s]; cur = s
+            while True:
+                nx = E[cur].pop()
+                if not E[cur]: del E[cur]
+                if nx == s: break
+                loop.append(nx); cur = nx
+            # ตัดจุดกลางแนวตรง
+            n = len(loop); keep = []
+            for k in range(n):
+                p0, p1, p2 = loop[k - 1], loop[k], loop[(k + 1) % n]
+                if not ((p0[0] == p1[0] == p2[0]) or (p0[1] == p1[1] == p2[1])):
+                    keep.append([p1[0], p1[1]])
+            area = sum(keep[k][0] * keep[(k + 1) % len(keep)][1] - keep[(k + 1) % len(keep)][0] * keep[k][1] for k in range(len(keep))) / 2
+            loops.append((area, keep))
+        loops.sort(key=lambda t: -t[0])
+        g = dict(type='prism', poly=loops[0][1], z0=parts[0]['z0'], t=parts[0]['t'])
+        holes = [l for a, l in loops[1:]]
+        if holes:
+            g['holes'] = holes
+        out.append(g)
+    return out
+
+
+def merge_tile_parts(e):
+    g = e['geom']
+    if e['category'] != 'กระเบื้อง' or g['type'] != 'multi':
+        return
+    ps = g['parts']
+    if not all(p['type'] == 'prism' and not p.get('holes') for p in ps) or len({(p['z0'], p['t']) for p in ps}) != 1:
+        return
+    m = _merge_rects(ps)
+    if m:
+        e['geom'] = m[0] if len(m) == 1 else dict(type='multi', parts=m)
+
+
 if __name__ == '__main__':
     for e in elements:
+        merge_tile_parts(e)
         mirror_y(e['geom'])
         if 'finish' in e:
             e['finish']['origin'][1] = round(GY['F'] - e['finish']['origin'][1], 4)
+        if 'component_place' in e:
+            e['component_place']['pt'][1] = round(GY['F'] - e['component_place']['pt'][1], 4)
+            e['component_place']['dir'][1] = -e['component_place']['dir'][1]
         if 'component_mount' in e:
             e['component_mount']['back_y'] = round(GY['F'] - e['component_mount']['back_y'], 4)
             e['component_mount']['box_dir'] = -e['component_mount'].get('box_dir', 1)

@@ -406,6 +406,25 @@ module DormBIM
       # บานประตู: ใช้คอมโพเนนต์ที่ผู้ใช้ใส่ในโมเดล (เช่น door2.dxf) ถ้ามี แทนแผ่นตัวแทน
       sliding_door_def(model, e['component'], e['component_spec']) if e['component_spec']
       cdef = e['component'] && model.definitions[e['component']]
+      # สุขภัณฑ์จากไฟล์ตัวอย่าง: วางคอมโพเนนต์ให้กึ่งกลางด้านหลัง (back) ชิดผนังที่ pt หันด้านหน้าไปทาง dir ฐานที่ระดับพื้น
+      cp = e['component_place']
+      pdef = cp && model.definitions[cp['def']]
+      if pdef
+        db = pdef.bounds
+        lb = case cp['back']
+             when 'xmin' then [db.min.x, (db.min.y + db.max.y) / 2.0, Geom::Vector3d.new(1, 0, 0)]
+             when 'xmax' then [db.max.x, (db.min.y + db.max.y) / 2.0, Geom::Vector3d.new(-1, 0, 0)]
+             when 'ymin' then [(db.min.x + db.max.x) / 2.0, db.min.y, Geom::Vector3d.new(0, 1, 0)]
+             else [(db.min.x + db.max.x) / 2.0, db.max.y, Geom::Vector3d.new(0, -1, 0)]
+             end
+        ang = Math.atan2(cp['dir'][1], cp['dir'][0]) - Math.atan2(lb[2].y, lb[2].x)
+        t = Geom::Transformation.translation(Geom::Point3d.new(cp['pt'][0].m, cp['pt'][1].m, cp['pt'][2].m)) *
+            Geom::Transformation.rotation(ORIGIN, Z_AXIS, ang) *
+            Geom::Transformation.translation(Geom::Vector3d.new(-lb[0], -lb[1], -db.min.z))
+        g.entities.add_instance(pdef, t)
+        geo = { 'type' => 'component' }
+        cdef = nil
+      end
       if cdef && geo['type'] == 'prism'
         xs = geo['poly'].map { |p| p[0] }
         ys = geo['poly'].map { |p| p[1] }
