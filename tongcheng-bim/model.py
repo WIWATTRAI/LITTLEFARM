@@ -50,6 +50,7 @@ SITE = [(-12.50, -15.80), (0.88, -14.64), (62.04, -9.33), (68.29, -4.52), (75.19
 
 # auxiliary footprints (digitised from A101/S202)
 TANK = (-11.38, -13.34, 0.74, -6.71)          # ถังเก็บน้ำใต้ดิน x0,y0,x1,y1  TF -2.60 BF -2.85
+TRANSFORMER = False                              # แท่นหม้อแปลงยกเลิกในโครงการนี้ (ผู้ว่าจ้าง 19/11/69)
 TRANS = (62.40, -8.665, 67.40, -5.665)         # แท่นหม้อแปลง 5.00x3.00 ม. (A104) ศูนย์กลางตามเข็ม I22-TR ใน S201
 TOILET = (-7.365, 18.007, -4.962, 26.011)         # อาคารห้องน้ำ 4x8
 CHEM = (-4.015, 0.0, 0.0, 6.012)
@@ -309,7 +310,7 @@ def build():
     for x, y in V["I26_tank"]:
         pile(x, y, LV["tank_bot"]+0.05, 260, "I26", "เสาเข็ม I-260x260 รับถังใต้ดิน (ลดระดับ 1 ม.)", "M21B", "2.1.4 เสาเข็มถังใต้ดิน", grp="pile_a")
     # I22-TR transformer (6)
-    for x, y in V["I22_TR"]:
+    for x, y in (V["I22_TR"] if TRANSFORMER else []):
         pile(x, y, -0.40, 220, "I22-TR", "เสาเข็ม I-220x220 รับฐานหม้อแปลง", "M21B", "4.3.1 เข็มฐานหม้อแปลง", grp="pile_a")
     # I22-22 road piles + F1A (232 on plan)
     for x, y in V["I22_road"]:
@@ -342,13 +343,14 @@ def build():
     # ---------------- slabs ----------------
     vbox("slab", "IfcSlab", "พื้น S1 คสล. หนา 0.20 ม. วางบนเสาเข็ม (TOP +0.50)", "S1", 0, 0, BW, BD, 0.30, 0.50,
          "M25", "2.3.2 พื้นชั้นล่าง คสล.", pre="FLOOR", extra={"ผิว": "ขัดมันผสม Floor Hardener (3.3.1)"})
-    holes = [bldg, rect(*TANK), rect(*TRANS), rect(*TOILET), rect(*CHEM), rect(*RAMP_N), rect(*RAMP_S)]
+    holes = [bldg, rect(*TANK)] + ([rect(*TRANS)] if TRANSFORMER else []) + [rect(*TOILET), rect(*CHEM), rect(*RAMP_N), rect(*RAMP_S)]
     road_outer = offset_rect_poly(SITE, 0.6)
     plan_prism("ext", "IfcSlab", "พื้นถนนรอบอาคาร S2 คสล. หนา 0.15 ม. (TOP ±0.00)", "S2", road_outer, holes,
                -0.15, 0.0, "M42", "4.1 งานพื้นถนนรอบอาคาร S2", pre="BASESLAB")
-    vbox("ext", "IfcFooting", "ฐานแท่นหม้อแปลง 750 kVA 5.00x3.00x0.40 ม.", "TRP", *TRANS, -0.40, 0.0, "M45", "4.3.2 แท่นหม้อแปลง", pre="PAD_FOOTING", src="แบบ A104")
-    cx_, cy_ = (TRANS[0]+TRANS[2])/2, (TRANS[1]+TRANS[3])/2
-    vbox("ext", "IfcSlab", "แท่นวางหม้อแปลง 3.50x1.75x0.15 ม.", "TRP", cx_-1.75, cy_-0.875, cx_+1.75, cy_+0.875, 0.0, 0.15, "M45", "4.3.2 แท่นหม้อแปลง", pre="BASESLAB", src="แบบ A104")
+    if TRANSFORMER:
+        vbox("ext", "IfcFooting", "ฐานแท่นหม้อแปลง 750 kVA 5.00x3.00x0.40 ม.", "TRP", *TRANS, -0.40, 0.0, "M45", "4.3.2 แท่นหม้อแปลง", pre="PAD_FOOTING", src="แบบ A104")
+        cx_, cy_ = (TRANS[0]+TRANS[2])/2, (TRANS[1]+TRANS[3])/2
+        vbox("ext", "IfcSlab", "แท่นวางหม้อแปลง 3.50x1.75x0.15 ม.", "TRP", cx_-1.75, cy_-0.875, cx_+1.75, cy_+0.875, 0.0, 0.15, "M45", "4.3.2 แท่นหม้อแปลง", pre="BASESLAB", src="แบบ A104")
     vbox("slab", "IfcSlab", "พื้นอาคารห้องน้ำ AF01 หนา 0.10 (TOP +0.50)", "AF01", *TOILET, LV["ffl"]-0.10, LV["ffl"], "M44", "2.4.2 พื้น AF01", pre="FLOOR", src="แบบ S202/S6.1")
     vbox("slab", "IfcSlab", "พื้นห้องเก็บสารเคมี หนา 0.10 (TOP +0.40 ตาม A103)", "AF01", *CHEM, CHEM_FFL-0.10, CHEM_FFL, "M44", "2.4.2 พื้น AF01", pre="FLOOR", src="แบบ S202/S6.1")
     for r, nm in [(RAMP_N, "ทางลาดขนส่งด้านเหนือ (DN)"), (RAMP_S, "ทางลาดขนส่งด้านใต้ (DN)")]:
@@ -518,6 +520,7 @@ def build():
 #  EXTERNAL WORKS FROM SKETCHUP R1 (data/sketchup_r1.json, extract_sketchup_ifc.py)
 # =====================================================================
 SKU = "SketchUp R1 (TONGCHENG-WH60X54_R1.ifc)"
+LW = dict(base_w=1.50, base_t=0.30, base_top=0.0, stem_t=0.20, stem_top=1.50)   # L-wall: พื้นกว้าง 1.50 ม. (ผู้ว่าจ้าง) หนา 0.30 (สมมติ) ผนัง 0.20 สูงถึง +1.50 (จาก R1)
 
 
 def _seg(cat, ifc, name, mark, p0, p1, w, z0, z1, task, boq, pre=None, src=SKU):
@@ -532,30 +535,27 @@ def sketchup_external_works(pile):
     rw, bw = J["rw"], J["bw"]
     for p in rw["piles"]:
         x, y = p["c"]; a = p["a"]
-        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้คานหัวเข็มกำแพงกันดิน", "RW-P", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
+        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้พื้น L-wall แถวนอก (SketchUp R1)", "RW-P", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
              "M47", "4.6.1 เข็มกำแพงกันดิน", pre="DRIVEN", src=SKU, extra={"ชื่อใน SketchUp": p["name"], "ความยาว (ม.)": round(p["z1"]-p["z0"], 2)})
     for p in rw["stay_piles"]:
         x, y = p["c"]; a = p["a"]
-        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้ฐานค้ำยัน", "RW-SP", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
+        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้พื้น L-wall แถวใน (ตำแหน่งเดิมจาก SketchUp R1)", "RW-SP", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
              "M47", "4.6.1 เข็มกำแพงกันดิน", pre="DRIVEN", src=SKU, extra={"ชื่อใน SketchUp": p["name"], "ความยาว (ม.)": round(p["z1"]-p["z0"], 2)})
-    P = rw["path"]
+    # L-wall (ผู้ว่าจ้าง 19/11/69): รื้อระบบค้ำยันเดิม ใช้กำแพงกันดินรูปตัว L ผิวนอกผนังอยู่ที่แนวเขต พื้น L-wall กว้าง 1.50 ม. จากแนวเขตเข้าด้านใน
+    P = rw["path"]; cx0, cy0 = 30.0, 27.0
     for i in range(len(P)-1):
-        _seg("ext_rw", "IfcBeam", f"คานหัวเข็มกำแพงกันดิน {rw['cap']['b']:.2f}x0.50 ม.", "RW-CB", P[i], P[i+1], rw["cap"]["b"], rw["cap"]["z0"], rw["cap"]["z1"],
-             "M48", "4.6.2 คานหัวเข็มกำแพงกันดิน", pre="BEAM")
-        _seg("ext_rw", "IfcWall", f"กำแพงกันดิน คสล. หนา {rw['wall']['t']:.2f} ม. สูง 1.50 ม.", "RW-W", P[i], P[i+1], rw["wall"]["t"], rw["wall"]["z0"], rw["wall"]["z1"],
-             "M48", "4.6.3 กำแพงกันดิน คสล.", pre="SOLIDWALL")
-    piles = [p["c"] for p in rw["piles"]]
-    for st, ft in zip(rw["stays"], rw["footings"]):
-        fx, fy = ft["c"]
-        q = min(piles, key=lambda c_: math.hypot(c_[0]-fx, c_[1]-fy))
-        d = math.hypot(fx-q[0], fy-q[1]); ux, uy = (fx-q[0])/d, (fy-q[1])/d
-        ex, ey = (ux, uy, 0.0), (-uy, ux, 0.0)
-        a_ = max(ft["bx"], ft["by"]) if abs(ux) < 0.2 or abs(uy) < 0.2 else 0.65
-        box("ext_rw", "IfcFooting", "ฐานค้ำยัน 0.65x0.65x0.40 ม. (เข็ม 1 ต้น)", "RW-SF", (fx, fy, (ft["z0"]+ft["z1"])/2), ex, ey, Z, 0.65, 0.65, ft["z1"]-ft["z0"],
-            "M48", "4.6.4 ฐานค้ำยัน", pre="PILE_CAP", src=SKU, extra={"ชื่อใน SketchUp": ft["name"]})
-        sx, sy = st["c"]
-        box("ext_rw", "IfcColumn", "ค้ำยันกำแพงกันดิน คสล. กว้าง 0.30 ม.", "RW-ST", (sx, sy, (st["z0"]+st["z1"])/2), ex, ey, Z, 1.0, 0.30, st["z1"]-st["z0"],
-            "M48", "4.6.5 ค้ำยันกำแพง", pre="COLUMN", src=SKU, extra={"ชื่อใน SketchUp": st["name"], "ปริมาตร SketchUp (ลบ.ม.)": round(st["vol"], 3)})
+        p0, p1 = P[i], P[i+1]
+        dx, dy = p1[0]-p0[0], p1[1]-p0[1]; L = math.hypot(dx, dy)
+        nx, ny = -dy/L, dx/L
+        mx, my = (p0[0]+p1[0])/2, (p0[1]+p1[1])/2
+        if (cx0-mx)*nx + (cy0-my)*ny < 0: nx, ny = -nx, -ny          # normal ชี้เข้าในที่ดิน
+        o_face = -LW["stem_t"]/2                                      # ผิวนอกผนัง = แนวเขต
+        def off(p, d): return (p[0]+nx*d, p[1]+ny*d)
+        dc = o_face + LW["base_w"]/2
+        _seg("ext_rw", "IfcFooting", f"พื้น L-wall คสล. กว้าง {LW['base_w']:.2f} ม. หนา {LW['base_t']:.2f} ม. (จากแนวเขต)", "RW-LB", off(p0, dc), off(p1, dc),
+             LW["base_w"], LW["base_top"]-LW["base_t"], LW["base_top"], "M48", "4.6.2 พื้น L-wall", pre="STRIP_FOOTING", src="ผู้ว่าจ้างกำหนดพื้น 1.50 ม. / ความหนาสมมติ")
+        _seg("ext_rw", "IfcWall", f"ผนัง L-wall คสล. หนา {LW['stem_t']:.2f} ม. สูง {LW['stem_top']-LW['base_top']:.2f} ม.", "RW-W", p0, p1, LW["stem_t"], LW["base_top"], LW["stem_top"],
+             "M48", "4.6.3 ผนัง L-wall", pre="SOLIDWALL")
     Q = bw["path"]
     for i in range(len(Q)-1):
         _seg("ext_rw", "IfcBeam", "คานคอดินรั้ว 0.15x0.20 ม.", "BW-GB", Q[i], Q[i+1], bw["groundbeam"]["b"], bw["groundbeam"]["z0"], bw["groundbeam"]["z1"], "M49", "4.7.1 คานคอดินรั้ว", pre="BEAM")
@@ -567,7 +567,7 @@ def sketchup_external_works(pile):
              extra={"ชื่อใน SketchUp": p["name"]})
 
 
-ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "RW-SF", "TRP", "C1", "C2", "C3", "SC1", "B1", "B3", "LB", "TB", "SC")
+ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "RW-LB", "TRP", "C1", "C2", "C3", "SC1", "B1", "B3", "LB", "TB", "SC")
 
 
 def grid_tag(x, y):
@@ -629,7 +629,7 @@ TASKS = [
     ("M12", "1.1", "วางผังอาคาร กริด 1-11/A-J ตั้งหมุด BM ±0.00", 3, [("M0", "FS", 0)], "ทีมสำรวจ", ""),
     ("M13", "1.3", "ถมดินบดอัดหนา 0.30 ม. (1,114 ลบ.ม.) + ลานทำงานปั้นจั่น", 6, [("M12", "SS", 1)], "รถเกลี่ย/รถบด/รถบรรทุก 6 คัน ~ 250 ลบ.ม./วัน + ทดสอบ FDT 16 จุด", ""),
     ("M21A", "2.1", "ตอกเข็มอาคาร: I35 ใต้พื้น 360 + I26 ฐาน F2P 92 (2 ปั้นจั่น)", 25, [("M13", "FS", 0)], "ปั้นจั่น 2 ชุด x ~9 ต้น/วัน (เข็ม 22 ม. ต่อ 2 ท่อน)", ""),
-    ("M21B", "2.1", "ตอกเข็มอาคารประกอบ/อื่นๆ: F1P-1 11, ถังใต้ดิน 17, หม้อแปลง 6, ฐานแนวเขต 16", 6, [("M21A", "FS", 0)], "ปั้นจั่น 1 ชุด", ""),
+    ("M21B", "2.1", "ตอกเข็มอาคารประกอบ/อื่นๆ: F1P-1 11, ถังใต้ดิน 17", 4, [("M21A", "FS", 0)], "ปั้นจั่น 1 ชุด", ""),
     ("M21C", "4.1", "ตอกเข็มพื้นถนนรอบอาคาร I22 249 ต้น (2 ปั้นจั่น)", 14, [("M21A", "FS", 0)], "ปั้นจั่น 2 ชุด x ~9 ต้น/วัน", ""),
     ("M21T", "1.4", "Dynamic Load Test 2 ต้น", 2, [("M21A", "SS", 10)], "หน่วยงานทดสอบ", ""),
     ("M22", "2.2", "ขุดดิน ตัดหัวเข็ม ฐานราก F2P/F1P-1", 18, [("M21A", "SS", 8)], "ทีมโครงสร้าง A 15 คน", ""),
@@ -654,11 +654,15 @@ TASKS = [
     ("M42", "4.1", "พื้นถนนรอบอาคาร S2 2,440 ตร.ม.", 20, [("M41", "FS", 0), ("M34", "FS", 0)], "ทีมพื้น ~366 ลบ.ม.", ""),
     ("M43", "4.2", "ทางลาดขนส่ง 2 จุด", 6, [("M42", "SS", 6), ("M25", "FS", 0)], "ทีมพื้น", ""),
     ("M47", "4.6", "ตอกเข็มกำแพงกันดิน/ค้ำยัน 0.18x0.18 ยาว 8 ม. 153 ต้น", 8, [("M21C", "FS", 0)], "ปั้นจั่นเล็ก 1 ชุด ~20 ต้น/วัน", ""),
-    ("M48", "4.6", "คานหัวเข็ม กำแพงกันดิน 226 ม. ฐานค้ำยันและค้ำยัน 77 ชุด", 30, [("M47", "SS", 3)], "ทีมภายนอก 12 คน", ""),
+    ("M48", "4.6", "กำแพงกันดิน L-wall 226 ม. (พื้นกว้าง 1.50 ม. + ผนังสูง 1.50 ม.)", 28, [("M47", "SS", 3)], "ทีมภายนอก 12 คน", ""),
     ("M49", "4.7", "รั้วกำแพงด้านใต้ 81 ม. (คานคอดิน เสา ผนังก่อ ทับหลัง)", 15, [("M41", "SS", 3)], "ช่างปูน 6 คน", ""),
     ("M51", "1.5", "ทดสอบระบบ ตรวจรับ แก้ไขงาน (Punch list)", 8, [("M38", "FS", 0), ("M48", "FS", 0), ("M49", "FS", 0), ("M42", "FS", 0), ("M39", "FS", 0), ("M35", "FS", 0), ("M44", "FS", 0), ("M43", "FS", 0), ("M46", "FS", 0), ("M37", "FS", 0), ("M45", "FS", 0), ("M26", "FS", 0)], "ทีมบริหารโครงการ", ""),
     ("M52", "1.5", "รื้อสิ่งชั่วคราวด้านเหนือ เทพื้นถนนส่วนใต้สิ่งชั่วคราว ทำความสะอาด ส่งมอบ + As-built", 8, [("M51", "FS", 0)], "", ""),
 ]
+
+if not TRANSFORMER:
+    TASKS = [t for t in TASKS if t[0] != "M45"]
+    TASKS = [(a, b, c, d, [p for p in e if p[0] != "M45"], f, g) for (a, b, c, d, e, f, g) in TASKS]
 
 PROJECT_START = dt.date(2026, 11, 5)   # ยื่นราคา Preconstruction
 
