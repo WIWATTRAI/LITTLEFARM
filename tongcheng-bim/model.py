@@ -317,13 +317,8 @@ def build():
     for x, y in V["F1A"]:
         vbox("ext", "IfcFooting", "ฐาน F1A 0.60x0.60x0.30 รับพื้นถนน", "F1A", x-0.3, y-0.3, x+0.3, y+0.3,
              LV["f1a_bot"], LV["f1a_bot"]+0.30, "M41", "4.1.2 ฐาน F1A", pre="PILE_CAP", src=POS)
-    # 0.66 m pads with I26 along south/east boundary (function unknown)
-    for x, y in V["SQ66"]:
-        vbox("found", "IfcFooting", "ฐาน 0.66x0.66 แนวเขตที่ดิน (ไม่ทราบหน้าที่)", "SQ66", x-0.33, y-0.33, x+0.33, y+0.33,
-             -0.45, -0.15, "M41", "4.6.1 ฐาน 0.66 แนวเขต", pre="PILE_CAP", src="แบบ S201 (ตำแหน่ง) / หน้าที่+ระดับรอยืนยัน")
-    for x, y in V["I26_SQ66"]:
-        pile(x, y, -0.40, 260, "I26-B", "เสาเข็ม I-260x260 ใต้ฐาน 0.66 แนวเขตที่ดิน", "M21B", "4.6.1 ฐาน 0.66 แนวเขต", src="แบบ S201 (ตำแหน่ง) / หน้าที่+ระดับรอยืนยัน", grp="pile_a")
-
+    # ---- external works from SketchUp R1 (IFC) : retaining wall W-N-E + boundary wall south (แทนฐาน 0.66 ใน S201) ----
+    sketchup_external_works(pile)
     # ---------------- 2.3 grade beams B1 (perimeter + grid 6) top +0.50 ----------------
     B1 = [((0, 0), (BW, 0)), ((0, BD), (BW, BD)), ((0, 0), (0, BD)), ((BW, 0), (BW, BD)), ((30, 0), (30, BD))]
     for (p0, p1) in B1:
@@ -370,7 +365,7 @@ def build():
     vbox("ext", "IfcSlab", "ถังเก็บน้ำใต้ดิน - ฝา หนา 0.15", "UGT", x0, y0, x1, y1, -0.15, 0.0, "M26", "4.4 ถังเก็บน้ำใต้ดิน", pre="ROOF", src="สมมติ")
 
     # drain channel along site boundary
-    drain = offset_rect_poly(SITE, 1.2)
+    drain = offset_rect_poly(SITE, 2.0)   # ห่างแนวเขต 2.00 ม. พ้นฐานค้ำยันกำแพงกันดิน (SketchUp R1) – แนวรางรอแบบขยาย
     for i in range(len(drain)):
         p0, p1 = drain[i], drain[(i+1) % len(drain)]
         member("ext", "IfcPipeSegment", "รางระบายน้ำ คสล. พร้อมฝาปิด 0.40x0.50", "DR", (p0[0], p0[1], -0.25), (p1[0], p1[1], -0.25),
@@ -519,7 +514,60 @@ def build():
     return ELEMENTS
 
 
-ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "SQ66", "TRP", "C1", "C2", "C3", "SC1", "B1", "B3", "LB", "TB", "SC")
+# =====================================================================
+#  EXTERNAL WORKS FROM SKETCHUP R1 (data/sketchup_r1.json, extract_sketchup_ifc.py)
+# =====================================================================
+SKU = "SketchUp R1 (TONGCHENG-WH60X54_R1.ifc)"
+
+
+def _seg(cat, ifc, name, mark, p0, p1, w, z0, z1, task, boq, pre=None, src=SKU):
+    """box along a plan segment p0->p1, width w, levels z0..z1"""
+    dx, dy = p1[0]-p0[0], p1[1]-p0[1]; L = math.hypot(dx, dy)
+    ex = (dx/L, dy/L, 0.0); ey = (-dy/L, dx/L, 0.0)
+    return box(cat, ifc, name, mark, ((p0[0]+p1[0])/2, (p0[1]+p1[1])/2, (z0+z1)/2), ex, ey, Z, L, w, z1-z0, task, boq, pre=pre, src=src)
+
+
+def sketchup_external_works(pile):
+    J = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sketchup_r1.json"), encoding="utf-8"))
+    rw, bw = J["rw"], J["bw"]
+    for p in rw["piles"]:
+        x, y = p["c"]; a = p["a"]
+        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้คานหัวเข็มกำแพงกันดิน", "RW-P", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
+             "M47", "4.6.1 เข็มกำแพงกันดิน", pre="DRIVEN", src=SKU, extra={"ชื่อใน SketchUp": p["name"], "ความยาว (ม.)": round(p["z1"]-p["z0"], 2)})
+    for p in rw["stay_piles"]:
+        x, y = p["c"]; a = p["a"]
+        vbox("pile_w", "IfcPile", "เสาเข็ม คสล. 0.18x0.18 ม. ยาว 8 ม. ใต้ฐานค้ำยัน", "RW-SP", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"],
+             "M47", "4.6.1 เข็มกำแพงกันดิน", pre="DRIVEN", src=SKU, extra={"ชื่อใน SketchUp": p["name"], "ความยาว (ม.)": round(p["z1"]-p["z0"], 2)})
+    P = rw["path"]
+    for i in range(len(P)-1):
+        _seg("ext_rw", "IfcBeam", f"คานหัวเข็มกำแพงกันดิน {rw['cap']['b']:.2f}x0.50 ม.", "RW-CB", P[i], P[i+1], rw["cap"]["b"], rw["cap"]["z0"], rw["cap"]["z1"],
+             "M48", "4.6.2 คานหัวเข็มกำแพงกันดิน", pre="BEAM")
+        _seg("ext_rw", "IfcWall", f"กำแพงกันดิน คสล. หนา {rw['wall']['t']:.2f} ม. สูง 1.50 ม.", "RW-W", P[i], P[i+1], rw["wall"]["t"], rw["wall"]["z0"], rw["wall"]["z1"],
+             "M48", "4.6.3 กำแพงกันดิน คสล.", pre="SOLIDWALL")
+    piles = [p["c"] for p in rw["piles"]]
+    for st, ft in zip(rw["stays"], rw["footings"]):
+        fx, fy = ft["c"]
+        q = min(piles, key=lambda c_: math.hypot(c_[0]-fx, c_[1]-fy))
+        d = math.hypot(fx-q[0], fy-q[1]); ux, uy = (fx-q[0])/d, (fy-q[1])/d
+        ex, ey = (ux, uy, 0.0), (-uy, ux, 0.0)
+        a_ = max(ft["bx"], ft["by"]) if abs(ux) < 0.2 or abs(uy) < 0.2 else 0.65
+        box("ext_rw", "IfcFooting", "ฐานค้ำยัน 0.65x0.65x0.40 ม. (เข็ม 1 ต้น)", "RW-SF", (fx, fy, (ft["z0"]+ft["z1"])/2), ex, ey, Z, 0.65, 0.65, ft["z1"]-ft["z0"],
+            "M48", "4.6.4 ฐานค้ำยัน", pre="PILE_CAP", src=SKU, extra={"ชื่อใน SketchUp": ft["name"]})
+        sx, sy = st["c"]
+        box("ext_rw", "IfcColumn", "ค้ำยันกำแพงกันดิน คสล. กว้าง 0.30 ม.", "RW-ST", (sx, sy, (st["z0"]+st["z1"])/2), ex, ey, Z, 1.0, 0.30, st["z1"]-st["z0"],
+            "M48", "4.6.5 ค้ำยันกำแพง", pre="COLUMN", src=SKU, extra={"ชื่อใน SketchUp": st["name"], "ปริมาตร SketchUp (ลบ.ม.)": round(st["vol"], 3)})
+    Q = bw["path"]
+    for i in range(len(Q)-1):
+        _seg("ext_rw", "IfcBeam", "คานคอดินรั้ว 0.15x0.20 ม.", "BW-GB", Q[i], Q[i+1], bw["groundbeam"]["b"], bw["groundbeam"]["z0"], bw["groundbeam"]["z1"], "M49", "4.7.1 คานคอดินรั้ว", pre="BEAM")
+        _seg("ext_rw", "IfcWall", "ผนังรั้วก่ออิฐ หนา 0.10 ม. สูง 1.80 ม.", "BW-W", Q[i], Q[i+1], bw["wall"]["t"], bw["wall"]["z0"], bw["wall"]["z1"], "M49", "4.7.2 ผนังรั้ว", pre="SOLIDWALL")
+        _seg("ext_rw", "IfcBeam", "คานทับหลังรั้ว 0.15x0.20 ม.", "BW-LB", Q[i], Q[i+1], bw["lintel"]["b"], bw["lintel"]["z0"], bw["lintel"]["z1"], "M49", "4.7.3 คานทับหลังรั้ว", pre="LINTEL")
+    for p in bw["posts"]:
+        x, y = p["c"]; a = p["a"]
+        vbox("ext_rw", "IfcColumn", "เสารั้ว คสล. 0.15x0.15 ม. สูง 2.20 ม.", "BW-C", x-a/2, y-a/2, x+a/2, y+a/2, p["z0"], p["z1"], "M49", "4.7.4 เสารั้ว", pre="COLUMN", src=SKU,
+             extra={"ชื่อใน SketchUp": p["name"]})
+
+
+ID_MARKS = ("F2P", "F1P", "F1P-1", "F1A", "RW-SF", "TRP", "C1", "C2", "C3", "SC1", "B1", "B3", "LB", "TB", "SC")
 
 
 def grid_tag(x, y):
@@ -605,7 +653,10 @@ TASKS = [
     ("M45", "4.3", "ฐานหม้อแปลง", 6, [("M21B", "FS", 3)], "ทีมภายนอก", ""),
     ("M42", "4.1", "พื้นถนนรอบอาคาร S2 2,440 ตร.ม.", 20, [("M41", "FS", 0), ("M34", "FS", 0)], "ทีมพื้น ~366 ลบ.ม.", ""),
     ("M43", "4.2", "ทางลาดขนส่ง 2 จุด", 6, [("M42", "SS", 6), ("M25", "FS", 0)], "ทีมพื้น", ""),
-    ("M51", "1.5", "ทดสอบระบบ ตรวจรับ แก้ไขงาน (Punch list)", 8, [("M38", "FS", 0), ("M42", "FS", 0), ("M39", "FS", 0), ("M35", "FS", 0), ("M44", "FS", 0), ("M43", "FS", 0), ("M46", "FS", 0), ("M37", "FS", 0), ("M45", "FS", 0), ("M26", "FS", 0)], "ทีมบริหารโครงการ", ""),
+    ("M47", "4.6", "ตอกเข็มกำแพงกันดิน/ค้ำยัน 0.18x0.18 ยาว 8 ม. 153 ต้น", 8, [("M21C", "FS", 0)], "ปั้นจั่นเล็ก 1 ชุด ~20 ต้น/วัน", ""),
+    ("M48", "4.6", "คานหัวเข็ม กำแพงกันดิน 226 ม. ฐานค้ำยันและค้ำยัน 77 ชุด", 30, [("M47", "SS", 3)], "ทีมภายนอก 12 คน", ""),
+    ("M49", "4.7", "รั้วกำแพงด้านใต้ 81 ม. (คานคอดิน เสา ผนังก่อ ทับหลัง)", 15, [("M41", "SS", 3)], "ช่างปูน 6 คน", ""),
+    ("M51", "1.5", "ทดสอบระบบ ตรวจรับ แก้ไขงาน (Punch list)", 8, [("M38", "FS", 0), ("M48", "FS", 0), ("M49", "FS", 0), ("M42", "FS", 0), ("M39", "FS", 0), ("M35", "FS", 0), ("M44", "FS", 0), ("M43", "FS", 0), ("M46", "FS", 0), ("M37", "FS", 0), ("M45", "FS", 0), ("M26", "FS", 0)], "ทีมบริหารโครงการ", ""),
     ("M52", "1.5", "รื้อสิ่งชั่วคราวด้านเหนือ เทพื้นถนนส่วนใต้สิ่งชั่วคราว ทำความสะอาด ส่งมอบ + As-built", 8, [("M51", "FS", 0)], "", ""),
 ]
 
