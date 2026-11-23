@@ -3561,8 +3561,8 @@ for side in ('N', 'S'):
             off += od / 2
             yc = yf - g['s'] * off
             off += od / 2 + SAN_GAP
-            if (side, i) in SAN_NEWPOS:                      # จัดตำแหน่งใหม่ (ผู้ใช้สั่ง 23 พ.ย. 2569): ส้วมฝั่งชักโครก น้ำทิ้งฝั่งอ่าง อากาศฝั่งคาน B2
-                _dx, _dy = SAN_NEWPOS[(side, i)][key]
+            if True:                                         # จัดตำแหน่งใหม่ (ผู้ใช้สั่ง 23 พ.ย. 2569): ส้วมฝั่งชักโครก น้ำทิ้งฝั่งอ่าง อากาศฝั่งคาน B2; ทุกห้อง N+S (ผู้ใช้เลือก 24 พ.ย. 2569)
+                _dx, _dy = SAN_NEWPOS[('N', 2)][key]
                 xc, yc = xi - g['dr'] * _dx, yf - g['s'] * _dy
             L = SAN_Z1 - SAN_Z0
             m = member((xc, yc, SAN_Z0), (xc, yc, SAN_Z1), od, od)
@@ -4248,108 +4248,136 @@ y_wc = 8.535                                      # แนวท่อฝัง�
 y_rf = _YM - (GY['C'] + 0.165)                    # ผิวฉาบผนังหน้าห้องด้านในห้อง
 x_r = 0.13                                        # ท่อแนวดิ่ง 2" ที่ผนังกริด 1 (พ้นคาน B1-1-CD)
 NW_MT = {}
-for f in (2, 3, 4, 5):
-    P = f'PB-NW-F{f}'
-    zMn = FL[f] + 3.20 - 0.60 - 0.15               # ท้องคาน B2 ชั้นบน − 0.15 (ชั้น 5 ไม่มีคานบน ใช้ระดับเดียวกัน)
-    zMt = FL[f] + 2.20
-    zFl = FL[f] - 0.025
-    h12, h114, h2 = (WOD[s][0] / 2 + 0.006 for s in ('1/2', '1 1/4', '2'))
-    tees = []
-    for k in NW_ROOMS:
-        door = next(e for e in elements if e['id'] == f'W-F{f}-N{k}-COR-O1')
-        dxs = [q[0] for q in door['geom']['poly']]
-        xl, xr = GX[k - 1], GX[k]
-        dc = (min(dxs) + max(dxs)) / 2
-        x_m = xr - 0.20 if dc < (xl + xr) / 2 else xl + 0.20   # ริมเสาฝั่งตรงข้ามประตู
-        s = 1 if x_m > (xl + xr) / 2 else -1                   # ทิศจากท่อดิ่งไปหามิเตอร์/เสา
-        x_d = x_m - s * 0.53
-        NW_MT[(f, k)] = x_m
-        R = f'PB-N{k}-F{f}-MT'
-        tees.append(x_d)
-        # ท่อดิ่ง 1¼" จากสามทางบนเมน → ข้องอ → ข้อต่อลด → วาล์ว → มิเตอร์ → วาล์ว → ข้องอเข้าผนัง
-        n3_wfit(f'{R}-TE', [x_d, y_mn, zMn], '1 1/4', 'สามทาง')
-        n3_wpipe(f'{R}-P1', [x_d, y_mn, zMn - h114], [x_d, y_mn, zMt + h114], '1 1/4', 'ท่อน้ำดีลงมิเตอร์หน้าห้อง')
-        n3_wfit(f'{R}-EL1', [x_d, y_mn, zMt], '1 1/4', 'ข้องอ 90°')
-        n3_box(f'{R}-RD', min(x_d + s * h114, x_d + s * 0.10), y_mn - 0.019, max(x_d + s * h114, x_d + s * 0.10), y_mn + 0.019, zMt - 0.019, 0.038,
+
+
+def water_row(side, ROOMS):
+    """ชุดมิเตอร์หน้าห้อง + ท่อเมนทางเดิน + จุดยึด + ท่อแนวดิ่ง 2" ที่กริด 1 ของแถว N หรือ S
+    เขียนพิกัดเป็นแถว N (json) แล้วสะท้อนแกน y รอบแนวกลางทางเดิน (y' = 15.50 − y) สำหรับแถว S (อาคารสมมาตร)"""
+    Y = (lambda v: v) if side == 'N' else (lambda v: round(GY['F'] - v, 6))
+    J3 = lambda p: [p[0], Y(p[1]), p[2]]
+
+    def bx(eid, x0, y0, x1, y1, z0, t, nm, **kw):
+        y0, y1 = Y(y0), Y(y1)
+        if side == 'S':
+            y0, y1 = sorted((y0, y1))
+        n3_box(eid, x0, y0, x1, y1, z0, t, nm, **kw)
+
+    wpipe = lambda eid, p, q, sz, nm: n3_wpipe(eid, J3(p), J3(q), sz, nm)
+    wfit = lambda eid, p, sz, nm: n3_wfit(eid, J3(p), sz, nm)
+    chrome = lambda eid, p, q, d, nm, **kw: n3_chrome(eid, J3(p), J3(q), d, nm, **kw)
+    wroute = lambda pref, pts, sz, nm: n3_wroute(pref, [J3(p) for p in pts], sz, nm)
+    W = f'{side}W'
+    for f in (2, 3, 4, 5):
+        P = f'PB-{W}-F{f}'
+        zMn = FL[f] + 3.20 - 0.60 - 0.15               # ท้องคาน B2 ชั้นบน − 0.15 (ชั้น 5 ไม่มีคานบน ใช้ระดับเดียวกัน)
+        zMt = FL[f] + 2.20
+        zFl = FL[f] - 0.025
+        h12, h114, h2 = (WOD[s][0] / 2 + 0.006 for s in ('1/2', '1 1/4', '2'))
+        tees = []
+        for k in ROOMS:
+            door = next(e for e in elements if e['id'] == f'W-F{f}-{side}{k}-COR-O1')
+            dxs = [q[0] for q in door['geom']['poly']]
+            xl, xr = GX[k - 1], GX[k]
+            dc = (min(dxs) + max(dxs)) / 2
+            x_m = xr - 0.20 if dc < (xl + xr) / 2 else xl + 0.20   # ริมเสาฝั่งตรงข้ามประตู
+            s = 1 if x_m > (xl + xr) / 2 else -1                   # ทิศจากท่อดิ่งไปหามิเตอร์/เสา
+            x_d = x_m - s * 0.53
+            NW_MT[(side, f, k)] = x_m
+            R = f'PB-{side}{k}-F{f}-MT'
+            tees.append(x_d)
+            # ท่อดิ่ง 1¼" จากสามทางบนเมน → ข้องอ → ข้อต่อลด → วาล์ว → มิเตอร์ → วาล์ว → ข้องอเข้าผนัง
+            wfit(f'{R}-TE', [x_d, y_mn, zMn], '1 1/4', 'สามทาง')
+            wpipe(f'{R}-P1', [x_d, y_mn, zMn - h114], [x_d, y_mn, zMt + h114], '1 1/4', 'ท่อน้ำดีลงมิเตอร์หน้าห้อง')
+            wfit(f'{R}-EL1', [x_d, y_mn, zMt], '1 1/4', 'ข้องอ 90°')
+            bx(f'{R}-RD', min(x_d + s * h114, x_d + s * 0.10), y_mn - 0.019, max(x_d + s * h114, x_d + s * 0.10), y_mn + 0.019, zMt - 0.019, 0.038,
                'ข้อต่อลด PVC 1¼"x1/2" ก่อนเข้ามิเตอร์', qty=dict(type='ข้อต่อลด', size='1¼"x1/2"'))
-        elements[-1]['material'] = 'BIM-ท่อน้ำดี PVC ฟ้า'
-        n3_chrome(f'{R}-V1', [x_d + s * 0.10, y_mn, zMt], [x_d + s * 0.185, y_mn, zMt], 0.034, 'บอลวาล์วทองเหลือง 1/2" ก่อนมิเตอร์', qty=dict(type='บอลวาล์ว', size='1/2"'))
-        n3_box(f'{R}-V1H', x_d + s * 0.1425 - 0.008, y_mn - 0.008, x_d + s * 0.1425 + 0.008, y_mn + 0.008, zMt + 0.017, 0.035, 'ด้ามบอลวาล์ว')
-        elements[-1]['material'] = 'BIM-โครเมียม'
-        x0, x1 = sorted((x_d + s * 0.19, x_d + s * 0.38))
-        n3_box(f'{R}', x0, y_mn - 0.045, x1, y_mn + 0.045, zMt - 0.045, 0.09, 'มิเตอร์น้ำ 1/2" (4 หุน) หน้าห้อง +2.20 ยื่นพ้นหน้าผนังฝั่งทางเดิน',
+            elements[-1]['material'] = 'BIM-ท่อน้ำดี PVC ฟ้า'
+            chrome(f'{R}-V1', [x_d + s * 0.10, y_mn, zMt], [x_d + s * 0.185, y_mn, zMt], 0.034, 'บอลวาล์วทองเหลือง 1/2" ก่อนมิเตอร์', qty=dict(type='บอลวาล์ว', size='1/2"'))
+            bx(f'{R}-V1H', x_d + s * 0.1425 - 0.008, y_mn - 0.008, x_d + s * 0.1425 + 0.008, y_mn + 0.008, zMt + 0.017, 0.035, 'ด้ามบอลวาล์ว')
+            elements[-1]['material'] = 'BIM-โครเมียม'
+            x0, x1 = sorted((x_d + s * 0.19, x_d + s * 0.38))
+            bx(f'{R}', x0, y_mn - 0.045, x1, y_mn + 0.045, zMt - 0.045, 0.09, 'มิเตอร์น้ำ 1/2" (4 หุน) หน้าห้อง +2.20 ยื่นพ้นหน้าผนังฝั่งทางเดิน',
                qty=dict(type='มิเตอร์น้ำ', size='1/2"'))
-        elements[-1]['material'] = 'BIM-สแตนเลส'
-        n3_chrome(f'{R}-DL', [(x0 + x1) / 2, y_mn, zMt + 0.045], [(x0 + x1) / 2, y_mn, zMt + 0.065], 0.07, 'หน้าปัดมิเตอร์น้ำ')
-        n3_chrome(f'{R}-V2', [x_d + s * 0.385, y_mn, zMt], [x_d + s * 0.47, y_mn, zMt], 0.034, 'บอลวาล์วทองเหลือง 1/2" หลังมิเตอร์', qty=dict(type='บอลวาล์ว', size='1/2"'))
-        n3_box(f'{R}-V2H', x_d + s * 0.4275 - 0.008, y_mn - 0.008, x_d + s * 0.4275 + 0.008, y_mn + 0.008, zMt + 0.017, 0.035, 'ด้ามบอลวาล์ว')
-        elements[-1]['material'] = 'BIM-โครเมียม'
-        n3_wpipe(f'{R}-P2', [x_d + s * 0.47, y_mn, zMt], [x_m - s * h12, y_mn, zMt], '1/2', 'ท่อน้ำดีหลังมิเตอร์')
-        # ข้องอเข้าผนัง → ฝังผนังลงพื้น → ข้องอ → ฝังพื้นเข้าห้อง
-        n3_wroute(f'{R}-W', [[x_m, y_mn, zMt], [x_m, y_wc, zMt], [x_m, y_wc, zFl], [x_m, y_rf + (0.0 if k == 3 else 0.15), zFl]], '1/2',
-                  'ท่อน้ำดีหลังมิเตอร์ ฝังผนังหน้าห้อง → ฝังพื้นเข้าห้อง')
-        if k == 3:
-            elements.pop()                          # ห้อง N3 ต่อเข้าแนวท่อในพื้นเดิม (PB-N3-F*-CW-M) ไม่ต้องมีท่อช่วงในห้องซ้ำ
-        n3_wfit(f'{R}-W-EL0', [x_m, y_mn, zMt], '1/2', 'ข้องอ 90°')
-        if k != 3:
-            n3_wfit(f'{R}-W-CAP', [x_m, y_rf + 0.15, zFl], '1/2', 'ฝาครอบปิดปลาย (รอต่อท่อในห้อง)')
-    # ท่อเมน 1¼" จากท่อแนวดิ่งที่กริด 1 → สามทางหน้าห้องทุกห้อง → ปลายปิด
-    xs = sorted(tees)
-    x_end = xs[-1] + 0.15
-    pts = [x_r] + xs + [x_end]
-    for j in range(len(pts) - 1):
-        a = pts[j] + (h2 if j == 0 else h114)
-        b = pts[j + 1] - (h114 if j + 1 < len(pts) - 1 else h114)
-        n3_wpipe(f'{P}-MN{j+1}', [a, y_mn, zMn], [b, y_mn, zMn], '1 1/4', 'ท่อเมนน้ำดีทางเดิน ใต้คาน B2')
-    n3_wfit(f'{P}-MN-CAP', [x_end, y_mn, zMn], '1 1/4', 'ฝาครอบปิดปลายท่อเมน')
-    # จุดยึดท่อเมน: ทุกคาน B2 หน้าห้อง (กลางช่วงคาน เลี่ยงสามทาง) เพลท PL8x150x150 ยิงพุก 4-M12 ข้างคาน + เหล็กฉาก L50x5 ห้อยลง + แขนรับใต้ท่อ + ห่วงรัดท่อ
-    # ชั้น 5 ไม่มีคานบน → ยึดผนังหน้าห้องฝั่งทางเดินแทน
-    zSo = zMn + 0.15
-    for i in range(1, 10):
-        xa, xb = GX[i - 1] + 0.175, GX[i] - 0.175
-        if xa > x_end:
-            continue
-        xh = (xa + max(xb, xa)) / 2
-        xh = min(xh, x_end - 0.20)
-        while any(abs(xh - t) < 0.15 for t in tees):
-            xh += 0.20
-        Q = f'{P}-SUP{i}'
-        yp = y_cf + 0.005 if f < 5 else y_wf     # ผิวคาน (ฉาบ) / ผิวผนัง
-        if f == 5 and i == 4:                    # ชั้น 5 หน้าโถงบันไดไม่มีผนัง → ยึดหน้าเสา C1-5C แทน
-            xh, yp = GX[4], y_cf
-        zp0 = zSo if f < 5 else zMn + 0.05
-        n3_box(f'{Q}-PL', xh - 0.075, yp - 0.008, xh + 0.075, yp, zp0, 0.15, 'เพลทเหล็ก PL8x150x150 ยิงพุก 4-M12 ' + ('ข้างคาน B2' if f < 5 else 'ผนังหน้าห้อง (ชั้น 5 ไม่มีคานบน)'),
+            elements[-1]['material'] = 'BIM-สแตนเลส'
+            chrome(f'{R}-DL', [(x0 + x1) / 2, y_mn, zMt + 0.045], [(x0 + x1) / 2, y_mn, zMt + 0.065], 0.07, 'หน้าปัดมิเตอร์น้ำ')
+            chrome(f'{R}-V2', [x_d + s * 0.385, y_mn, zMt], [x_d + s * 0.47, y_mn, zMt], 0.034, 'บอลวาล์วทองเหลือง 1/2" หลังมิเตอร์', qty=dict(type='บอลวาล์ว', size='1/2"'))
+            bx(f'{R}-V2H', x_d + s * 0.4275 - 0.008, y_mn - 0.008, x_d + s * 0.4275 + 0.008, y_mn + 0.008, zMt + 0.017, 0.035, 'ด้ามบอลวาล์ว')
+            elements[-1]['material'] = 'BIM-โครเมียม'
+            wpipe(f'{R}-P2', [x_d + s * 0.47, y_mn, zMt], [x_m - s * h12, y_mn, zMt], '1/2', 'ท่อน้ำดีหลังมิเตอร์')
+            # ข้องอเข้าผนัง → ฝังผนังลงพื้น → ข้องอ → ฝังพื้นเข้าห้อง
+            # ห้องที่ห้องน้ำอยู่ฝั่งเดียวกับมิเตอร์: ต่อเข้าแนวท่อในพื้น (PB-*-F*-CW-M) ตรงจากข้องอโคนผนัง
+            # ห้องที่ห้องน้ำอยู่ฝั่งประตู: เดินท่อในพื้นเข้าห้อง 0.15 แล้วข้องอเลียบผนังหน้าห้องไปฝั่งห้องน้ำ (ต่อในบล็อกท่อห้องน้ำ)
+            same = wc_geo(k - 1, side, f)['dr'] == -1
+            wroute(f'{R}-W', [[x_m, y_mn, zMt], [x_m, y_wc, zMt], [x_m, y_wc, zFl], [x_m, y_rf + 0.15, zFl]], '1/2',
+                   'ท่อน้ำดีหลังมิเตอร์ ฝังผนังหน้าห้อง → ฝังพื้นเข้าห้อง')
+            if same:
+                elements.pop()
+            wfit(f'{R}-W-EL0', [x_m, y_mn, zMt], '1/2', 'ข้องอ 90°')
+            if not same:
+                wfit(f'{R}-W-EL3', [x_m, y_rf + 0.15, zFl], '1/2', 'ข้องอ 90°')
+        # ท่อเมน 1¼" จากท่อแนวดิ่งที่กริด 1 → สามทางหน้าห้องทุกห้อง → ปลายปิด
+        xs = sorted(tees)
+        x_end = xs[-1] + 0.15
+        pts = [x_r] + xs + [x_end]
+        for j in range(len(pts) - 1):
+            a = pts[j] + (h2 if j == 0 else h114)
+            b = pts[j + 1] - (h114 if j + 1 < len(pts) - 1 else h114)
+            wpipe(f'{P}-MN{j+1}', [a, y_mn, zMn], [b, y_mn, zMn], '1 1/4', 'ท่อเมนน้ำดีทางเดิน ใต้คาน B2')
+        wfit(f'{P}-MN-CAP', [x_end, y_mn, zMn], '1 1/4', 'ฝาครอบปิดปลายท่อเมน')
+        # จุดยึดท่อเมน: ทุกคาน B2 หน้าห้อง (กลางช่วงคาน เลี่ยงสามทาง) เพลท PL8x150x150 ยิงพุก 4-M12 ข้างคาน + เหล็กฉาก L50x5 ห้อยลง + แขนรับใต้ท่อ + ห่วงรัดท่อ
+        # ชั้น 5 ไม่มีคานบน → ยึดผนังหน้าห้องฝั่งทางเดินแทน
+        zSo = zMn + 0.15
+        for i in range(1, 10):
+            xa, xb = GX[i - 1] + 0.175, GX[i] - 0.175
+            if xa > x_end:
+                continue
+            xh = (xa + max(xb, xa)) / 2
+            xh = min(xh, x_end - 0.20)
+            while any(abs(xh - t) < 0.15 for t in tees):
+                xh += 0.20
+            Q = f'{P}-SUP{i}'
+            yp = y_cf + 0.005 if f < 5 else y_wf     # ผิวคาน (ฉาบ) / ผิวผนัง
+            if side == 'N' and f == 5 and i == 4:    # ชั้น 5 หน้าโถงบันไดไม่มีผนัง → ยึดหน้าเสา C1-5C แทน
+                xh, yp = GX[4], y_cf
+            zp0 = zSo if f < 5 else zMn + 0.05
+            bx(f'{Q}-PL', xh - 0.075, yp - 0.008, xh + 0.075, yp, zp0, 0.15, 'เพลทเหล็ก PL8x150x150 ยิงพุก 4-M12 ' + ('ข้างคาน B2' if f < 5 else 'ผนังหน้าห้อง (ชั้น 5 ไม่มีคานบน)'),
                qty=dict(type='เพลทเหล็ก PL8x150x150 + พุก M12', size='150x150x8', bolts=4))
-        elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
-        zb = zMn - WOD['1 1/4'][0] / 2 - 0.005     # ผิวบนแขนรับ = ใต้ท่อ (เผื่อยาง)
-        n3_box(f'{Q}-L1', xh - 0.025, yp - 0.013, xh + 0.025, yp - 0.008, zb - 0.005, zp0 + 0.075 - zb + 0.005, 'เหล็กฉาก L50x5 ห้อยลง เชื่อมกับเพลท',
+            elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+            zb = zMn - WOD['1 1/4'][0] / 2 - 0.005     # ผิวบนแขนรับ = ใต้ท่อ (เผื่อยาง)
+            bx(f'{Q}-L1', xh - 0.025, yp - 0.013, xh + 0.025, yp - 0.008, zb - 0.005, zp0 + 0.075 - zb + 0.005, 'เหล็กฉาก L50x5 ห้อยลง เชื่อมกับเพลท',
                qty=dict(type='เหล็กฉาก L50x50x5', length=round(zp0 + 0.075 - zb + 0.005, 3)))
-        elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
-        n3_box(f'{Q}-L2', xh - 0.025, y_mn - 0.04, xh + 0.025, yp - 0.013, zb - 0.005, 0.005, 'เหล็กฉาก L50x5 แขนรับใต้ท่อเมน',
+            elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+            bx(f'{Q}-L2', xh - 0.025, y_mn - 0.04, xh + 0.025, yp - 0.013, zb - 0.005, 0.005, 'เหล็กฉาก L50x5 แขนรับใต้ท่อเมน',
                qty=dict(type='เหล็กฉาก L50x50x5', length=round(yp - 0.013 - y_mn + 0.04, 3)))
-        elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
-        od = WOD['1 1/4'][0]
-        m = member(_J([xh - 0.0125, y_mn, zMn]), _J([xh + 0.0125, y_mn, zMn]), od + 0.012, od + 0.012)
-        m.update(shape='POLY', poly2d=_circ(od / 2 + 0.006), hole2d=_circ(od / 2 + 0.001))
-        add(f'{Q}-CL', 'สุขาภิบาล', 1, 'A07', m, name='ห่วงรัดท่อเหล็กชุบกัลวาไนซ์ บุยาง 1¼" ยึดกับแขนเหล็กฉาก', assumed=True, qty=dict(type='ห่วงรัดท่อ', size='1¼"'))
-        elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
-# ท่อแนวดิ่ง 2" ที่ผนังกริด 1: ปลายล่างใต้พื้นชั้น 2 ปิดไว้รอต่อระบบปั๊ม → สามทางลด 2"x1¼" ทุกชั้น 2–4 → ชั้น 5 ข้องอ
-zR = [FL[f] + 2.45 for f in (2, 3, 4, 5)]
-hb2 = WOD['2'][0] / 2 + 0.006
-zbot = FL[2] - SLAB_T - 0.30
-n3_wfit('PB-NW-RS-CAP', [x_r, y_mn, zbot], '2', 'ฝาครอบปิดปลายท่อ (รอต่อระบบปั๊ม)')
-zc = zbot
-for j, z in enumerate(zR):
-    n3_wpipe(f'PB-NW-RS-P{j+1}', [x_r, y_mn, zc + hb2], [x_r, y_mn, z - hb2], '2', 'ท่อแนวดิ่งจ่ายน้ำแต่ละชั้น ผนังกริด 1')
-    n3_wfit(f'PB-NW-RS-T{j+2}', [x_r, y_mn, z], '2', 'สามทางลด 2"x1¼"' if j < 3 else 'ข้องอ 90° + ข้อต่อลด 2"x1¼"')
-    zc = z
+            elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+            od = WOD['1 1/4'][0]
+            m = member(_J([xh - 0.0125, Y(y_mn), zMn]), _J([xh + 0.0125, Y(y_mn), zMn]), od + 0.012, od + 0.012)
+            m.update(shape='POLY', poly2d=_circ(od / 2 + 0.006), hole2d=_circ(od / 2 + 0.001))
+            add(f'{Q}-CL', 'สุขาภิบาล', 1, 'A07', m, name='ห่วงรัดท่อเหล็กชุบกัลวาไนซ์ บุยาง 1¼" ยึดกับแขนเหล็กฉาก', assumed=True, qty=dict(type='ห่วงรัดท่อ', size='1¼"'))
+            elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+    # ท่อแนวดิ่ง 2" ที่ผนังกริด 1: ปลายล่างใต้พื้นชั้น 2 ปิดไว้รอต่อระบบปั๊ม → สามทางลด 2"x1¼" ทุกชั้น 2–4 → ชั้น 5 ข้องอ
+    zR = [FL[f] + 2.45 for f in (2, 3, 4, 5)]
+    hb2 = WOD['2'][0] / 2 + 0.006
+    zbot = FL[2] - SLAB_T - 0.30
+    wfit(f'PB-{W}-RS-CAP', [x_r, y_mn, zbot], '2', 'ฝาครอบปิดปลายท่อ (รอต่อระบบปั๊ม)')
+    zc = zbot
+    for j, z in enumerate(zR):
+        wpipe(f'PB-{W}-RS-P{j+1}', [x_r, y_mn, zc + hb2], [x_r, y_mn, z - hb2], '2', 'ท่อแนวดิ่งจ่ายน้ำแต่ละชั้น ผนังกริด 1')
+        wfit(f'PB-{W}-RS-T{j+2}', [x_r, y_mn, z], '2', 'สามทางลด 2"x1¼"' if j < 3 else 'ข้องอ 90° + ข้อต่อลด 2"x1¼"')
+        zc = z
+
+
+water_row('N', NW_ROOMS)
+water_row('S', tuple(range(1, 10)))  # แถว S ทุกห้อง (ผู้ใช้เลือก 24 พ.ย. 2569)
 ASSUMPTIONS.append('ชุดมิเตอร์หน้าห้อง + ท่อเมนทางเดินแถว N ชั้น 2–5 (ผู้ใช้สั่ง 23 พ.ย. 2569): เมน 1¼" PVC 13.5 ใต้ท้องคาน 0.15 ห่างหน้าเสา 0.10 (ศูนย์ท่อ), ลด 1¼"x1/2" ก่อนมิเตอร์, '
                    'มิเตอร์ 1/2" +2.20 ฝั่งทางเดินริมเสาฝั่งตรงข้ามประตู, บอลวาล์วก่อน/หลัง, หลังมิเตอร์ 1/2" ฝังผนังลงพื้นเข้าห้อง, ท่อแนวดิ่ง 2" ที่ผนังกริด 1 ปลายล่างปิดรอต่อปั๊ม (ผู้ใช้); '
                    'ระยะชุดมิเตอร์/วาล์ว ขนาดมิเตอร์ 0.19x0.09x0.09, ตำแหน่งจุดยึดกลางช่วงคาน 1 จุด/คาน, ชั้น 5 ยึดผนัง (หน้าโถงบันไดยึดหน้าเสา C1-5C), ปลายล่างท่อแนวดิ่ง 0.30 ใต้พื้นชั้น 2, ห้องอื่นนอกจาก N3 ปิดปลายท่อในห้องรอต่อ (ผมกำหนด)')
 
-# ตัดท่อดิ่ง N3 เป็นท่อนตามข้อต่อ (ท่อนล่างสุดคงรหัสเดิม)
-for k, cuts in N3_CUTS.items():
-    e = N3_P[k]; g = e['geom']
+# ตัดท่อดิ่งทุกแนว (N3 + แนวอื่นที่ทำตาม N3) เป็นท่อนตามข้อต่อ (ท่อนล่างสุดคงรหัสเดิม) — ระดับข้อต่อเท่ากันทุกห้อง
+WC_ROOMS = [f'{sd}{i+1}' for sd in ('N', 'S') for i in range(9) if not (sd == 'N' and i == STAIR_BAY[0])]
+for RM, k in ((rm, k) for rm in WC_ROOMS for k in N3_CUTS):
+    cuts = N3_CUTS[k]
+    e = next(x for x in elements if x['id'] == f'PB-{RM}-{k}'); g = e['geom']
     lo, hi = sorted((g['p0'][2], g['p1'][2]))
     x0, y0 = g['p0'][0], g['p0'][1]
     segs, z = [], lo
@@ -4360,11 +4388,87 @@ for k, cuts in N3_CUTS.items():
     e['qty']['length'] = round(segs[0][1] - segs[0][0], 3)
     for j, (a, b) in enumerate(segs[1:], 2):
         m = dict(e['geom']); m['p0'] = [x0, y0, round(a, 4)]; m['p1'] = [x0, y0, round(b, 4)]
-        add(f'PB-N3-{k}-{j:02d}', 'สุขาภิบาล', 2, 'A07', m, name=e['name'].split(' แนวดิ่ง')[0] + f' แนวดิ่งในช่องชาร์ฟ ห้อง N3 ท่อนที่ {j}', assumed=True,
+        add(f'PB-{RM}-{k}-{j:02d}', 'สุขาภิบาล', 2, 'A07', m, name=e['name'].split(' แนวดิ่ง')[0] + f' แนวดิ่งในช่องชาร์ฟ ห้อง {RM} ท่อนที่ {j}', assumed=True,
             qty=dict(e['qty'], length=round(b - a, 3)))
 for _e in elements:
     if re.match(r'^PB-N3-F\d-SUP-', _e['id']):
         _e['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+
+# ---- ระบบท่อห้องน้ำทุกห้อง N+S ทำตามแนว N3 (ผู้ใช้เลือก "ทุกห้อง N+S" 24 พ.ย. 2569) ----
+# ห้องน้ำทุกห้องเป็นภาพสะท้อน/เลื่อนของ N3 (ตรวจแล้ว: ระยะผนัง B5, ชักโครก, อ่าง เทียบผนังกริดและผนังนอกเท่ากันทุกห้อง)
+# x' = xg' − dr'·(x − xg_N3)  (dr_N3 = −1),  y' = yo' + s'·(y − yo_N3)  (พิกัดโมเดล ก่อนกลับแกน y)
+import copy as _copy
+_g3 = wc_geo(2, 'N', 2)
+
+
+def _wc_xf(side, i):
+    g = wc_geo(i, side, 2)
+    fx = lambda x: round(g['xg'] - g['dr'] * (x - _g3['xg']), 4)
+    fy = lambda y: round(g['yo'] + g['s'] * (y - _g3['yo']), 4)
+    return fx, fy, -g['dr'], g['s']                          # สเกลแกน x, y (±1)
+
+
+def _xf_geom(gm, fx, fy, sx, sy):
+    t = gm['type']
+    if t == 'member':
+        for k in ('p0', 'p1'):
+            gm[k] = [fx(gm[k][0]), fy(gm[k][1]), gm[k][2]]
+        if gm.get('path'):
+            gm['path'] = [[fx(q[0]), fy(q[1]), q[2]] for q in gm['path']]
+    elif t == 'prism':
+        gm['poly'] = [[fx(x), fy(y)] for x, y in gm['poly']]
+        if sx * sy < 0:
+            gm['poly'] = gm['poly'][::-1]
+    elif t == 'multi':
+        for q in gm['parts']:
+            _xf_geom(q, fx, fy, sx, sy)
+    else:
+        raise ValueError(t)
+
+
+_N3_SRC = [e for e in elements if re.match(r'^PB-N3-F\d-', e['id']) and not re.match(r'^PB-N3-F\d-MT', e['id'])]
+_wc_new = []
+for side in ('N', 'S'):
+    for i in range(9):
+        RM = f'{side}{i+1}'
+        if RM == 'N3' or (side == 'N' and i == STAIR_BAY[0]):
+            continue
+        fx, fy, sx, sy = _wc_xf(side, i)
+        same = wc_geo(i, side, 2)['dr'] == -1               # ห้องน้ำอยู่ฝั่งเดียวกับมิเตอร์
+        for e0 in _N3_SRC:
+            if not same and re.match(r'^PB-N3-F\d-CW-M-P1$', e0['id']):
+                continue                                     # ห้องน้ำฝั่งประตู: ท่อช่วงแรกเดินใหม่จากมิเตอร์ (ด้านล่าง)
+            e = _copy.deepcopy(e0)
+            e['id'] = e['id'].replace('PB-N3-', f'PB-{RM}-', 1)
+            e['name'] = e['name'].replace('ห้อง N3', f'ห้อง {RM}')
+            _xf_geom(e['geom'], fx, fy, sx, sy)
+            if 'fitting' in e:
+                F = e['fitting']
+                F['origin'] = [fx(F['origin'][0]), fy(F['origin'][1]), F['origin'][2]]
+                F['x'] = [round(F['x'][0] * sx, 5) + 0.0, round(F['x'][1] * sy, 5) + 0.0, F['x'][2]]
+                F['y'] = [round(F['y'][0] * sx, 5) + 0.0, round(F['y'][1] * sy, 5) + 0.0, F['y'][2]]
+            _wc_new.append(e)
+        if not same:
+            # มิเตอร์อยู่ฝั่งตรงข้ามห้องน้ำ: ท่อ 1/2" ฝังพื้นเลียบผนังหน้าห้อง (ห่างผิวผนัง 0.15) จากข้องอใต้มิเตอร์ → ข้องอริมเสาฝั่งห้องน้ำ → ข้องอเดิมของแนว N3
+            h = WOD['1/2'][0] / 2 + 0.006
+            ctr = lambda e: ((min(q[0] for q in e['geom']['poly']) + max(q[0] for q in e['geom']['poly'])) / 2,
+                             (min(q[1] for q in e['geom']['poly']) + max(q[1] for q in e['geom']['poly'])) / 2)
+            for f in (2, 3, 4, 5):
+                xc_, ybal = ctr(next(x for x in _wc_new if x['id'] == f'PB-{RM}-F{f}-CW-M-EL1'))       # พิกัดโมเดล
+                xm_, yq = ctr(next(x for x in elements if x['id'] == f'PB-{RM}-F{f}-MT-W-EL3'))
+                zFl = FL[f] - 0.025
+                n = len(elements)
+                n3_wroute(f'PB-{RM}-F{f}-CW-M0', [[xm_, _YM - yq, zFl], [xc_, _YM - yq, zFl], [xc_, _YM - ybal, zFl]], '1/2',
+                          'ท่อน้ำดี 4 หุน หลังมิเตอร์ ฝังพื้นเลียบผนังหน้าห้อง → ฝั่งห้องน้ำ')
+                p = elements[n]['geom']; dx = 1 if p['p1'][0] > p['p0'][0] else -1
+                p['p0'][0] = round(p['p0'][0] + dx * h, 4)
+                q = elements[-1]['geom']; dy = 1 if q['p1'][1] > q['p0'][1] else -1
+                q['p1'][1] = round(q['p1'][1] - dy * h, 4)
+                for x in elements[n:]:
+                    if x['geom']['type'] == 'member':
+                        x['qty']['length'] = round(math.dist(x['geom']['p0'], x['geom']['p1']), 3)
+                _wc_new.extend(elements[n:]); del elements[n:]
+elements.extend(_wc_new)
 ASSUMPTIONS.append('ระบบท่อห้องน้ำแนว N3 ชั้น 2–5 (23 พ.ย. 2569): ท่อดิ่งจัดใหม่ ส้วม 4" ฝั่งชักโครก น้ำทิ้ง 3" ฝั่งอ่าง อากาศ 2" ฝั่งคาน B2; '
                    'ชักโครกผ่านข้อต่อกันซึม SCG 4" (ใช้คอมโพเนนต์ PVC-TS-FLANG-100 แทน) ท่อ 4" ใต้พื้นลาด 1:50 เข้า TY-100; ระยะท่อออกชักโครก 0.305 จากผนังหลัง (สมมติ); '
                    'อ่าง P-trap 2" ท่อทะลุผนังชาร์ฟที่ +0.45 เข้า TYR-80x55; ฟลอร์เดรน PVC กันกลิ่นที่มุมห้องข้างฝักบัว (มุมผนัง B5 กับผนังนอก ขยับพ้นคาน B5/B4) ท่อ 3" ใต้พื้น 1:50 เข้า TY-80; '
