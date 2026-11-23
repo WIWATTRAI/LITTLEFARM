@@ -3589,6 +3589,329 @@ for _k, _x, _z in SEP_TANKS:
     elements[-1]['material'] = 'BIM-ถังบำบัด DOS เทา'
 ASSUMPTIONS.append('ถังบำบัดน้ำเสีย: DOS COMPACT 3000 ลิตร 6 ใบ (โซน 1: 2, โซน 2: 3, โซน 3: 1) ทรงกระบอกตั้ง ø1.82 สูง 1.93 ม. (ขนาดจาก HomePro, รูปทรงสมมติ) แนวศูนย์กลางห่างกริด A ออกนอกอาคาร 5.00 ม. ศูนย์กลางถังห่างกัน 2.30 ม. ฝาถังเสมอดิน ±0.00 (23 พ.ย. 2569)')
 
+# ---- ท่อระบายน้ำเสียจากโคนท่อแนวดิ่ง → บ่อพัก → ถังบำบัด → ท่อทิ้งรอต่อบ่อพักโครงการ (ผู้ใช้ยืนยันแนวท่อ 23 พ.ย. 2569) ----
+# ข้อต่อ/บ่อพักใช้คอมโพเนนต์จากไฟล์ตัวอย่าง (PVC-EB-45-*, PVC-YR-*, MH); ท่อ PVC ชั้น 8.5 สร้างเป็นชิ้นงานเอง
+# คู่มือ DOS: ท่อเข้าถัง 1:50, ท่อออก 1:100, ท่อออกต่ำกว่าท่อเข้า ≥ 15 ซม.; ระยะ A (ท่อเข้าต่ำจากปากถัง) ไม่มีในคู่มือ → สมมติ 0.40 ม.
+SD_OD = {50: 0.060, 80: 0.089, 100: 0.114, 150: 0.165, 200: 0.216}
+SD_T = {50: 0.0023, 80: 0.0032, 100: 0.0041, 150: 0.0060, 200: 0.0078}      # ชั้น 8.5 ค่าประมาณ
+SD_DEF = {('EB45', 80): ('PVC-EB-45-80', 0.021, 0.021), ('EB45', 100): ('PVC-EB-45-100', 0.025, 0.025), ('EB45', 150): ('PVC-EB-45-150', 0.038, 0.038)}
+# วาย: (คอมโพเนนต์, ระยะก้นปากออก(+x), ระยะก้นปากเข้า(-x), ระยะก้นปากแยก(ทิศ -0.71,0.71))
+SD_Y = {(100, 80): ('PVC-YR-100x80', 0.015, 0.114, 0.127), (150, 100): ('PVC-YR-150x100', 0.000, 0.160, 0.178)}
+SD_A, SD_DROP_TANK, SD_COVER_Z = 0.40, 0.15, -0.45
+_sd_n = collections.Counter()
+
+
+def _v(a, b):
+    return [b[i] - a[i] for i in range(3)]
+
+
+def _unit(v):
+    L = math.sqrt(sum(c * c for c in v))
+    return [c / L for c in v]
+
+
+def _pt(p, d, s):
+    return [p[i] + d[i] * s for i in range(3)]
+
+
+def _cross(a, b):
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def _frame(X, P2, l2):
+    """แกนคอมโพเนนต์: แกน x ท้องถิ่น = X (โลก), ทิศปากที่ 2 ท้องถิ่น l2 = (lx, ly) ชี้ไปทาง P2 (โลก)"""
+    X = _unit(X)
+    a = l2[0]
+    Y = [(P2[i] - a * X[i]) for i in range(3)]
+    d = sum(Y[i] * X[i] for i in range(3))
+    Y = _unit([Y[i] - d * X[i] for i in range(3)])
+    return X, Y
+
+
+def sd_pipe(pref, p, q, size, nm, zone, solid=False):
+    _sd_n[pref] += 1
+    eid = f'{pref}-P{_sd_n[pref]:02d}'
+    od = SD_OD[size]
+    m = member(p, q, od, od)
+    m.update(shape='POLY', poly2d=_circ(od / 2))
+    if not solid:
+        m['hole2d'] = _circ(od / 2 - SD_T[size])
+    L = math.dist(p, q)
+    add(eid, 'สุขาภิบาล', 1, 'A07', m, name=f'{nm} ø{size} PVC ชั้น 8.5 ({zone})', assumed=True,
+        qty=dict(length=round(L, 3), size=f'ø{size}', od_mm=round(od * 1000), cls='8.5',
+                 slope=round(abs(q[2] - p[2]) / max(math.hypot(q[0] - p[0], q[1] - p[1]), 1e-6), 4)))
+    return eid
+
+
+def sd_fit(pref, kind, dname, origin, X, Y, nm, zone, anchor='origin', size=None):
+    _sd_n[pref + kind] += 1
+    eid = f'{pref}-{kind}{_sd_n[pref + kind]:02d}'
+    o = [round(c, 4) for c in origin]
+    add(eid, 'สุขาภิบาล', 1, 'A07', member(o, [o[0], o[1], o[2] + 0.01], 0.05, 0.05),
+        name=f'{nm} ({zone}) คอมโพเนนต์ไฟล์ตัวอย่าง {dname}', assumed=True, qty=dict(type=nm, model=dname, size=size))
+    elements[-1]['fitting'] = dict(def_=dname, origin=o, x=[round(c, 5) for c in X], y=[round(c, 5) for c in Y], anchor=anchor)
+    elements[-1]['fitting']['def'] = elements[-1]['fitting'].pop('def_')
+    return eid
+
+
+def sd_route(pref, pts, size, nm, zone, start_port=0.0, end_port=0.0):
+    """เส้นท่อผ่านจุด pts: ข้องอ 45° ทุกจุดหักมุม (ท่อเริ่มที่ระยะ start_port จาก pts[0] ตามแนว, จบก่อน pts[-1] ระยะ end_port)"""
+    dname, d1, d2 = SD_DEF[('EB45', size)]
+    cur = _pt(pts[0], _unit(_v(pts[0], pts[1])), start_port)
+    for i in range(1, len(pts) - 1):
+        a = _unit(_v(pts[i - 1], pts[i])); b = _unit(_v(pts[i], pts[i + 1]))
+        ang = math.degrees(math.acos(max(-1, min(1, sum(a[k] * b[k] for k in range(3))))))
+        assert 30 < ang < 60, (pref, i, ang)
+        X, Y = _frame([-c for c in a], b, (-0.7071, 0.7071))
+        sd_fit(pref, 'EB', dname, pts[i], X, Y, f'ข้องอ 45° ø{size}', zone, size=f'ø{size}')
+        sd_pipe(pref, cur, _pt(pts[i], a, -d1), size, nm, zone)
+        cur = _pt(pts[i], b, d2)
+    a = _unit(_v(pts[-2], pts[-1]))
+    sd_pipe(pref, cur, _pt(pts[-1], a, -end_port), size, nm, zone)
+
+
+def sd_y(pref, key, origin, flow, branch_from, zone):
+    """วายลดที่ origin: ทางออกไปทิศ flow, ปากแยกชี้ไปทาง branch_from (ทิศจากวายไปหาท่อแยก) — คืนจุดก้นปาก (ออก, เข้า, แยก)"""
+    dname, do, di, db = SD_Y[key]
+    X, Y = _frame(flow, branch_from, (-0.7071, 0.7071))
+    sd_fit(pref, 'Y', dname, origin, X, Y, f'วายลด {key[0]}x{key[1]}', zone, size=f'{key[0]}x{key[1]}')
+    br = [-0.7071 * X[i] + 0.7071 * Y[i] for i in range(3)]
+    return _pt(origin, X, do), _pt(origin, X, -di), _pt(origin, br, db)
+
+
+def sd_cap(pref, p, d, size, zone):
+    """ฝาปิดปลายท่อ/ช่องล้าง (ไฟล์ตัวอย่างไม่มีชิ้นนี้ — ทำขึ้นเอง)"""
+    _sd_n[pref + 'CAP'] += 1
+    od = SD_OD[size] + 0.012
+    m = member(p, _pt(p, d, 0.03), od, od)
+    m.update(shape='POLY', poly2d=_circ(od / 2))
+    add(f'{pref}-CAP{_sd_n[pref + "CAP"]:02d}', 'สุขาภิบาล', 1, 'A07', m, name=f'ฝาปิดช่องล้าง/ปลายท่อ ø{size} ({zone}) ทำเอง ไม่มีในไฟล์ตัวอย่าง',
+        assumed=True, qty=dict(type='ฝาปิดปลายท่อ (ปลั๊ก)', size=f'ø{size}'))
+
+
+def sd_cleanout(pref, p_elbow, run_dir, size, zone, z_top=0.03):
+    """ช่องล้างต้นสาย: ข้องอ 45° ที่ p_elbow ยกขึ้นถอยหลังทิศ run_dir ไปถึงระดับ z_top แล้วปิดฝา"""
+    h = z_top - p_elbow[2]
+    top = [p_elbow[0] - run_dir[0] * h, p_elbow[1] - run_dir[1] * h, z_top]
+    return top
+
+
+SD_HY = -0.60 + 0.0          # ท่อรวมใต้ระเบียง ห่างกริด A เข้าอาคาร 0.60 (ก่อนกลับแกน y = +0.60)
+SD_HY = GY['A'] + 0.60
+SD_MHY = SEP_Y + SEP_D / 2 + 1.00 + 0.40      # บ่อพัก 0.80x0.80 ห่างหน้าถัง 1.00
+SD_MAINY = SEP_Y - SEP_D / 2 - 0.59           # ท่อทิ้งรวมหลังแนวถัง
+_stk = {}
+for _e in elements:
+    _m = re.match(r'^PB-N(\d)-(SOIL|WASTE)$', _e['id'])
+    if _m:
+        _stk[(int(_m.group(1)), _m.group(2))] = _e
+
+
+def sd_stack_base(pref, n, hx, z_h_of, zone):
+    """โคนท่อแนวดิ่งห้อง N{n}: น้ำทิ้ง 3" เข้าท่อส้วม 4" ด้วยวายลด 100x80 (แนวดิ่ง), ท่อส้วมลงดินด้วยข้องอ 45° 2 ตัว
+    แล้วเดินแนวทแยง 45° ในแปลนเข้าวายลด 150x100 บนท่อรวม — คืน (x วายบนท่อรวม, ฟังก์ชันสร้างท่อแยกเมื่อรู้ระดับ)"""
+    es, ew = _stk[(n, 'SOIL')], _stk[(n, 'WASTE')]
+    xs, ys = es['geom']['p0'][0], es['geom']['p0'][1]
+    yw = ew['geom']['p0'][1]
+    sw = 1 if yw > ys else -1                      # ท่อน้ำทิ้งอยู่ด้าน +y/-y ของท่อส้วม
+    zY = -0.15
+    up = [0, 0, 1]
+    # วายลด 100x80 แนวดิ่ง: ทางออกลง (-z), ปากแยกชี้ขึ้นเฉียงไปทางท่อน้ำทิ้ง
+    o_out, o_in, o_br = sd_y(pref, (100, 80), [xs, ys, zY], [0, 0, -1], [0, sw * 0.7071, 0.7071], zone)
+    brd = _unit(_v([xs, ys, zY], o_br))
+    s = (yw - o_br[1]) / brd[1]
+    E = _pt(o_br, brd, s)
+    X, Y = _frame(up, [-c for c in brd], (-0.7071, 0.7071))
+    sd_fit(pref, 'EB', 'PVC-EB-45-80', E, X, Y, 'ข้องอ 45° ø80', zone, size='ø80')
+    sd_pipe(pref, _pt(E, brd, -0.021), o_br, 80, 'ท่อน้ำทิ้ง', zone)
+    # ตัดปลายล่างท่อแนวดิ่งให้จบที่ปากข้อต่อ
+    for _e2, _zb in ((ew, E[2] + 0.021), (es, o_in[2])):
+        _g = _e2['geom']
+        _lo = 'p0' if _g['p0'][2] < _g['p1'][2] else 'p1'
+        _g[_lo][2] = round(_zb, 4)
+    for _e2 in (es, ew):
+        g = _e2['geom']; L = abs(g['p0'][2] - g['p1'][2]); _e2['qty']['length'] = round(L, 3)
+    # ข้องอ 45° 2 ตัว: ลงดิ่ง → เอียง 45° → แนวราบทิศ ds (ทแยงในแปลน)
+    ds = [0.7071 * hx, -0.7071 if SD_HY < ys else 0.7071, 0]
+    Lb = 0.12
+    t = abs(ys - 0.5 * Lb - SD_HY) / 0.7071
+    xY = xs + (0.5 * Lb + 0.7071 * t) * hx
+    zYh = z_h_of(xY)
+    zO2 = zYh + 0.02 * t
+    O2 = [xs + 0.5 * Lb * hx, ys + 0.5 * Lb * ds[1] / 0.7071, zO2]
+    O1 = [xs, ys, zO2 + 0.7071 * Lb]
+    Yo = [xY, SD_HY, zYh]
+    pts = [o_out, O1, O2, Yo]
+    return dict(x=xY, pts=pts, ds=ds, Yo=Yo)
+
+
+def sd_zone_header(pref, zone, hx, stacks, x_turn, x_mh_in, z0):
+    """ท่อรวม ø150 ใต้ระเบียงทิศ hx → ข้องอ 45° 2 ตัวเลี้ยวออกนอกอาคาร → เข้าบ่อพักที่ x_mh_in; คืนระดับที่ผนังบ่อพัก"""
+    xs_first = min(_stk[(n, 'SOIL')]['geom']['p0'][0] for n in stacks) if hx > 0 else max(_stk[(n, 'SOIL')]['geom']['p0'][0] for n in stacks)
+    bases = {}
+    # ตำแหน่งวายบนท่อรวม (ไม่ขึ้นกับระดับ)
+    for n in stacks:
+        xs = _stk[(n, 'SOIL')]['geom']['p0'][0]
+        bases[n] = xs + (0.06 + 0.7071 * abs(_stk[(n, 'SOIL')]['geom']['p0'][1] - 0.06 - SD_HY) / 0.7071) * hx
+    x_co = min(bases.values()) - 0.50 if hx > 0 else max(bases.values()) + 0.50
+    zf = lambda x: z0 - 0.01 * abs(x - x_co)
+    # ช่องล้างต้นสาย
+    pco = [x_co, SD_HY, z0]
+    top = sd_cleanout(pref, pco, [hx, 0, 0], 150, zone)
+    seq = sorted(stacks, key=lambda n: bases[n] * hx)
+    # จุดเลี้ยว
+    p_t1 = [x_turn, SD_HY, zf(x_turn)]
+    p_t2 = [x_mh_in, SD_HY - abs(x_mh_in - x_turn), zf(x_turn) - 0.01 * abs(x_mh_in - x_turn) * 1.4142]
+    y_face = SD_MHY + 0.40 * (1 if SD_HY > SD_MHY else -1)
+    L3 = abs(p_t2[1] - y_face)
+    p_mh = [x_mh_in, y_face - 0.05 * (1 if SD_HY > SD_MHY else -1), p_t2[2] - 0.01 * L3]
+    # ช่องล้าง: ท่อตั้งเอียง + ข้องอ
+    dname, d1, d2 = SD_DEF[('EB45', 150)]
+    dirup = _unit(_v(pco, top))
+    X, Y = _frame(dirup, [hx, 0, 0], (-0.7071, 0.7071))
+    sd_fit(pref, 'EB', dname, pco, X, Y, 'ข้องอ 45° ø150 (ช่องล้างต้นสาย)', zone, size='ø150')
+    sd_pipe(pref, _pt(pco, dirup, d1), top, 150, 'ท่อช่องล้าง', zone)
+    sd_cap(pref, top, dirup, 150, zone)
+    cur = _pt(pco, [hx, 0, 0], d2)
+    for n in seq:
+        info = sd_stack_base(pref, n, hx, zf, zone)
+        Yo = info['Yo']
+        o_out, o_in, o_br = sd_y(pref, (150, 100), Yo, _unit([hx, 0, -0.01]), [-info['ds'][0], -info['ds'][1], 0.02], zone)
+        sd_pipe(pref, cur, o_in, 150, 'ท่อรวม', zone)
+        # ท่อแยกจากโคนท่อส้วม
+        p = info['pts']
+        sd_route(pref, [p[0], p[1], p[2], o_br], 100, 'ท่อส้วม+น้ำทิ้ง', zone, start_port=0.0, end_port=0.0)
+        cur = o_out
+    sd_route(pref, [cur, p_t1, p_t2, p_mh], 150, 'ท่อรวม', zone)
+    return p_mh[2]
+
+
+SD_MH = {}
+SD_TANK_IN = {}
+
+
+def sd_mh(pref, zone, x, z_in_min):
+    o = [x, SD_MHY, -0.40]
+    sd_fit(pref, 'MH', 'MH', o, [1, 0, 0], [0, 1, 0], 'บ่อพัก 0.80x0.80 ลึก 0.80', zone, anchor='center', size='0.80x0.80x0.80')
+    SD_MH[pref] = (x, z_in_min - 0.05)
+    return z_in_min - 0.05
+
+
+def sd_mh_to_tank(pref, zone, xm, zm, xt):
+    """ท่อ ø100 ลาด 1:50 จากบ่อพักเข้าถัง: ตรงถ้าอยู่แนวเดียวกัน ไม่งั้นออกด้านข้างบ่อ + ข้องอ 45° 2 ตัว"""
+    sgn = 1 if SD_MHY > SEP_Y else -1
+    y_face_t = SEP_Y + sgn * SEP_D / 2
+    if abs(xt - xm) < 0.01:
+        p0 = [xm, SD_MHY - sgn * 0.40, zm]
+        p1 = [xt, y_face_t - sgn * 0.02, zm - 0.02 * abs(p0[1] - y_face_t)]
+        sd_pipe(pref, p0, p1, 100, 'ท่อเข้าถัง', zone)
+        return p1[2]
+    sx = 1 if xt > xm else -1
+    p0 = [xm + sx * 0.40, SD_MHY, zm]
+    jog = 0.30
+    pa = [xt - sx * jog, SD_MHY, None]
+    pb = [xt, SD_MHY - sgn * jog, None]
+    pc = [xt, y_face_t - sgn * 0.02, None]
+    L = 0
+    pts = [p0, pa, pb, pc]
+    for i in range(1, 4):
+        L += math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+        pts[i][2] = zm - 0.02 * L
+    sd_route(pref, pts, 100, 'ท่อเข้าถัง', zone)
+    return pc[2]
+
+
+# ระดับเริ่มท่อรวม (กลางท่อ) −0.45: ดินกลบหลังท่อ ≥ 0.30
+_z1w = sd_zone_header('SD-Z1W', 'โซน 1 ฝั่งกริด 1', +1, [1, 2], 4.75, 5.05, SD_COVER_Z)
+_z1e = sd_zone_header('SD-Z1E', 'โซน 1 ฝั่งกริด 4', -1, [3], 5.75, 5.45, SD_COVER_Z)
+_z2w = sd_zone_header('SD-Z2W', 'โซน 2 ฝั่งกริด 5', +1, [5, 6, 7], 24.00, 24.30, SD_COVER_Z)
+_z2e = sd_zone_header('SD-Z2E', 'โซน 2 ฝั่งกริด 10', -1, [8, 9], 25.00, 24.70, SD_COVER_Z)
+_zm1 = sd_mh('SD-Z1', 'โซน 1', 5.25, min(_z1w, _z1e))
+_zm2 = sd_mh('SD-Z2', 'โซน 2', 24.50, min(_z2w, _z2e))
+for _k, _xt, _z in SEP_TANKS:
+    if _k.startswith('Z1'):
+        SD_TANK_IN[_k] = sd_mh_to_tank('SD-Z1', 'โซน 1', 5.25, _zm1, _xt)
+    elif _k.startswith('Z2'):
+        SD_TANK_IN[_k] = sd_mh_to_tank('SD-Z2', 'โซน 2', 24.50, _zm2, _xt)
+
+# โซน 3: ท่อรวม ø150 จากใต้พื้นห้องน้ำชั้น 1 → ท่อปลอก ø200 ผ่านคานคอดิน GB2-B9-10 → ลดระดับด้วยข้องอ 45° 2 ตัว → เข้าถังที่กริด 11 (ลาด 1:50)
+_x3, _y3s, _z3s = 29.80, GY['B'] + 1.85, -0.05
+_yb0, _yb1 = GY['B'] - 0.10, GY['B'] + 0.10          # ความกว้างคาน GB2 0.20 กลางแนว B
+_co3 = [_x3, _y3s, _z3s]
+_top3 = [_x3, _y3s + (0.33 - _z3s), FL[1] + 0.03 - 0.30 + 0.30]     # ช่องล้างโผล่ผิวพื้นชั้น 1
+_top3 = [_x3, _y3s + (FL[1] - _z3s), FL[1]]
+_dup = _unit(_v(_co3, _top3))
+X, Y = _frame(_dup, [0, -1, 0], (-0.7071, 0.7071))
+sd_fit('SD-Z3', 'EB', 'PVC-EB-45-150', _co3, X, Y, 'ข้องอ 45° ø150 (ช่องล้างต้นสาย ใต้พื้นห้องน้ำ)', 'โซน 3', size='ø150')
+sd_pipe('SD-Z3', _pt(_co3, _dup, 0.038), _top3, 150, 'ท่อช่องล้าง', 'โซน 3')
+sd_cap('SD-Z3', _top3, _dup, 150, 'โซน 3')
+_yd = _yb0 - 0.35                                     # เริ่มลดระดับหลังพ้นคาน
+_zd = SD_COVER_Z
+_xt3 = GX11
+_yt3f = SEP_Y + SEP_D / 2
+_pA = [_x3, _yd, _z3s - 0.02 * (_y3s - _yd)]
+_pB = [_x3, _yd - 0.40, None]
+_pB[2] = _pA[2] - 0.40 - 0.0
+_yE = _yt3f + 0.40
+_yC = _yE + (_xt3 - _x3)
+_pts3 = [[_x3, _y3s - 0.038, _z3s], _pA, _pB, [_x3, _yC, None], [_xt3, _yE, None], [_xt3, _yt3f - 0.02, None]]
+_L = 0
+for _i in range(3, 6):
+    _L += math.hypot(_pts3[_i][0] - _pts3[_i - 1][0], _pts3[_i][1] - _pts3[_i - 1][1])
+    _pts3[_i][2] = _pB[2] - 0.02 * _L
+sd_route('SD-Z3', _pts3, 150, 'ท่อรวม', 'โซน 3')
+SD_TANK_IN['Z3-1'] = _pts3[-1][2]
+# ท่อปลอก ø200 ในคาน GB2
+_zs = _z3s - 0.02 * (_y3s - GY['B'])
+_m = member([_x3, _yb0, _zs], [_x3, _yb1, _zs], SD_OD[200], SD_OD[200])
+_m.update(shape='POLY', poly2d=_circ(SD_OD[200] / 2), hole2d=_circ(SD_OD[200] / 2 - SD_T[200]))
+add('SD-Z3-SLV1', 'สุขาภิบาล', 1, 'A07', _m, name='ท่อปลอก PVC ø200 ฝังคานคอดิน GB2-B9-10 สำหรับท่อ ø150 (โซน 3)', assumed=True,
+    qty=dict(type='ท่อปลอก', size='ø200', length=0.20))
+
+# ปรับระดับถัง: ท่อเข้าที่ระยะ A ต่ำจากปากถัง; ท่ออากาศ ø50 จากปากถังขึ้นเหนือดิน 0.30 (รอแนวต่อขึ้นสูงกว่าอาคาร)
+SD_TANK_OUT = {}
+for _e in elements:
+    _m = re.match(r'^SEP-(Z\d-\d)$', _e['id'])
+    if not _m:
+        continue
+    _k = _m.group(1)
+    _top = round(SD_TANK_IN[_k] + SD_A, 3)
+    g = _e['geom']
+    g['p0'][2], g['p1'][2] = _top, round(_top - SEP_H, 3)
+    _e['qty'].update(top=_top, bottom=round(_top - SEP_H, 3), inlet_z=round(SD_TANK_IN[_k], 3), outlet_z=round(SD_TANK_IN[_k] - SD_DROP_TANK, 3),
+                     neck=round(-_top, 3))
+    SD_TANK_OUT[_k] = (g['p0'][0], SD_TANK_IN[_k] - SD_DROP_TANK)
+    _xv = g['p0'][0] + 0.50
+    sd_pipe(f'SD-{_k}', [_xv, SEP_Y, _top - 0.02], [_xv, SEP_Y, 0.30], 50, 'ท่ออากาศถังบำบัด', f'ถัง {_k}')
+
+# ท่อทิ้งรวม ø150 หลังแนวถัง ลาด 1:100 ไปทางกริด 11 (บ่อพักโครงการเฟสถัดไป ห่าง ~50 ม.) ปิดปลายรอ
+_ys = SD_MAINY
+_xs0 = min(x for x, _ in SD_TANK_OUT.values()) - 0.20
+_xend = GX11 + 1.00
+_zmain0 = min(z + 0.01 * ((x + 0.40) - _xs0) for x, z in SD_TANK_OUT.values()) - 0.05
+_zmf = lambda x: _zmain0 - 0.01 * (x - _xs0)
+_pco = [_xs0, _ys, _zmain0]
+_top = sd_cleanout('SD-OUT', _pco, [1, 0, 0], 150, 'ท่อทิ้งรวม')
+_dup = _unit(_v(_pco, _top))
+X, Y = _frame(_dup, [1, 0, 0], (-0.7071, 0.7071))
+sd_fit('SD-OUT', 'EB', 'PVC-EB-45-150', _pco, X, Y, 'ข้องอ 45° ø150 (ช่องล้างต้นสาย)', 'ท่อทิ้งรวม', size='ø150')
+sd_pipe('SD-OUT', _pt(_pco, _dup, 0.038), _top, 150, 'ท่อช่องล้าง', 'ท่อทิ้งรวม')
+sd_cap('SD-OUT', _top, _dup, 150, 'ท่อทิ้งรวม')
+_cur = _pt(_pco, [1, 0, 0], 0.038)
+for _k in sorted(SD_TANK_OUT, key=lambda k: SD_TANK_OUT[k][0]):
+    _xt, _zo = SD_TANK_OUT[_k]
+    _Yo = [_xt + 0.40, _ys, _zmf(_xt + 0.40)]
+    _o_out, _o_in, _o_br = sd_y('SD-OUT', (150, 100), _Yo, _unit([1, 0, -0.01]), [-0.7071, 0.7071, 0.0], 'ท่อทิ้งรวม')
+    sd_pipe('SD-OUT', _cur, _o_in, 150, 'ท่อทิ้งรวม', 'ท่อทิ้งรวม')
+    _p0 = [_xt, SEP_Y - SEP_D / 2 + 0.02, _zo]
+    _p1 = [_xt, SEP_Y - SEP_D / 2 - 0.19, _zo - 0.01 * 0.21]
+    sd_route(f'SD-{_k}', [_p0, _p1, _o_br], 100, 'ท่อออกจากถัง', f'ถัง {_k}')
+    _cur = _o_out
+_pend = [_xend, _ys, _zmf(_xend)]
+sd_pipe('SD-OUT', _cur, _pend, 150, 'ท่อทิ้งรวม (ปิดปลายรอต่อบ่อพักโครงการ)', 'ท่อทิ้งรวม')
+sd_cap('SD-OUT', _pend, [1, 0, 0], 150, 'ท่อทิ้งรวม')
+ASSUMPTIONS.append('ท่อระบายจากโคนท่อแนวดิ่งถึงถังบำบัด (23 พ.ย. 2569): น้ำทิ้ง 3" เข้าท่อส้วม 4" ด้วยวายลด 100x80 ที่ −0.15, ลงดินด้วยข้องอ 45° 2 ตัว เข้าท่อรวม ø150 ใต้ระเบียง (ห่างกริด A 0.60) ด้วยวายลด 150x100 ลาด 1:100 ช่องล้างต้นสาย → บ่อพัก MH 0.80 ห่างหน้าถัง 1.00 → ท่อ ø100 ลาด 1:50 เข้าถังแบบขนาน; ท่อออกจากถังรวมด้วยวายลดเป็น ø150 ลาด 1:100 ไปทางกริด 11 ปิดปลายเลยกริด 11 1.00 ม.; ระยะ A ท่อเข้าต่ำจากปากถัง 0.40 (สมมติ) ปากถังต่ำกว่าดิน → ต้องก่อคอถัง; ท่ออากาศถัง ø50 โผล่เหนือดิน 0.30 รอกำหนดแนวต่อขึ้นสูงกว่าอาคาร; ฝาปิดช่องล้างทำเอง (ไฟล์ตัวอย่างไม่มี); ระดับดิน ±0.00 ไม่มีในโมเดล')
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 def _merge_rects(parts):
@@ -3677,6 +4000,12 @@ if __name__ == '__main__':
         if 'component_place' in e:
             e['component_place']['pt'][1] = round(GY['F'] - e['component_place']['pt'][1], 4)
             e['component_place']['dir'][1] = -e['component_place']['dir'][1]
+        if 'fitting' in e:
+            _f = e['fitting']
+            _f['origin'][1] = round(GY['F'] - _f['origin'][1], 4)
+            if _f.get('anchor') != 'center':       # ข้อต่อสมมาตรตามระนาบ z ท้องถิ่น: กลับแกน y ได้; บ่อพัก (center) คงแกนเดิม
+                _f['x'][1] = -_f['x'][1]
+                _f['y'][1] = -_f['y'][1]
         if 'component_mount' in e:
             e['component_mount']['back_y'] = round(GY['F'] - e['component_mount']['back_y'], 4)
             e['component_mount']['box_dir'] = -e['component_mount'].get('box_dir', 1)

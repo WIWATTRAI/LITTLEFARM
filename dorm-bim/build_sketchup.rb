@@ -390,8 +390,9 @@ module DormBIM
       end
       geo = e['geom']
       mat = e['material'] ? named_material(model, e['material']) : material(model, e['category'])
-      by_pbs = use_pb && pb_shape?(geo)
-      by_pb = by_pbs || (use_pb && PB_CATS.include?(e['category']))
+      fit = e['fitting']
+      by_pbs = !fit && use_pb && pb_shape?(geo)
+      by_pb = !fit && (by_pbs || (use_pb && PB_CATS.include?(e['category'])))
       by_comp = geo['type'] == 'xprofile'
       g = if by_pbs
             pb_shape_group(cg.entities, e, mat.name, pb_cache)
@@ -422,6 +423,19 @@ module DormBIM
             Geom::Transformation.rotation(ORIGIN, Z_AXIS, ang) *
             Geom::Transformation.translation(Geom::Vector3d.new(-lb[0], -lb[1], -db.min.z))
         g.entities.add_instance(pdef, t)
+        geo = { 'type' => 'component' }
+        cdef = nil
+      end
+      # ข้อต่อท่อ/บ่อพักจากไฟล์ตัวอย่าง: origin + แกน x, y ของคอมโพเนนต์ในพิกัดโลก (z = x × y); anchor 'center' = กึ่งกลางกรอบคอมโพเนนต์อยู่ที่ origin
+      fdef = fit && model.definitions[fit['def']]
+      if fdef
+        xa = Geom::Vector3d.new(*fit['x']).normalize
+        ya = Geom::Vector3d.new(*fit['y']).normalize
+        za = xa.cross(ya).normalize
+        o = Geom::Point3d.new(fit['origin'][0].m, fit['origin'][1].m, fit['origin'][2].m)
+        t = Geom::Transformation.axes(o, xa, ya, za)
+        t = t * Geom::Transformation.translation(ORIGIN - fdef.bounds.center) if fit['anchor'] == 'center'
+        g.entities.add_instance(fdef, t)
         geo = { 'type' => 'component' }
         cdef = nil
       end
