@@ -1208,7 +1208,7 @@ SMALL_WIN = 1.00         # หน้าต่างกว้างไม่เ�
 LINTEL_EXT = TIE         # ทับหลัง/คานใต้วงกบสิ้นสุดชนผิวนอกเสาเอ็นข้างช่องพอดี ไม่ยื่นเลย (ผู้ใช้กำหนด 10 พ.ย. 2569)
 
 
-def tie_layout(a0, a1, z0, z1, openings):
+def tie_layout(a0, a1, z0, z1, openings, mid_at_sill=False):
     """คืน posts [(p0,p1)], beams [(x0,x1,zb0,zb1,kind)] ตามหลักผนังก่อ:
     เสาเอ็นข้างวงกบทุกช่อง, เสาเอ็นกลางช่วงผนังทึบที่ยาวเกิน 3.50 ม., คานเอ็นกลางความสูงผนัง,
     คานทับหลังเหนือช่องเปิด และคานใต้วงกบหน้าต่าง ยาวชนเสาเอ็นข้างช่องพอดี"""
@@ -1239,13 +1239,19 @@ def tie_layout(a0, a1, z0, z1, openings):
     posts = sorted((max(a0, p0), min(a1, p1), zb, zt) for p0, p1, zb, zt in posts)
     beams = []
     zm = z0 + (z1 - z0) / 2
-    beams.append((a0, a1, zm - TIE / 2, zm + TIE / 2, 'คานเอ็นกลางผนัง'))
+    _sills = [sill for c, w, sill, h in openings if sill > 0]
+    if mid_at_sill and _sills:
+        # ยกคานเอ็นกลางผนังขึ้นไปอยู่ระดับใต้วงกบหน้าต่าง ใช้แทนคานใต้วงกบ (ผู้ใช้สั่ง 23 พ.ย. 2569 ผนังหลังห้องน้ำ)
+        zs_ = z0 + min(_sills)
+        beams.append((a0, a1, zs_ - TIE, zs_, 'คานเอ็นกลางผนัง (ระดับใต้วงกบหน้าต่าง)'))
+    else:
+        beams.append((a0, a1, zm - TIE / 2, zm + TIE / 2, 'คานเอ็นกลางผนัง'))
     for c, w, sill, h in openings:
         x0, x1 = max(a0, c - w / 2 - LINTEL_EXT), min(a1, c + w / 2 + LINTEL_EXT)
         zt = z0 + sill + h
         if zt + TIE <= z1 + 1e-6:
             beams.append((x0, x1, zt, zt + TIE, 'คานทับหลัง'))
-        if sill > 0:
+        if sill > 0 and not mid_at_sill:
             beams.append((x0, x1, z0 + sill - TIE, z0 + sill, 'คานใต้วงกบ'))
     return posts, beams
 
@@ -1285,12 +1291,12 @@ def wall_cells(a0, a1, z0, z1, openings, posts, beams):
     return cells
 
 
-def add_wall(eid, floor, axis, fixed, a0, a1, z0, z1, task_wall, task_plaster, openings=(), name=None):
+def add_wall(eid, floor, axis, fixed, a0, a1, z0, z1, task_wall, task_plaster, openings=(), name=None, mid_at_sill=False):
     if a1 - a0 < 0.05:
         return
     openings = list(openings)
     pcs = wall_pieces(a0, a1, z0, z1, openings)
-    posts, beams = tie_layout(a0, a1, z0, z1, openings)
+    posts, beams = tie_layout(a0, a1, z0, z1, openings, mid_at_sill)
     cells = wall_cells(a0, a1, z0, z1, openings, posts, beams)
     area = sum((b - a) * (d - c) for a, b, c, d in cells['mas'])
     if cells['mas']:                   # ผนังที่เหลือแต่เสาเอ็นข้างช่องเปิด (เช่น หน้าร้าน) ไม่มีงานก่อ
@@ -1418,7 +1424,7 @@ for f in (2, 3, 4, 5):
                 # ผนังนอกห้องน้ำ: หน้าต่าง W1 KPA 0.60x0.40 ขอบล่าง 1.80 ชิดเสา (ศูนย์กลางห่างกริด 0.47 ตาม A106)
                 add_wall(f'W-{tag}-OWC', f, 'x', y_out + (OUT_C if side == 'N' else -OUT_C),
                          ox(tx0, 1), ox(tx1, -1), zs, beam_soffit(f, 'edge', True), tw, tp,
-                         [(g['xc'] + g['dr'] * 0.47, 0.60, 1.80, 0.40)], name=f'ผนังนอกห้องน้ำ ชั้น {f} ห้อง {side}{i+1}')
+                         [(g['xc'] + g['dr'] * 0.47, 0.60, 1.80, 0.40)], name=f'ผนังนอกห้องน้ำ ชั้น {f} ห้อง {side}{i+1}', mid_at_sill=True)
                 elements[-1].update(name=f'หน้าต่าง W1 0.60x0.40 ใน W-{tag}-OWC')
                 elements[-1]['qty'].update(type='หน้าต่างบานกระจกซ้อน อะลูมิเนียม', model=W1_MODEL)
                 add_wall(f'W-{tag}-OBL', f, 'x', y_out + (OUT_C if side == 'N' else -OUT_C),
@@ -4214,10 +4220,10 @@ for f in (2, 3, 4, 5):
     # สายตะวันตก: ขึ้นมุมผนังชาร์ฟ → ผนังประตูห้องน้ำ +2.30 (เหนือวงกบ) → ผนัง B5 → ลงฝักบัว/ก๊อกระเบียง
     n3_wroute(f'{P}-W', [[x_sh, y_bal, zJ], [x_sh, y_bal, zM], [x_b5, y_bal, zM], [x_b5, y_s, zM], [x_b5, y_s, FF + 1.10]], '1/2', 'ท่อน้ำดีฝังผนัง สายฝักบัว/ก๊อกระเบียง')
     n3_wfit(f'{P}-W-TE', [x_b5, y_s, FF + 1.10], '1/2', 'สามทาง')
-    n3_wpipe(f'{P}-W-P4', [x_b5, y_s, FF + 1.10 - 0.0171], [x_b5, y_s, FF + 0.60 + 0.0171], '1/2', 'ท่อน้ำดีฝังผนัง ลงก๊อกระเบียง')
+    n3_wpipe(f'{P}-W-D1', [x_b5, y_s, FF + 1.10 - 0.0171], [x_b5, y_s, FF + 0.60 + 0.0171], '1/2', 'ท่อน้ำดีฝังผนัง ลงก๊อกระเบียง')
     n3_wfit(f'{P}-W-EL4', [x_b5, y_s, FF + 0.60], '1/2', 'ข้องอ 90°')
-    n3_wpipe(f'{P}-W-P5', [x_b5 - 0.0171, y_s, FF + 0.60], [x_b5b, y_s, FF + 0.60], '1/2', 'ท่อน้ำดีทะลุผนัง B5 ไปก๊อกระเบียง')
-    n3_wpipe(f'{P}-W-P6', [x_b5 + 0.0171, y_s, FF + 1.10], [x_b5f, y_s, FF + 1.10], '1/2', 'ท่อน้ำดีออกสต็อปวาล์วฝักบัว')
+    n3_wpipe(f'{P}-W-D2', [x_b5 - 0.0171, y_s, FF + 0.60], [x_b5b, y_s, FF + 0.60], '1/2', 'ท่อน้ำดีทะลุผนัง B5 ไปก๊อกระเบียง')
+    n3_wpipe(f'{P}-W-D3', [x_b5 + 0.0171, y_s, FF + 1.10], [x_b5f, y_s, FF + 1.10], '1/2', 'ท่อน้ำดีออกสต็อปวาล์วฝักบัว')
     # ชุดฝักบัวทั่วไป ราคาไม่สูง: สต็อปวาล์ว + ฝักบัวสายอ่อน + ขอแขวน
     zv = FF + 1.10
     n3_chrome(f'{P}-SHV', [x_b5f, y_s, zv], [x_b5f + 0.07, y_s, zv], 0.032, 'สต็อปวาล์วฝักบัว (วาล์วเดี่ยว ชุบโครเมียม) +1.10',
