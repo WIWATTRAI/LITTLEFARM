@@ -4482,6 +4482,648 @@ ASSUMPTIONS.append('ระบบท่อห้องน้ำแนว N3 ช�
 ASSUMPTIONS.append('ท่ออากาศถังบำบัดเข้าท่ออากาศอาคาร ยกเลิก (ผู้ใช้สั่ง); คอถังก่ออิฐฉาบ ช่อง ø0.60 นอก ø0.80 จากปากถังถึงผิวดิน + ฝาถัง (ขนาดสมมติ) (23 พ.ย. 2569)')
 ASSUMPTIONS.append('ท่อระบายจากโคนท่อแนวดิ่งถึงถังบำบัด (23 พ.ย. 2569): น้ำทิ้ง 3" เข้าท่อส้วม 4" ด้วยวายลด 100x80 ที่ −0.15, ลงดินด้วยข้องอ 45° 2 ตัว เข้าท่อรวม ø150 ใต้ระเบียง (ห่างกริด A 0.60) ด้วยวายลด 150x100 ลาด 1:100 ช่องล้างต้นสาย → บ่อพัก MH 0.80 ห่างหน้าถัง 1.00 → ท่อ ø100 ลาด 1:50 เข้าถังแบบขนาน; ท่อออกจากถังรวมด้วยวายลดเป็น ø150 ลาด 1:100 ไปทางกริด 11 ปิดปลายเลยกริด 11 1.00 ม.; ระยะ A ท่อเข้าต่ำจากปากถัง 0.40 (สมมติ) ปากถังต่ำกว่าดิน → ต้องก่อคอถัง; ท่ออากาศถัง ø50 โผล่เหนือดิน 0.30 รอกำหนดแนวต่อขึ้นสูงกว่าอาคาร; ฝาปิดช่องล้างทำเอง (ไฟล์ตัวอย่างไม่มี); ระดับดิน ±0.00 ไม่มีในโมเดล')
 
+# ---- ระบบท่อห้องน้ำชาย-หญิง ชั้น 1 + ซิงค์ล้างจานหลังร้านค้า 3 ร้าน (ผู้ใช้สั่ง 24 พ.ย. 2569) ----
+# พิกัดในบล็อกนี้เป็นพิกัด elements.json (กลับแกน y แล้ว) แปลงด้วย _J/_JV ผ่าน n3_* เหมือนบล็อก N3
+# ผู้ใช้ยืนยัน 24 พ.ย. 2569: ซิงค์ทั้ง 3 ร้าน (กริด 5–8) ชุดทั่วไปราคาไม่แพง, ก๊อกซิงค์ติดผนัง 1/2",
+#   น้ำดีชั้น 1 แยกจากท่อดิ่ง 2" ผนังกริด 1 เดินเมนใต้ท้องพื้นชั้น 2, ชักโครก/โถปัสสาวะลงถังบำบัด (โซน 3),
+#   อ่างล้างมือ/อ่างรวม/ฟลอร์เดรน/ซิงค์ลงท่อน้ำทิ้ง → ท่อรวม ø150 ใต้ระเบียง (โซน 2) ผ่านบ่อพักเดิม
+F1_FF, F1_SB = FL[1] + 0.02, FL[1] - 0.10          # ผิวกระเบื้อง 0.32, ท้องพื้น GS-F1 0.20
+_f1n = collections.Counter()
+F1_EB = {(45, 50): ('PVC-EB-45-55.', 0.0145), (90, 50): ('PVC-EB-90-55', 0.030), (45, 80): ('PVC-EB-45-80', 0.021),
+         (90, 80): ('PVC-EB-90-80', 0.044), (45, 100): ('PVC-EB-45-100', 0.025), (90, 100): ('PVC-EB-90-100', 0.057),
+         (45, 150): ('PVC-EB-45-150', 0.038)}
+F1_T = {'TY100': ('PVC-TY-100', 0.040, 0.123, 0.123, '4"'), 'TYR55': ('PVC-TYR-100x55', 0.027, 0.061, 0.087, '4"x2"'),
+        'TEE55': ('PVC-TEE-55', 0.031, 0.031, 0.031, '2"')}
+F1_Y = {(150, 100): ('PVC-YR-150x100', 0.000, 0.160, 0.178), (100, 80): ('PVC-YR-100x80', 0.015, 0.114, 0.127)}
+F1_IN = {50: '2"', 80: '3"', 100: '4"', 150: '6"'}
+
+
+def _f1id(pref, k):
+    _f1n[pref + '|' + k] += 1
+    return f'{pref}-{k}{_f1n[pref + "|" + k]:02d}'
+
+
+def _ortho(X, Y):
+    X = _unit(X)
+    d = sum(X[i] * Y[i] for i in range(3))
+    return _unit([Y[i] - d * X[i] for i in range(3)])
+
+
+def f1_pipe(pref, p, q, size, nm):
+    eid = _f1id(pref, 'P')
+    n3_pipe(eid, p, q, SD_OD[size], SD_T[size], f'{nm} ø{F1_IN[size]} PVC ชั้น 8.5')
+    elements[-1]['qty']['size'] = f'ø{size}'
+    return eid
+
+
+def f1_fit(pref, kind, dname, o, X, Y, nm, size):
+    eid = _f1id(pref, kind)
+    n3_fit(eid, dname, o, X, Y, nm, size)
+    return eid
+
+
+def f1_eb(pref, ang, size, o, a, b, nm=None):
+    """ข้องอที่จุด o: ท่อเข้าทิศ a (ไหลเข้าหา o), ท่อออกทิศ b — คืนระยะปากข้อต่อ"""
+    dname, dp = F1_EB[(ang, size)]
+    if ang == 45:
+        X, Y = _frame([-c for c in a], b, (-0.7071, 0.7071))
+    else:
+        X, Y = _frame([-c for c in a], b, (0.0, 1.0))
+    f1_fit(pref, 'EB', dname, o, X, Y, nm or f'ข้องอ {ang}° ø{F1_IN[size]}', f'{F1_IN[size]}')
+    return dp
+
+
+def f1_route(pref, pts, size, nm, s0=0.0, s1=0.0):
+    """ท่อผ่านจุด pts (ทิศการไหล) ข้องอ 45°/90° อัตโนมัติที่จุดหักมุม; ตัดปลายแรก s0 ปลายท้าย s1"""
+    cur = _pt(pts[0], _unit(_v(pts[0], pts[1])), s0)
+    for i in range(1, len(pts) - 1):
+        a = _unit(_v(pts[i - 1], pts[i])); b = _unit(_v(pts[i], pts[i + 1]))
+        ang = math.degrees(math.acos(max(-1, min(1, sum(a[k] * b[k] for k in range(3))))))
+        k = 45 if 30 < ang < 60 else 90
+        assert 30 < ang < 60 or 75 < ang < 105, (pref, i, ang)
+        dp = f1_eb(pref, k, size, pts[i], a, b)
+        f1_pipe(pref, cur, _pt(pts[i], a, -dp), size, nm)
+        cur = _pt(pts[i], b, dp)
+    a = _unit(_v(pts[-2], pts[-1]))
+    f1_pipe(pref, cur, _pt(pts[-1], a, -s1), size, nm)
+
+
+def f1_tee(pref, key, o, X, Yb, nm):
+    """สามทาง (TY/TYR/TEE) ที่ o: X = ทิศการไหล, Yb = ทิศไปหาท่อแยก — คืน (ปากเข้า, ปากออก, ปากแยก, แกนแยก)"""
+    dname, du, dd, db, sz = F1_T[key]
+    X = _unit(X); Y = _ortho(X, Yb)
+    f1_fit(pref, 'T', dname, o, X, Y, nm, sz)
+    return _pt(o, X, -du), _pt(o, X, dd), _pt(o, Y, db), Y
+
+
+def f1_yr(pref, key, o, flow, bdir, nm):
+    """วายลด: ทางออกทิศ flow, ปากแยกชี้ไปทาง bdir (ทำมุม 135° กับ flow) — คืน (ปากเข้า, ปากออก, ปากแยก, แกนแยก)"""
+    dname, do, di, db = F1_Y[key]
+    X, Y = _frame(flow, bdir, (-0.7071, 0.7071))
+    f1_fit(pref, 'Y', dname, o, X, Y, nm, f'{key[0]}x{key[1]}')
+    br = [-0.7071 * X[i] + 0.7071 * Y[i] for i in range(3)]
+    return _pt(o, X, -di), _pt(o, X, do), _pt(o, br, db), br
+
+
+def f1_cap(pref, p, d, size, nm='ฝาปิดปลายท่อ (ปลั๊กอุด)'):
+    od = SD_OD[size] + 0.012
+    q = _pt(p, d, 0.03)
+    m = member(_J(p), _J(q), od, od)
+    m.update(shape='POLY', poly2d=_circ(od / 2))
+    add(_f1id(pref, 'CAP'), 'สุขาภิบาล', 1, 'A07', m, name=f'{nm} ø{F1_IN[size]} PVC (ทำเอง ไม่มีในไฟล์ตัวอย่าง)', assumed=True,
+        qty=dict(type='ฝาปิดปลายท่อ (ปลั๊ก)', size=f'ø{size}'))
+
+
+def f1_sleeve(eid, y, z, x0, x1, size, nm):
+    od = SD_OD[size]
+    m = member(_J([x0, y, z]), _J([x1, y, z]), od, od)
+    m.update(shape='POLY', poly2d=_circ(od / 2), hole2d=_circ(od / 2 - SD_T[size]))
+    add(eid, 'สุขาภิบาล', 1, 'A07', m, name=nm, assumed=True, qty=dict(type='ท่อปลอก', size=f'ø{size}', length=round(abs(x1 - x0), 3)))
+
+
+def f1_drop(pref, c, size, z_top, b, nm):
+    """ข้องอ 90° ที่ c (ใต้ดิน): ปากบนรับท่อดิ่งจาก z_top, ปากราบออกทิศ b — คืนจุดปากราบ"""
+    dname, dp = F1_EB[(90, size)]
+    f1_fit(pref, 'EB', dname, c, [0, 0, 1], _ortho([0, 0, 1], b), f'ข้องอ 90° ø{F1_IN[size]}', f'{F1_IN[size]}')
+    f1_pipe(pref, [c[0], c[1], c[2] + dp], [c[0], c[1], z_top], size, nm)
+    return _pt(c, _ortho([0, 0, 1], b), dp)
+
+
+def _hdir(p, q, s):
+    """ทิศจาก p ไป q ในแปลน ลาดขึ้น s (ใช้ตอนเดินย้อนจากปากข้อต่อขึ้นต้นน้ำ)"""
+    L = math.hypot(q[0] - p[0], q[1] - p[1])
+    return _unit([(q[0] - p[0]) / L, (q[1] - p[1]) / L, s])
+
+
+def _up(p, q, s):
+    """จุด q ในแปลน ระดับสูงขึ้นจาก p ตามความลาด s"""
+    return [q[0], q[1], p[2] + s * math.hypot(q[0] - p[0], q[1] - p[1])]
+
+
+def f1_dz(p, s, x=None, y=None):
+    """เลื่อนจุดในแนวราบไป x หรือ y (แกนเดียว) ลาดขึ้น s"""
+    q = [p[0] if x is None else x, p[1] if y is None else y, 0]
+    return _up(p, q, s)
+
+
+S_BK, S_GR, S_BR = 0.02, 0.01, 0.02          # ลาด: ท่อส้วม 1:50, ท่อน้ำทิ้งรวม ø100 1:100, ท่อแยก 2"/3" 1:50
+
+# ---------- 1) ท่อรวมโซน 3 (ø150 แนว x = 29.20): ย้ายช่องล้างต้นสายไปใต้ทางเดินห้องน้ำหญิงชิดผนังกั้นกลาง รับท่อส้วมชาย/หญิงด้วยวายลด 150x100 ----
+_z3old = {k: next(e for e in elements if e['id'] == k) for k in ('SD-Z3-EB01', 'SD-Z3-P01', 'SD-Z3-CAP01', 'SD-Z3-P02')}
+_g = _z3old['SD-Z3-P02']['geom']
+_a, _b = _J(_g['p0']), _J(_g['p1'])
+_z3a, _z3b = (_a, _b) if _a[1] < _b[1] else (_b, _a)            # ต้นน้ำ (y น้อย) / ท้ายน้ำ (ปากข้องอ EB02)
+S3 = (_z3a[2] - _z3b[2]) / (_z3b[1] - _z3a[1])
+X3 = _unit([0, 1, -S3])
+z3 = lambda y: _z3a[2] - S3 * (y - _z3a[1])
+elements[:] = [e for e in elements if e['id'] not in _z3old]
+X30 = 29.20
+_co = [X30, 10.95, z3(10.95)]
+_top = [X30, _co[1] - (FL[1] - _co[2]), FL[1]]
+_dup = _unit(_v(_co, _top))
+X, Y = _frame(_dup, [0, 1, 0], (-0.7071, 0.7071))
+f1_fit('SD-Z3N', 'EB', 'PVC-EB-45-150', _co, X, Y, 'ข้องอ 45° ø150 (ช่องล้างต้นสาย ใต้ทางเดินห้องน้ำหญิง)', 'ø150')
+f1_pipe('SD-Z3N', _pt(_co, _dup, 0.038), _top, 150, 'ท่อช่องล้าง (โซน 3)')
+f1_cap('SD-Z3N', _top, _dup, 150, 'ฝาปิดช่องล้าง')
+_YW = [X30, 11.30, z3(11.30)]
+_YM_ = [X30, 12.35, z3(12.35)]
+wi, wo, wbp, wbr = f1_yr('SD-Z3N', (150, 100), _YW, X3, _unit([0.7071, -0.7071, S_BK]), 'วายลด 150x100 รับท่อส้วมห้องน้ำหญิง (โซน 3)')
+mi, mo, mbp, mbr = f1_yr('SD-Z3N', (150, 100), _YM_, X3, _unit([-0.7071, -0.7071, S_BK]), 'วายลด 150x100 รับท่อส้วมห้องน้ำชาย (โซน 3)')
+f1_pipe('SD-Z3N', _pt(_co, X3, 0.038), wi, 150, 'ท่อรวม (โซน 3)')
+f1_pipe('SD-Z3N', wo, mi, 150, 'ท่อรวม (โซน 3)')
+f1_pipe('SD-Z3N', mo, _z3b, 150, 'ท่อรวม (โซน 3)')
+
+# ---------- 2) ท่อส้วมห้องน้ำหญิง ø100 ลาด 1:50: ชักโครก 3 ตัว (ท่อออกห่างหลังถังพัก 0.305) → แนว x = 30.45 ไหลทิศ −y → วายลด Z3 ----
+W_X = 30.45
+_wcW = {}
+for j in (1, 2, 3):
+    wc = next(e for e in elements if e['id'] == f'FX-F1-WC2-{j}')
+    xs = [q[0] for q in wc['geom']['poly']]; ys = [_YM - q[1] for q in wc['geom']['poly']]
+    _wcW[j] = (max(xs) - 0.305, round((min(ys) + max(ys)) / 2, 4))
+pA = wbp
+pB = _pt(pA, wbr, (29.95 - pA[0]) / wbr[0])                   # จบแนวทแยงที่ x = 29.95
+pC = f1_dz(pB, S_BK, x=30.25)
+pD = _up(pC, [W_X, pC[1] + 0.20, 0], S_BK)
+Xw = _unit([0, -1, -S_BK])
+NM_W = 'ท่อส้วมห้องน้ำหญิง ชั้น 1 ลาด 1:50 (โซน 3)'
+prev_in = None
+for k, jj in enumerate(sorted(_wcW, key=lambda j: _wcW[j][1])):     # ท้ายน้ำก่อน (y น้อย)
+    xo, yo = _wcW[jj]
+    o = _up(pD, [W_X, yo, 0], S_BK)
+    ti, to, tb, tY = f1_tee('SD-F1W', 'TY100', o, Xw, [1, 0, S_BK], f'สามทางวาย (TY) ø4" รับท่อชักโครกหญิง ห้อง {jj}')
+    if k == 0:
+        f1_route('SD-F1W', [o, pD, pC, pB, pA], 100, NM_W, s0=0.123)
+    else:
+        f1_pipe('SD-F1W', to, prev_in, 100, NM_W)
+    zE = tb[2] + S_BK * (xo - tb[0])
+    n3_fit(f'SD-F1W-WC{jj}-SLV', 'PVC-TS-FLANG-100', [xo, yo, F1_SB], [1, 0, 0], [0, 1, 0], 'ข้อต่อกันซึม PVC 4" สีฟ้า SCG ใต้ชักโครก (ฝังในพื้น)', '4"')
+    elements[-1]['qty'].update(brand='SCG', color='ฟ้า')
+    p = f1_drop('SD-F1W', [xo, yo, zE], 100, F1_SB + 0.10, [-1, 0, 0], 'ท่อส้วมจากชักโครก ผ่านข้อต่อกันซึม')
+    f1_pipe('SD-F1W', p, tb, 100, 'ท่อส้วมชักโครก ใต้พื้น ลาด 1:50 (โซน 3)')
+    prev_in = ti
+f1_cap('SD-F1W', prev_in, [0, 1, 0], 100)
+
+# ---------- 3) ท่อส้วมห้องน้ำชาย ø100 ลาด 1:50: ชักโครก 2 ตัว + โถปัสสาวะ 3 โถ → แนว x = 25.25 → แนวราบทิศ +x → ลอดคานคอดิน GB1-9 (ท่อปลอก) → วายลด Z3 ----
+M_X = 25.25
+_wcM = {}
+for j in (1, 2):
+    wc = next(e for e in elements if e['id'] == f'FX-F1-WC1-{j}')
+    xs = [q[0] for q in wc['geom']['poly']]; ys = [_YM - q[1] for q in wc['geom']['poly']]
+    _wcM[j] = (min(xs) + 0.305, round((min(ys) + max(ys)) / 2, 4))
+qA = mbp
+qB = _pt(qA, mbr, (28.30 - qA[0]) / mbr[0])                    # จบแนวทแยงที่ x = 28.30 (พ้นคาน GB1-9)
+qU = f1_dz(qB, S_BK, x=26.80)                                    # สามทางลดรับท่อโถปัสสาวะ
+qC = f1_dz(qU, S_BK, x=M_X + 0.25)
+qD = _up(qC, [M_X, qC[1] + 0.25, 0], S_BK)
+Xm = _unit([1, 0, -S_BK])
+NM_M = 'ท่อส้วมห้องน้ำชาย ชั้น 1 ลาด 1:50 (โซน 3)'
+dpB = f1_eb('SD-F1M', 45, 100, qB, Xm, _unit(_v(qB, qA)))
+f1_pipe('SD-F1M', _pt(qB, _unit(_v(qB, qA)), dpB), qA, 100, NM_M)
+ui, uo, ub, uY = f1_tee('SD-F1M', 'TYR55', qU, Xm, [0, -1, S_BR], 'สามทางวายลด (TYR) 4"x2" รับท่อโถปัสสาวะ')
+f1_pipe('SD-F1M', uo, _pt(qB, Xm, -dpB), 100, NM_M)
+_zs = qB[2] + S_BK * (qB[0] - 28.0)
+f1_sleeve('SD-F1M-SLV1', qB[1], round(_zs, 4), 27.90, 28.10, 150, 'ท่อปลอก PVC ø150 ฝังคานคอดิน GB1-9-BC สำหรับท่อส้วม ø100 ห้องน้ำชาย')
+Xmy = _unit([0, -1, -S_BK])
+prev_in = None
+for k, jj in enumerate((2, 1)):                                  # ท้ายน้ำก่อน
+    xo, yo = _wcM[jj]
+    o = _up(qD, [M_X, yo, 0], S_BK)
+    ti, to, tb, tY = f1_tee('SD-F1M', 'TY100', o, Xmy, [-1, 0, S_BK], f'สามทางวาย (TY) ø4" รับท่อชักโครกชาย ห้อง {jj}')
+    if k == 0:
+        f1_route('SD-F1M', [o, qD, qC, qU], 100, NM_M, s0=0.123, s1=0.027)
+    else:
+        f1_pipe('SD-F1M', to, prev_in, 100, NM_M)
+    zE = tb[2] + S_BK * (tb[0] - xo)
+    n3_fit(f'SD-F1M-WC{jj}-SLV', 'PVC-TS-FLANG-100', [xo, yo, F1_SB], [1, 0, 0], [0, 1, 0], 'ข้อต่อกันซึม PVC 4" สีฟ้า SCG ใต้ชักโครก (ฝังในพื้น)', '4"')
+    elements[-1]['qty'].update(brand='SCG', color='ฟ้า')
+    p = f1_drop('SD-F1M', [xo, yo, zE], 100, F1_SB + 0.10, [1, 0, 0], 'ท่อส้วมจากชักโครก ผ่านข้อต่อกันซึม')
+    f1_pipe('SD-F1M', p, tb, 100, 'ท่อส้วมชักโครก ใต้พื้น ลาด 1:50 (โซน 3)')
+    prev_in = ti
+f1_cap('SD-F1M', prev_in, [0, 1, 0], 100)
+# โถปัสสาวะ 3 โถ (กะรัต K-17392X): ท่อ 2" ดิ่งหลังโถ (ห่างผิวผนังกั้นกลาง 0.07) → ใต้พื้นแนว y = 10.47 ทิศ +x → ข้องอ 45° 2 ตัว → TYR บนท่อส้วม
+U_Y = 10.47
+NM_U = 'ท่อน้ำทิ้งโถปัสสาวะ ใต้พื้น ลาด 1:50 (โซน 3)'
+uP = ub
+u1 = _up(uP, [26.80, 10.67, 0], S_BR)
+u2 = _up(u1, [26.60, U_Y, 0], S_BR)
+u3 = f1_dz(u2, S_BR, x=26.44)
+f1_route('SD-F1U', [u3, u2, u1, uP], 50, NM_U, s0=0.031)
+prev_in = None
+for k, xu in enumerate((26.44, 25.64, 24.84)):
+    o = f1_dz(u3, S_BR, x=xu)
+    if k < 2:
+        ti, to, tb, tY = f1_tee('SD-F1U', 'TEE55', o, _unit([1, 0, -S_BR]), [0, 0, 1], f'สามทาง ø2" รับท่อดิ่งโถปัสสาวะ ตัวที่ {3 - k}')
+        if k == 1:
+            f1_pipe('SD-F1U', to, prev_in, 50, NM_U)
+        zt = tb[2]
+        prev_in = ti
+    else:
+        dname, dp = F1_EB[(90, 50)]
+        f1_fit('SD-F1U', 'EB', dname, o, [0, 0, 1], [1, 0, 0], 'ข้องอ 90° ø2"', '2"')
+        f1_pipe('SD-F1U', _pt(o, [1, 0, 0], dp), prev_in, 50, NM_U)
+        zt = o[2] + dp
+    zU = F1_FF + 0.35                                            # ท่อออกโถปัสสาวะ (สมมติ +0.35)
+    f1_fit('SD-F1U', 'EB', 'PVC-EB-90-55', [xu, U_Y, zU], [0, 0, -1], [0, 1, 0], 'ข้องอ 90° ø2" รับท่อออกหลังโถปัสสาวะ', '2"')
+    f1_pipe('SD-F1U', [xu, U_Y, zt], [xu, U_Y, zU - 0.030], 50, 'ท่อน้ำทิ้งโถปัสสาวะ ดิ่งหลังโถ')
+
+# ---------- 4) ท่อน้ำทิ้งห้องน้ำ ø100 ลาด 1:100 ลึกใต้คานคอดิน: แนว x = 27.00 ไหล +y → ลอดใต้คาน GB2-B → ทแยง 45° → วายลด 150x100 บนท่อรวมโซน 2 ฝั่งกริด 10 (x = 26.40) ----
+def f1_header_y(zone_pref, x_y, flow_sgn, bdir, nm):
+    """แทรกวายลด 150x100 บนท่อรวม ø150 ใต้ระเบียง (y json 14.90) ที่ x_y: แยกท่อเดิมเป็น 2 ท่อน — คืน (ปากแยก, แกนแยก)"""
+    hy = round(_YM - SD_HY, 4)
+    cand = [e for e in elements if re.match(rf'^{zone_pref}-P\d+$', e['id'])]
+    for e in cand:
+        a, b = _J(e['geom']['p0']), _J(e['geom']['p1'])
+        if abs(a[1] - hy) < 1e-3 and abs(b[1] - hy) < 1e-3 and min(a[0], b[0]) < x_y - 0.2 and max(a[0], b[0]) > x_y + 0.2:
+            break
+    else:
+        raise RuntimeError('header pipe not found ' + zone_pref)
+    up_, dn_ = (a, b) if (b[0] - a[0]) * flow_sgn > 0 else (b, a)
+    zf = lambda x: up_[2] + (dn_[2] - up_[2]) * (x - up_[0]) / (dn_[0] - up_[0])
+    o = [x_y, hy, zf(x_y)]
+    Xh = _unit(_v(up_, dn_))
+    yi, yo_, ybp, ybr = f1_yr(zone_pref + '-F1', (150, 100), o, Xh, bdir, nm)
+    g = e['geom']
+    k_dn = 'p0' if _J(g['p0'])[0] == dn_[0] else 'p1'
+    g[k_dn] = [round(c, 4) for c in _J(yi)]
+    e['qty']['length'] = round(math.dist(up_, yi), 3)
+    f1_pipe(zone_pref + '-F1', yo_, dn_, 150, 'ท่อรวม')
+    elements[-1]['name'] = e['name']
+    return ybp, ybr
+
+
+gP, gbr = f1_header_y('SD-Z2E', 26.40, -1, _unit([0.7071, -0.7071, S_GR]), 'วายลด 150x100 รับท่อน้ำทิ้งห้องน้ำชาย-หญิง ชั้น 1')
+G_X = 27.00
+gD = _pt(gP, gbr, (G_X - gP[0]) / gbr[0])                       # จุดเลี้ยว 45° (y ≈ 14.30)
+Xg = _unit([0, 1, -S_GR])
+zg = lambda y: gD[2] + S_GR * (gD[1] - y)
+dpG = f1_eb('SD-F1G', 45, 100, gD, Xg, _unit(_v(gD, gP)))
+f1_pipe('SD-F1G', _pt(gD, _unit(_v(gD, gP)), dpG), gP, 100, 'ท่อน้ำทิ้งห้องน้ำ ชั้น 1 ลาด 1:100 (ลงท่อรวมโซน 2)')
+# จุดรับบนแนวท่อ (ทิศการไหล +y): (y, ชนิด, ทิศไปหาท่อแยก)
+G_J = [(10.10, 'TYR55', [-1, 0, S_BR], 'อ่างล้างมือรวมห้องน้ำชาย (ต้นสาย)'),
+       (10.40, 'TYR55', [1, 0, S_BR], 'อ่างล้างมือรวมห้องน้ำหญิง'),
+       (11.40, 'YR80', [-0.7071, -0.7071, S_BR], 'ฟลอร์เดรนห้องน้ำชาย'),
+       (12.00, 'YR80', [0.7071, -0.7071, S_BR], 'ฟลอร์เดรนห้องน้ำหญิง'),
+       (12.52, 'TYR55', [1, 0, S_BR], 'อ่างล้างหน้าชาย-หญิง ตัวที่ 2'),
+       (13.32, 'TYR55', [1, 0, S_BR], 'อ่างล้างหน้าชาย-หญิง ตัวที่ 1')]
+G_BP = {}
+prev_out = None
+for yj, kind, bd, what in G_J:
+    o = [G_X, yj, zg(yj)]
+    if kind == 'YR80':
+        pin, pout, pb, pbr = f1_yr('SD-F1G', (100, 80), o, Xg, _unit(bd), f'วายลด 100x80 รับท่อ{what}')
+    else:
+        pin, pout, pb, pbr = f1_tee('SD-F1G', kind, o, Xg, bd, f'สามทางวายลด (TYR) 4"x2" รับท่อ{what}')
+    G_BP[yj] = (pb, pbr)
+    if prev_out is None:
+        f1_cap('SD-F1G', pin, [0, -1, 0], 100, 'ฝาปิดปลายท่อต้นสาย (ปลั๊กอุด)')
+    else:
+        f1_pipe('SD-F1G', prev_out, pin, 100, 'ท่อน้ำทิ้งห้องน้ำ ชั้น 1 ลาด 1:100 (ลงท่อรวมโซน 2)')
+    prev_out = pout
+f1_pipe('SD-F1G', prev_out, _pt(gD, Xg, -dpG), 100, 'ท่อน้ำทิ้งห้องน้ำ ชั้น 1 ลาด 1:100 (ลงท่อรวมโซน 2)')
+
+
+def f1_trough_waste(eid, x, y, nm):
+    tr_top = F1_FF - 0.02 + 0.45
+    n3_chrome(eid, [x, y, tr_top - 0.005], [x, y, tr_top + 0.005], 0.075, nm, qty=dict(type='สะดืออ่างสแตนเลส (อ่างล้างมือรวม)', size='ต่อท่อ 2"'), mat='BIM-สแตนเลส')
+    return tr_top
+
+
+def f1_fd(pref, x, y, nm):
+    n3_box(f'{pref}-FD', x - 0.06, y - 0.06, x + 0.06, y + 0.06, F1_FF - 0.003, 0.006, nm,
+           qty=dict(type='ฟลอร์เดรน PVC กันกลิ่น', size='ตะแกรง 4" ต่อท่อ 3"'))
+    elements[-1]['material'] = 'BIM-สแตนเลส'
+
+
+# 4a) อ่างล้างมือรวมห้องน้ำชาย: สะดืออ่าง x = 26.55 → ท่อ 2" ดิ่ง → ข้องอ 90° → TYR ต้นสาย (จากทิศ −x)
+pb, pbr = G_BP[10.10]
+c = _up(pb, [26.55, pb[1], 0], S_BR)
+zt = f1_trough_waste('SD-F1G-TRM-WST', 26.55, pb[1], 'สะดืออ่างล้างมือรวม สแตนเลส ห้องน้ำชาย ต่อท่อ 2"')
+p = f1_drop('SD-F1G', c, 50, zt - 0.005, [1, 0, 0], 'ท่อน้ำทิ้งอ่างล้างมือรวม 2" ดิ่งผ่านตัวอ่าง')
+f1_pipe('SD-F1G', p, pb, 50, 'ท่อน้ำทิ้งอ่างล้างมือรวม ใต้พื้น ลาด 1:50')
+# 4b) อ่างล้างมือรวมห้องน้ำหญิง: สะดือ x = 29.45 y = 10.10 → ท่อ 2" ลึกลอดใต้คาน GB1-9 → ข้องอ 45° 2 ตัว → TYR (จากทิศ +x)
+pb, pbr = G_BP[10.40]
+w1 = _up(pb, [27.15, pb[1], 0], S_BR)
+w2 = _up(w1, [27.45, 10.10, 0], S_BR)
+w3 = _up(w2, [29.45, 10.10, 0], S_BR)
+zt = f1_trough_waste('SD-F1G-TRW-WST', 29.45, 10.10, 'สะดืออ่างล้างมือรวม สแตนเลส ห้องน้ำหญิง ต่อท่อ 2"')
+p = f1_drop('SD-F1G', w3, 50, zt - 0.005, [-1, 0, 0], 'ท่อน้ำทิ้งอ่างล้างมือรวม 2" ดิ่งผ่านตัวอ่าง')
+f1_route('SD-F1G', [w3, w2, w1, pb], 50, 'ท่อน้ำทิ้งอ่างล้างมือรวมห้องน้ำหญิง ใต้พื้น ลาด 1:50 ลอดใต้คานคอดิน', s0=0.030)
+# 4c) ฟลอร์เดรนห้องน้ำชาย (หน้าโถปัสสาวะ): ท่อ 3" ดิ่ง → ข้องอ 90° ทิศทแยง → วายลด 100x80
+pb, pbr = G_BP[11.40]
+c = _pt(pb, pbr, (pb[0] - 26.60) / -pbr[0])
+f1_fd('SD-F1G-M', c[0], c[1], 'ฟลอร์เดรน PVC ฝังพื้น ตะแกรง 4" แบบกันกลิ่น ห้องน้ำชาย ชั้น 1 (หน้าโถปัสสาวะ)')
+p = f1_drop('SD-F1G', c, 80, F1_FF - 0.003, [-pbr[0], -pbr[1], 0], 'ตัวฟลอร์เดรน/ท่อ 3" PVC ฝังพื้น')
+f1_pipe('SD-F1G', p, pb, 80, 'ท่อน้ำทิ้งฟลอร์เดรน ใต้พื้น ลาด 1:50')
+# 4d) ฟลอร์เดรนห้องน้ำหญิง (ทางเดินหน้าห้องส้วม): ท่อ 3" ดิ่ง → ข้องอ 90° → ราบ −x ลึกลอดใต้คาน GB1-9 → ข้องอ 45° → วายลด 100x80
+pb, pbr = G_BP[12.00]
+e1 = _pt(pb, pbr, (27.40 - pb[0]) / pbr[0])
+e2 = _up(e1, [29.00, e1[1], 0], S_BR)
+f1_fd('SD-F1G-W', 29.00, e1[1], 'ฟลอร์เดรน PVC ฝังพื้น ตะแกรง 4" แบบกันกลิ่น ห้องน้ำหญิง ชั้น 1 (ทางเดินหน้าห้องส้วม)')
+p = f1_drop('SD-F1G', e2, 80, F1_FF - 0.003, [-1, 0, 0], 'ตัวฟลอร์เดรน/ท่อ 3" PVC ฝังพื้น')
+dp1 = f1_eb('SD-F1G', 45, 80, e1, [-1, 0, 0], _unit(_v(e1, pb)))
+f1_pipe('SD-F1G', p, _pt(e1, [1, 0, 0], dp1), 80, 'ท่อน้ำทิ้งฟลอร์เดรน ใต้พื้น ลาด 1:50 ลอดใต้คานคอดิน')
+f1_pipe('SD-F1G', _pt(e1, _unit(_v(e1, pb)), dp1), pb, 80, 'ท่อน้ำทิ้งฟลอร์เดรน ใต้พื้น ลาด 1:50')
+# 4e) อ่างล้างหน้า 2 คู่ (ชายติดผนังกริด 9 ด้านตะวันตก / หญิงด้านตะวันออก): P-trap 2" → ข้องอ 90° ลง → ท่อ 2" ลึกลอดใต้คาน GB1-9 → TEE รับอ่างชาย → TYR
+for yj, j in ((13.32, 1), (12.52, 2)):
+    pb, pbr = G_BP[yj]
+    lm = next(e for e in elements if e['id'] == f'FX-F1-WC1-LAV{j}')
+    lw = next(e for e in elements if e['id'] == f'FX-F1-WC2-LAV{j}')
+    xm = sum(q[0] for q in lm['geom']['poly']) / len(lm['geom']['poly'])
+    xw = sum(q[0] for q in lw['geom']['poly']) / len(lw['geom']['poly'])
+    zb = lm['geom']['z0']                                       # ท้องอ่าง
+    zA = F1_FF + 0.45                                           # ปากออก P-trap
+    xtm = xm - 0.102 - 0.030 - 0.030                            # แนวท่อดิ่งชาย (P-trap หันปากออกทิศ −x)
+    xtw = xw + 0.102 + 0.030 + 0.030
+    t1 = _up(pb, [xtm, yj, 0], S_BR)
+    c2 = _up(t1, [xtw, yj, 0], S_BR)
+    ti, to, tb, tY = f1_tee('SD-F1G', 'TEE55', t1, _unit([-1, 0, -S_BR]), [0, 0, 1], f'สามทาง ø2" รับท่อดิ่งอ่างล้างหน้าชาย ตัวที่ {j}')
+    f1_pipe('SD-F1G', to, pb, 50, 'ท่อน้ำทิ้งอ่างล้างหน้า ใต้พื้น ลาด 1:50')
+    p = f1_drop('SD-F1G', c2, 50, zA - 0.030, [-1, 0, 0], 'ท่อน้ำทิ้งอ่างล้างหน้าหญิง 2" ดิ่ง')
+    f1_pipe('SD-F1G', p, ti, 50, 'ท่อน้ำทิ้งอ่างล้างหน้า ใต้พื้น ลาด 1:50 ลอดใต้คานคอดิน')
+    for sx, xa, xt, who, ztop in ((-1, xm, xtm, 'ชาย', tb[2]), (1, xw, xtw, 'หญิง', None)):
+        oT = [xa + sx * 0.102, yj, zA - 0.058]
+        n3_fit(f'SD-F1G-LAV{"M" if sx < 0 else "W"}{j}-TRAP', 'PVC-P-TRAP-55', oT, [sx, 0, 0], [0, 1, 0], f'P-trap ø2" ใต้อ่างล้างหน้า{who} ตัวที่ {j}', '2"')
+        n3_chrome(f'SD-F1G-LAV{"M" if sx < 0 else "W"}{j}-WST', [xa, yj, zb - 0.10], [xa, yj, zb], 0.040,
+                  f'สะดืออ่างล้างหน้าสำเร็จรูป สแตนเลส ต่อท่อ 2" ห้องน้ำ{who} ชั้น 1', qty=dict(type='สะดืออ่างสแตนเลส', size='ต่อท่อ 2"'), mat='BIM-สแตนเลส')
+        f1_pipe('SD-F1G', [xa, yj, oT[2] + 0.045], [xa, yj, zb - 0.10], 50, f'ท่อน้ำทิ้งใต้อ่างล้างหน้า{who} (สะดืออ่าง → P-trap)')
+        ce = [xt, yj, zA]
+        f1_fit('SD-F1G', 'EB', 'PVC-EB-90-55', ce, [-sx, 0, 0], [0, 0, -1], 'ข้องอ 90° ø2" หลัง P-trap ลงพื้น', '2"')
+        if sx < 0:
+            f1_pipe('SD-F1G', [xt, yj, zA - 0.030], tb, 50, 'ท่อน้ำทิ้งอ่างล้างหน้าชาย 2" ดิ่งลงพื้น')
+
+# ---------- 5) ท่อน้ำทิ้งซิงค์ร้านค้า 3 ร้าน ø100 ลาด 1:100 ลึกใต้พื้นร้าน (แนว y ใต้ซิงค์ พ้นตอม่อ) → ทแยงลอดใต้คาน GB2-B7-8 → วายลด 150x100 บนท่อรวมโซน 2 ฝั่งกริด 5 (x = 23.30) ----
+SK_W, SK_D, SK_H = 0.75, 0.45, 0.80                             # DYNA HOME DH-7545-TB 75x45 ซม. (สูงพร้อมขา 0.80 สมมติ)
+SK_Y0, SK_Y1 = 13.80 - SK_D, 13.80                              # ชิดผิวฉาบผนังหลังร้าน (แนว B)
+SK = {}
+for n, i in ((1, 5), (2, 6), (3, 7)):
+    x1 = GX[i] - 0.185                                          # ชิดผิวฉาบเสา C1-{i+1}B
+    SK[n] = (x1 - SK_W, x1, (x1 - SK_W / 2))
+SK_YC = (SK_Y0 + SK_Y1) / 2
+S_YD = round(SK_YC - 0.102 - 0.030 - 0.030, 4)                  # แนวท่อดิ่ง/ท่อรวม (P-trap หันปากออกทิศ −y)
+sP, sbr = f1_header_y('SD-Z2W', 23.30, +1, _unit([-0.7071, -0.7071, S_GR]), 'วายลด 150x100 รับท่อน้ำทิ้งซิงค์ร้านค้า ชั้น 1')
+sD = _pt(sP, sbr, (S_YD - sP[1]) / sbr[1])                      # จุดเลี้ยว 45° บนแนว y = S_YD
+Xs = _unit([1, 0, -S_GR])
+zs = lambda x: sD[2] + S_GR * (sD[0] - x)
+udg = _unit(_v(sD, sP))
+dpS = f1_eb('SD-F1S', 45, 100, sD, Xs, udg)
+# ซิงค์ร้าน 3: ท่อแยก 2" ตั้งฉากกับแนวทแยง เข้า TYR บนแนวทแยง
+x3c = SK[3][2]
+tq = (x3c - sD[0]) * udg[0] + (S_YD - sD[1]) * udg[1]
+tq /= math.hypot(udg[0], udg[1]) ** 2
+Q3 = [sD[0] + udg[0] * tq, sD[1] + udg[1] * tq, sD[2] + udg[2] * tq]
+Xd = _unit([udg[0], udg[1], udg[2]])
+ti, to, tb3, tY3 = f1_tee('SD-F1S', 'TYR55', Q3, Xd, [x3c - Q3[0], S_YD - Q3[1], 0.02 * math.hypot(x3c - Q3[0], S_YD - Q3[1])], 'สามทางวายลด (TYR) 4"x2" รับท่อซิงค์ร้าน 3')
+f1_pipe('SD-F1S', _pt(sD, udg, dpS), ti, 100, 'ท่อน้ำทิ้งซิงค์ร้านค้า ลาด 1:100 ลอดใต้คานคอดิน (ลงท่อรวมโซน 2)')
+f1_pipe('SD-F1S', to, sP, 100, 'ท่อน้ำทิ้งซิงค์ร้านค้า ลาด 1:100 (ลงท่อรวมโซน 2)')
+c3 = _up(tb3, [x3c, S_YD, 0], S_BR)
+SK_ZT = {}
+SK_ZT[3] = c3
+# แนว y = S_YD (ไหล +x): TYR ซิงค์ร้าน 2, 1 (ปากแยกตั้งขึ้นรับท่อดิ่ง) → ปลายต้นสายปิดปลั๊ก
+cur_dn = _pt(sD, Xs, -dpS)
+for n in (2, 1):
+    o = [SK[n][2], S_YD, zs(SK[n][2])]
+    ti, to, tb, tY = f1_tee('SD-F1S', 'TYR55', o, Xs, [0, 0, 1], f'สามทางวายลด (TYR) 4"x2" รับท่อดิ่งซิงค์ร้าน {n}')
+    f1_pipe('SD-F1S', to, cur_dn, 100, 'ท่อน้ำทิ้งซิงค์ร้านค้า ใต้พื้นร้าน ลาด 1:100')
+    SK_ZT[n] = tb
+    cur_dn = ti
+f1_cap('SD-F1S', cur_dn, [-1, 0, 0], 100, 'ฝาปิดปลายท่อต้นสาย (ปลั๊กอุด)')
+SK_TOP = F1_FF + SK_H                                            # ขอบบนซิงค์ 1.12
+SK_BOT = SK_TOP - 0.20                                           # ก้นหลุมซิงค์ (ลึก 0.20 สมมติ)
+for n in (1, 2, 3):
+    x0, x1, xc = SK[n]
+    # ตัวซิงค์ (แผ่นบน + หลุม) + ขาตั้ง 4 ขา
+    parts = [prism([(x0, _YM - SK_Y0), (x1, _YM - SK_Y0), (x1, _YM - SK_Y1), (x0, _YM - SK_Y1)], SK_BOT, SK_TOP - SK_BOT)]
+    for lx, ly in ((x0 + 0.03, SK_Y0 + 0.03), (x1 - 0.03, SK_Y0 + 0.03), (x0 + 0.03, SK_Y1 - 0.03), (x1 - 0.03, SK_Y1 - 0.03)):
+        parts.append(prism([(lx - 0.02, _YM - ly + 0.02), (lx + 0.02, _YM - ly + 0.02), (lx + 0.02, _YM - ly - 0.02), (lx - 0.02, _YM - ly - 0.02)], F1_FF, SK_BOT - F1_FF))
+    add(f'FX-F1-SH{n}-SINK', 'สุขภัณฑ์', 1, 'A21', dict(type='multi', parts=parts),
+        name=f'ซิงค์ล้างจานสแตนเลส 1 หลุม พร้อมขาตั้ง DYNA HOME DH-7545-TB 75x45 ซม. หลังร้าน {n} มุมแนวหน้าต่าง', assumed=True,
+        qty=dict(count=1, type='ซิงค์ล้างจาน 1 หลุม พร้อมขาตั้ง', model='DYNA HOME DH-7545-TB', size='75x45 ซม.', height=SK_H))
+    elements[-1]['material'] = 'BIM-สแตนเลส'
+    # สะดือซิงค์ → ท่อหาง → P-trap 2" (ปากออก −y) → ข้องอ 90° ลง → ท่อ 2" ดิ่ง
+    zA = SK_BOT - 0.20
+    oT = [xc, SK_YC - 0.102, zA - 0.058]
+    n3_fit(f'SD-F1S-SK{n}-TRAP', 'PVC-P-TRAP-55', oT, [0, -1, 0], [1, 0, 0], f'P-trap ø2" ใต้ซิงค์ร้าน {n}', '2"')
+    n3_chrome(f'SD-F1S-SK{n}-WST', [xc, SK_YC, SK_BOT - 0.05], [xc, SK_YC, SK_BOT], 0.045, f'สะดือซิงค์ (มากับชุดซิงค์) ร้าน {n}', qty=dict(type='สะดือซิงค์ (มากับชุดซิงค์)', size='ต่อท่อ 2"'), mat='BIM-สแตนเลส')
+    f1_pipe('SD-F1S', [xc, SK_YC, oT[2] + 0.045], [xc, SK_YC, SK_BOT - 0.05], 50, f'ท่อน้ำทิ้งใต้ซิงค์ร้าน {n} (สะดือ → P-trap)')
+    f1_fit('SD-F1S', 'EB', 'PVC-EB-90-55', [xc, S_YD, zA], [0, 1, 0], [0, 0, -1], 'ข้องอ 90° ø2" หลัง P-trap ลงพื้น', '2"')
+    if n < 3:
+        f1_pipe('SD-F1S', [xc, S_YD, zA - 0.030], SK_ZT[n], 50, f'ท่อน้ำทิ้งซิงค์ร้าน {n} 2" ดิ่งลงพื้น')
+    else:
+        p = f1_drop('SD-F1S', c3, 50, zA - 0.030, [tb3[0] - c3[0], tb3[1] - c3[1], 0], f'ท่อน้ำทิ้งซิงค์ร้าน {n} 2" ดิ่งลงพื้น')
+        f1_pipe('SD-F1S', p, tb3, 50, 'ท่อน้ำทิ้งซิงค์ร้าน 3 ใต้ดิน ลาด 1:50 ลอดใต้คานคอดิน')
+
+# ---------- 6) ท่อน้ำดีชั้น 1 PVC ชั้น 13.5: สามทางลดบนท่อดิ่ง 2" ผนังกริด 1 (ใต้ท้องพื้นชั้น 2) → เมน 1¼" ใต้ท้องคานทางเดินชั้น 1 ----
+#     → ห้องน้ำชาย 3/4" (โถปัสสาวะ อ่างรวม อ่างล้างหน้าชาย-หญิง ชักโครกชาย) → ต่อ 1/2" ไปก๊อกซิงค์ 3 ร้าน (ท่อเดินในร้านชิดผนังหลังร้าน) ; ห้องน้ำหญิง 3/4" (อ่างรวม ชักโครกหญิง)
+CW = 'PB-F1-CW'
+h2, h114, h34, h12 = (WOD[s][0] / 2 + 0.006 for s in ('2', '1 1/4', '3/4', '1/2'))
+zW = 2.70                                                       # ระดับท่อน้ำดีชั้น 1 (ใต้ท้องคาน 2.90)
+yWm = 8.20                                                      # แนวท่อเมนทางเดิน (ห่างคาน B2-C 0.30)
+rs = next(e for e in elements if e['id'] == 'PB-NW-RS-P1')
+_g = rs['geom']
+_lo = 'p0' if _g['p0'][2] < _g['p1'][2] else 'p1'
+xR, yR = _g[_lo][0], round(_YM - _g[_lo][1], 4)
+zR0 = _g[_lo][2]
+zRT = 3.25
+_g[_lo][2] = round(zRT + h2, 4)
+rs['qty']['length'] = round(abs(_g['p0'][2] - _g['p1'][2]), 3)
+n3_wpipe(f'{CW}-RS-P0', [xR, yR, zR0], [xR, yR, zRT - h2], '2', 'ท่อแนวดิ่งจ่ายน้ำ ผนังกริด 1 (ช่วงล่าง)')
+n3_wfit(f'{CW}-RS-T', [xR, yR, zRT], '2', 'สามทางลด 2"x1¼" (แยกจ่ายชั้น 1)')
+
+
+def cw_run(pref, pts, sz, nm, s0, s1):
+    """ท่อน้ำดีผ่านจุด pts ข้องอ 90° (ทำเอง) ที่จุดหักมุม; ตัดปลายแรก s0 ปลายท้าย s1"""
+    h = WOD[sz][0] / 2 + 0.006
+    for j in range(len(pts) - 1):
+        a, b = pts[j], pts[j + 1]
+        d = _unit(_v(a, b))
+        n3_wpipe(_f1id(pref, 'P'), _pt(a, d, s0 if j == 0 else h), _pt(b, d, -(s1 if j == len(pts) - 2 else h)), sz, nm)
+        if j < len(pts) - 2:
+            n3_wfit(_f1id(pref, 'EL'), b, sz, 'ข้องอ 90°')
+
+
+def cw_tee(pref, p, sz, nm='สามทาง'):
+    n3_wfit(_f1id(pref, 'TE'), p, sz, nm)
+
+
+def cw_valve(eid, p, d, sz, nm, kind='บอลวาล์ว'):
+    h = 0.045 if sz == '1/2' else 0.06
+    n3_chrome(eid, _pt(p, d, -h), _pt(p, d, h), WOD[sz][0] + 0.012, f'{nm} {sz}"', qty=dict(type=kind, size=f'{sz}"'))
+    n3_box(eid + 'H', p[0] - 0.008, p[1] - 0.008, p[0] + 0.008, p[1] + 0.008, p[2] + WOD[sz][0] / 2 + 0.006, 0.035, 'ด้ามบอลวาล์ว')
+    elements[-1]['material'] = 'BIM-โครเมียม'
+
+
+# 6.1 เมน 1¼": ท่อดิ่ง → ทิศ −y 0.19 → ลง 2.70 → ตามแนวทางเดิน y = 8.20 ไปทางกริด 10
+x_mt, x_wt = 26.60, 30.72                                        # สามทางแยกเข้าห้องน้ำชาย (ทะลุผนังแนว C ฝั่งตะวันตกของเสาเอ็นประตูผนังกั้นกลาง) / หญิง (ช่องทางเข้าโล่ง)
+x_vm = 0.60
+cw_run(f'{CW}-MN', [[xR, yR, zRT], [xR, yWm, zRT], [xR, yWm, zW], [x_vm, yWm, zW]], '1 1/4', 'ท่อเมนน้ำดีชั้น 1 ใต้ท้องพื้นชั้น 2', h2, 0.06)
+cw_valve(f'{CW}-MN-V', [x_vm, yWm, zW], [1, 0, 0], '1 1/4', 'บอลวาล์วทองเหลือง ท่อเมนน้ำดีชั้น 1')
+n3_wpipe(f'{CW}-MN-P10', [x_vm + 0.06, yWm, zW], [x_mt - h114, yWm, zW], '1 1/4', 'ท่อเมนน้ำดีชั้น 1 ใต้ท้องคานทางเดิน')
+cw_tee(f'{CW}-MN', [x_mt, yWm, zW], '1 1/4', 'สามทางลด 1¼"x3/4"')
+n3_wpipe(f'{CW}-MN-P11', [x_mt + h114, yWm, zW], [x_wt - h114, yWm, zW], '1 1/4', 'ท่อเมนน้ำดีชั้น 1 ใต้ท้องคานทางเดิน')
+n3_wfit(f'{CW}-MN-EL9', [x_wt, yWm, zW], '1 1/4', 'ข้องอ 90° + ข้อต่อลด 1¼"x3/4" (ปลายท่อเมน)')
+# จุดแขวนท่อ: ใต้คาน B1-CD ทุกกริด + ใต้คาน B2-C ตรงท่อแยกเข้าห้องน้ำ + กลางห้องน้ำ (แขวนจากท้องพื้นชั้น 2)
+F1_HG = []
+
+
+def cw_hang(eid, p, sz, z_top, where, ax=(1, 0, 0)):
+    od = WOD[sz][0]
+    n3_chrome(eid + '-ROD', [p[0], p[1], z_top], [p[0], p[1], p[2] + od / 2 + 0.008], 0.010, f'เหล็กเส้นเกลียว M10 ชุบกัลวาไนซ์ + พุกเหล็ก M10 ยึด{where}',
+              qty=dict(type='เหล็กเส้นเกลียว M10 + พุกเหล็ก M10', length=round(z_top - p[2] - od / 2 - 0.008, 3)), mat='BIM-เหล็กชุบกัลวาไนซ์')
+    m = member(_J(_pt(p, ax, -0.0125)), _J(_pt(p, ax, 0.0125)), od + 0.012, od + 0.012)
+    m.update(shape='POLY', poly2d=_circ(od / 2 + 0.006), hole2d=_circ(od / 2 + 0.001))
+    add(eid + '-CL', 'สุขาภิบาล', 1, 'A07', m, name=f'ห่วงแขวนท่อเหล็กชุบกัลวาไนซ์ บุยาง {sz}"', assumed=True, qty=dict(type='ห่วงแขวนท่อ', size=f'{sz}"'))
+    elements[-1]['material'] = 'BIM-เหล็กชุบกัลวาไนซ์'
+    F1_HG.append(eid)
+
+
+Z_BSOF, Z_CEIL = 2.90, 3.31                                      # ท้องคานชั้น 2 / ผิวฉาบใต้ท้องพื้นชั้น 2
+for i in range(1, 9):
+    cw_hang(f'{CW}-HG{i}', [GX[i], yWm, zW], '1 1/4', Z_BSOF, 'ท้องคาน B1-CD')
+cw_hang(f'{CW}-HG9', [29.75, yWm, zW], '1 1/4', Z_CEIL, 'ท้องพื้นชั้น 2')
+# 6.2 ห้องน้ำชาย 3/4": จากสามทางบนเมน → +y (ผ่านใต้คาน B2-C ทางเข้าโล่ง) → ทะลุผนังกั้นกลางเหนือประตู → สามทาง (โถปัสสาวะ/อ่างรวม) → สามทาง (อ่างล้างหน้า) → ข้องอ → ทิศ −x
+yMW = 10.35                                                     # แนวกลางผนังกั้นกลาง
+y_bs, y_ws = 12.92, 13.55                                       # สามทางอ่างล้างหน้า / แนวท่อชิดผนังหลัง (หน้าคาน B2-B)
+n3_wpipe(f'{CW}-M-P01', [x_mt, yWm + h114, zW], [x_mt, 9.40 - 0.045, zW], '3/4', 'ท่อน้ำดีห้องน้ำชาย ชั้น 1')
+cw_valve(f'{CW}-M-V', [x_mt, 9.40, zW], [0, 1, 0], '3/4', 'บอลวาล์วทองเหลือง ห้องน้ำชาย')
+n3_wpipe(f'{CW}-M-P02', [x_mt, 9.40 + 0.045, zW], [x_mt, yMW - h34, zW], '3/4', 'ท่อน้ำดีห้องน้ำชาย ชั้น 1 ทะลุผนังกั้นกลาง')
+cw_tee(f'{CW}-M', [x_mt, yMW, zW], '3/4', 'สามทางลด 3/4"x1/2"')
+n3_wpipe(f'{CW}-M-P03', [x_mt, yMW + h34, zW], [x_mt, y_bs - h34, zW], '3/4', 'ท่อน้ำดีห้องน้ำชาย ชั้น 1')
+cw_tee(f'{CW}-M', [x_mt, y_bs, zW], '3/4', 'สามทางลด 3/4"x1/2"')
+n3_wpipe(f'{CW}-M-P04', [x_mt, y_bs + h34, zW], [x_mt, y_ws - h34, zW], '3/4', 'ท่อน้ำดีห้องน้ำชาย ชั้น 1')
+n3_wfit(f'{CW}-M-EL1', [x_mt, y_ws, zW], '3/4', 'ข้องอ 90°')
+x_g8 = 24.50
+n3_wpipe(f'{CW}-M-P05', [x_mt - h34, y_ws, zW], [x_g8 + h34, y_ws, zW], '3/4', 'ท่อน้ำดีห้องน้ำชาย ชั้น 1 ชิดผนังหลัง')
+cw_tee(f'{CW}-M', [x_g8, y_ws, zW], '3/4', 'สามทางลด 3/4"x1/2" (ในผนังกริด 8)')
+for k, yh in enumerate((9.55, 11.65, 13.20)):
+    cw_hang(f'{CW}-M-HG{k+1}', [x_mt, yh, zW], '3/4', Z_CEIL, 'ท้องพื้นชั้น 2', ax=(0, 1, 0))
+cw_hang(f'{CW}-M-HG4', [x_mt, 8.625, zW], '3/4', Z_BSOF, 'ท้องคาน B2-C8-9', ax=(0, 1, 0))
+cw_hang(f'{CW}-M-HG5', [25.90, y_ws, zW], '3/4', Z_CEIL, 'ท้องพื้นชั้น 2')
+# โถปัสสาวะ + อ่างรวมชาย: ท่อ 1/2" ฝังผนังกั้นกลาง +2.70 → ท่อดิ่งในผนัง 3 จุด → ฟลัชวาล์วโถปัสสาวะ (ด้านห้องส้วม) + ก๊อกอ่างรวม (ด้านอ่าง)
+X_UR = (26.44, 25.64, 24.84)
+Z_FV, Z_TT = F1_FF + 1.15, F1_FF + 0.80                         # ฟลัชวาล์ว / ก๊อกอ่างรวม (ขอบอ่าง +0.58)
+y_mwB, y_mwC = 10.40, 10.30                                     # ผิวฉาบผนังกั้นกลาง ด้านห้องส้วม / ด้านอ่างรวม
+
+
+def cw_mw_drops(pref, xs_, x_from, sz, tap_who, fv=False):
+    """ท่อ 1/2" ฝังผนังกั้นกลางจาก x_from ไปตามลำดับ xs_ (สามทาง ... ข้องอปลาย) แล้วดิ่งลงแต่ละจุด"""
+    cur = x_from
+    for k, xu in enumerate(xs_):
+        last = k == len(xs_) - 1
+        sgn = 1 if xu > cur else -1
+        n3_wpipe(_f1id(pref, 'P'), [cur + sgn * (h34 if k == 0 else h12), yMW, zW], [xu - sgn * h12, yMW, zW], '1/2', 'ท่อน้ำดีฝังผนังกั้นกลาง')
+        n3_wfit(_f1id(pref, 'EL' if last else 'TE'), [xu, yMW, zW], '1/2', 'ข้องอ 90°' if last else 'สามทาง')
+        zlow = Z_TT
+        if fv:
+            n3_wpipe(_f1id(pref, 'P'), [xu, yMW, zW - h12], [xu, yMW, Z_FV + h12], '1/2', 'ท่อน้ำดีฝังผนัง ดิ่งลงฟลัชวาล์ว')
+            n3_wfit(_f1id(pref, 'TE'), [xu, yMW, Z_FV], '1/2', 'สามทาง')
+            n3_wpipe(_f1id(pref, 'P'), [xu, yMW + h12, Z_FV], [xu, y_mwB, Z_FV], '1/2', 'ท่อน้ำดีออกฟลัชวาล์วโถปัสสาวะ')
+            n3_chrome(_f1id(pref, 'FV'), [xu, y_mwB, Z_FV], [xu, y_mwB + 0.09, Z_FV], 0.045, 'ฟลัชวาล์วโถปัสสาวะ กะรัต K-11702X-CP (มากับชุดโถ) +1.15',
+                      qty=dict(type='ฟลัชวาล์วโถปัสสาวะ (มากับชุดโถ)', size='3/4"', model='กะรัต K-11702X-CP'))
+            n3_chrome(_f1id(pref, 'FVP'), [xu, y_mwB + 0.07, Z_FV], [xu, y_mwB + 0.07, F1_FF + 0.60], 0.019, 'ท่อจ่ายน้ำฟลัชวาล์ว → โถปัสสาวะ (มากับชุด)')
+            n3_wpipe(_f1id(pref, 'P'), [xu, yMW, Z_FV - h12], [xu, yMW, Z_TT + h12], '1/2', 'ท่อน้ำดีฝังผนัง ดิ่งลงก๊อกอ่างรวม')
+        else:
+            n3_wpipe(_f1id(pref, 'P'), [xu, yMW, zW - h12], [xu, yMW, Z_TT + h12], '1/2', 'ท่อน้ำดีฝังผนัง ดิ่งลงก๊อกอ่างรวม')
+        n3_wfit(_f1id(pref, 'EL'), [xu, yMW, Z_TT], '1/2', 'ข้องอ 90°')
+        n3_wpipe(_f1id(pref, 'P'), [xu, yMW - h12, Z_TT], [xu, y_mwC, Z_TT], '1/2', 'ท่อน้ำดีออกก๊อกอ่างรวม')
+        n3_chrome(_f1id(pref, 'TAP'), [xu, y_mwC, Z_TT], [xu, y_mwC - 0.08, Z_TT], 0.022, f'ก๊อกอ่างล้างมือรวม{tap_who} (ก๊อกบอลสนาม ชุบโครเมียม) 1/2" +0.80',
+                  qty=dict(type='ก๊อกน้ำติดผนัง', size='1/2"'))
+        n3_chrome(_f1id(pref, 'TAPS'), [xu, y_mwC - 0.08, Z_TT], [xu, y_mwC - 0.08, Z_TT - 0.06], 0.018, 'ปากก๊อกอ่างล้างมือรวม')
+        cur = xu
+
+
+cw_mw_drops(f'{CW}-MU', X_UR, x_mt, '1/2', 'ชาย', fv=True)
+# อ่างล้างหน้า ชาย+หญิง: 1/2" จากสามทาง → ผนังกริด 9 → ดิ่งในผนังลง +0.55 → สามทาง → ราบในผนัง → สามทางที่จุดวาล์ว → ออกผิวผนังทั้ง 2 ด้าน + วาล์วเปิดปิด (angle valve)
+x_g9 = 28.00
+Z_LV = F1_FF + 0.55
+cw_run(f'{CW}-LV', [[x_mt, y_bs, zW], [x_g9, y_bs, zW], [x_g9, y_bs, Z_LV]], '1/2', 'ท่อน้ำดีอ่างล้างหน้า (ฝังผนังกริด 9)', h34, h12)
+cw_tee(f'{CW}-LV', [x_g9, y_bs, Z_LV], '1/2')
+for yv in (13.22, 12.42):
+    sgn = 1 if yv > y_bs else -1
+    n3_wpipe(_f1id(f'{CW}-LV', 'P'), [x_g9, y_bs + sgn * h12, Z_LV], [x_g9, yv - sgn * h12, Z_LV], '1/2', 'ท่อน้ำดีฝังผนังกริด 9')
+    cw_tee(f'{CW}-LV', [x_g9, yv, Z_LV], '1/2')
+    for sx, xf, who in ((-1, 27.95, 'ชาย'), (1, 28.05, 'หญิง')):
+        n3_wpipe(_f1id(f'{CW}-LV', 'P'), [x_g9 + sx * h12, yv, Z_LV], [xf, yv, Z_LV], '1/2', 'ท่อน้ำดีออกวาล์วอ่างล้างหน้า')
+        n3_chrome(_f1id(f'{CW}-LV', 'AV'), [xf, yv, Z_LV], [xf + sx * 0.06, yv, Z_LV], 0.03, f'วาล์วเปิดปิดน้ำอ่างล้างหน้า{who} (angle valve) +0.55',
+                  qty=dict(type='angle valve', size='1/2"'))
+        n3_chrome(_f1id(f'{CW}-LV', 'HS'), [xf + sx * 0.06, yv, Z_LV], [xf + sx * 0.20, yv + 0.10, F1_FF + 0.80], 0.010, 'สายน้ำดีถัก 1/2" วาล์ว → ก๊อกอ่าง', mat='BIM-สแตนเลส')
+        elements[-1]['qty'] = dict(type='สายน้ำดีถักสแตนเลส', size='1/2"')
+# ชักโครกชาย 2 ตัว (ผนังกริด 8): ดิ่งในผนังจากสามทาง → +0.20 → ราบในผนัง → สต็อปวาล์ว (angle valve) ข้างชักโครก
+Z_WV = F1_FF + 0.20
+y_wv1, y_wv2 = 13.22 - 0.07, 11.995 - 0.07
+cw_run(f'{CW}-MW', [[x_g8, y_ws, zW], [x_g8, y_ws, Z_WV], [x_g8, y_wv2, Z_WV]], '1/2', 'ท่อน้ำดีชักโครกชาย (ฝังผนังกริด 8)', h34, 0.0)
+elements.pop()
+n3_wpipe(_f1id(f'{CW}-MW', 'P'), [x_g8, y_ws - h12, Z_WV], [x_g8, y_wv1 + h12, Z_WV], '1/2', 'ท่อน้ำดีชักโครกชาย (ฝังผนังกริด 8)')
+cw_tee(f'{CW}-MW', [x_g8, y_wv1, Z_WV], '1/2')
+n3_wpipe(_f1id(f'{CW}-MW', 'P'), [x_g8, y_wv1 - h12, Z_WV], [x_g8, y_wv2 + h12, Z_WV], '1/2', 'ท่อน้ำดีชักโครกชาย (ฝังผนังกริด 8)')
+n3_wfit(_f1id(f'{CW}-MW', 'EL'), [x_g8, y_wv2, Z_WV], '1/2', 'ข้องอ 90°')
+
+
+def cw_wc_valve(pref, xw, xf, sx, y, who):
+    n3_wpipe(_f1id(pref, 'P'), [xw + sx * h12, y, Z_WV], [xf, y, Z_WV], '1/2', 'ท่อน้ำดีออกสต็อปวาล์วชักโครก')
+    n3_chrome(_f1id(pref, 'WV'), [xf, y, Z_WV], [xf + sx * 0.06, y, Z_WV], 0.03, f'สต็อปวาล์วชักโครก{who} (angle valve) +0.20', qty=dict(type='angle valve', size='1/2"'))
+    n3_chrome(_f1id(pref, 'HS'), [xf + sx * 0.06, y, Z_WV], [xf + sx * 0.12, y + 0.10, Z_WV + 0.05], 0.010, 'สายน้ำดีถัก 1/2" สต็อปวาล์ว → ถังพักชักโครก', mat='BIM-สแตนเลส')
+    elements[-1]['qty'] = dict(type='สายน้ำดีถักสแตนเลส', size='1/2"')
+
+
+for y in (y_wv1, y_wv2):
+    cw_wc_valve(f'{CW}-MW', x_g8, 24.55, 1, y, 'ชาย')
+# ก๊อกซิงค์ร้าน 3 ร้าน: 1/2" ต่อจากสามทางในผนังกริด 8 → ทะลุผนังกริด 7, 6 ในร้าน แนวเดียวกัน (+2.70 ชิดผนังหลัง) → สามทาง → ฝังผนังหลังร้านดิ่งลงก๊อก
+Z_ST = SK_TOP + 0.25                                            # ก๊อกซิงค์ติดผนัง +1.05 (สูงกว่าขอบซิงค์ 0.25)
+y_bw, y_bf = 13.85, 13.80                                       # แนวกลางผนังหลังร้าน / ผิวฉาบด้านในร้าน
+xs_sk = [SK[n][2] for n in (3, 2, 1)]
+cur = x_g8
+for k, xc in enumerate(xs_sk):
+    last = k == len(xs_sk) - 1
+    n3_wpipe(_f1id(f'{CW}-SH', 'P'), [cur - (h34 if k == 0 else h12), y_ws, zW], [xc + h12, y_ws, zW], '1/2', 'ท่อน้ำดีก๊อกซิงค์ร้านค้า (ในร้าน ชิดผนังหลัง +2.70)')
+    n = 3 - k
+    n3_wfit(_f1id(f'{CW}-SH', 'EL' if last else 'TE'), [xc, y_ws, zW], '1/2', 'ข้องอ 90°' if last else 'สามทาง')
+    cw_run(f'{CW}-SH{n}', [[xc, y_ws, zW], [xc, y_bw, zW], [xc, y_bw, Z_ST], [xc, y_bf, Z_ST]], '1/2', f'ท่อน้ำดีก๊อกซิงค์ร้าน {n} (ฝังผนังหลังร้าน)', h12, 0.0)
+    n3_chrome(f'{CW}-SH{n}-TAP', [xc, y_bf, Z_ST], [xc, y_bf - 0.20, Z_ST], 0.022, f'ก๊อกซิงค์ติดผนัง VEGARR VHY1108F 1/2" ร้าน {n} +{Z_ST - F1_FF:.2f}',
+              qty=dict(type='ก๊อกซิงค์ติดผนัง', size='1/2"', model='VEGARR VHY1108F'))
+    n3_chrome(f'{CW}-SH{n}-TAPS', [xc, y_bf - 0.20, Z_ST], [xc, y_bf - 0.22, Z_ST - 0.08], 0.020, 'ปากก๊อกซิงค์')
+    cur = xc
+for k, xh in enumerate((23.00, 22.20, 20.00, 19.00, 17.20)):
+    cw_hang(f'{CW}-SH-HG{k+1}', [xh, y_ws, zW], '1/2', Z_CEIL, 'ท้องพื้นชั้น 2')
+# 6.3 ห้องน้ำหญิง 3/4": จากปลายเมน → +y → บอลวาล์ว → ผนังกั้นกลาง +2.70 → สามทาง → ก๊อกอ่างรวม 3 จุด / ผนังกริด 10 ดิ่งลง +0.20 → สต็อปวาล์วชักโครก 3 ตัว
+n3_wpipe(f'{CW}-W-P01', [x_wt, yWm + h114, zW], [x_wt, 9.40 - 0.045, zW], '3/4', 'ท่อน้ำดีห้องน้ำหญิง ชั้น 1')
+cw_valve(f'{CW}-W-V', [x_wt, 9.40, zW], [0, 1, 0], '3/4', 'บอลวาล์วทองเหลือง ห้องน้ำหญิง')
+n3_wpipe(f'{CW}-W-P02', [x_wt, 9.40 + 0.045, zW], [x_wt, yMW - h34, zW], '3/4', 'ท่อน้ำดีห้องน้ำหญิง ชั้น 1')
+cw_tee(f'{CW}-W', [x_wt, yMW, zW], '3/4', 'สี่ทางลด 3/4"x1/2" (ทิศ −x, +x, +y)')
+cw_hang(f'{CW}-W-HG1', [x_wt, 8.625, zW], '3/4', Z_BSOF, 'ท้องคาน B2-C9-10', ax=(0, 1, 0))
+cw_hang(f'{CW}-W-HG2', [x_wt, 9.70, zW], '3/4', Z_CEIL, 'ท้องพื้นชั้น 2', ax=(0, 1, 0))
+cw_mw_drops(f'{CW}-WU', (30.38, 29.70), x_wt, '1/2', 'หญิง')
+x_g10 = 31.64
+cw_mw_drops(f'{CW}-WE', (31.06,), x_wt, '1/2', 'หญิง')
+# เปลี่ยนข้องอที่ 31.06 เป็นสามทาง แล้วเดินต่อไปผนังกริด 10
+_el = next(e for e in elements if e['id'] == f'{CW}-WE-EL01')
+_el['id'] = f'{CW}-WE-TE01'; _el['name'] = _el['name'].replace('ข้องอ 90°', 'สามทาง'); _el['qty']['type'] = 'สามทาง'
+y_wvW = {}
+for j in (3, 2, 1):
+    wc = next(e for e in elements if e['id'] == f'FX-F1-WC2-{j}')
+    ys = [_YM - q[1] for q in wc['geom']['poly']]
+    y_wvW[j] = round((max(ys) + 0.07) if j > 1 else (min(ys) - 0.07), 4)      # ข้างชักโครก ด้านที่ไม่ติดประตู
+# ชักโครกหญิง 3 (ติดผนังกั้นกลาง): ต่อจากสายตะวันออกในผนังกั้นกลาง → ผนังกริด 10 → ดิ่งลง +0.20 → สต็อปวาล์ว (ไม่ผ่านเสาเอ็น G10-TC1)
+cw_run(f'{CW}-WW', [[31.06, yMW, zW], [x_g10, yMW, zW], [x_g10, 10.60, zW], [x_g10, 10.60, Z_WV], [x_g10, y_wvW[3], Z_WV]], '1/2',
+       'ท่อน้ำดีชักโครกหญิง ห้อง 3 (ฝังผนังกั้นกลาง/ผนังกริด 10)', h12, h12)
+n3_wfit(_f1id(f'{CW}-WW', 'EL'), [x_g10, y_wvW[3], Z_WV], '1/2', 'ข้องอ 90°')
+cw_wc_valve(f'{CW}-WW', x_g10, 31.59, -1, y_wvW[3], 'หญิง')
+# ชักโครกหญิง 2, 1: ท่อ 1/2" ต่อจากสามทางผนังกั้นกลาง เดินต่อ +y เหนือผนังกั้นห้องส้วม (+2.70) → ผนังกริด 10 ที่ห้อง 2 → ดิ่งลง +0.20 → สามทาง → ห้อง 1
+n3_wpipe(f'{CW}-W-P03', [x_wt, yMW + h34, zW], [x_wt, y_wvW[2] - h12, zW], '1/2', 'ท่อน้ำดีชักโครกหญิง ห้อง 1–2 (+2.70 เหนือผนังกั้นห้องส้วม)')
+cw_run(f'{CW}-WN', [[x_wt, y_wvW[2], zW], [x_g10, y_wvW[2], zW], [x_g10, y_wvW[2], Z_WV]], '1/2', 'ท่อน้ำดีชักโครกหญิง ห้อง 1–2 (ฝังผนังกริด 10)', h12, h12)
+n3_wfit(_f1id(f'{CW}-WN', 'EL'), [x_wt, y_wvW[2], zW], '1/2', 'ข้องอ 90°')
+cw_tee(f'{CW}-WN', [x_g10, y_wvW[2], Z_WV], '1/2')
+cw_wc_valve(f'{CW}-WN', x_g10, 31.59, -1, y_wvW[2], 'หญิง')
+n3_wpipe(_f1id(f'{CW}-WN', 'P'), [x_g10, y_wvW[2] + h12, Z_WV], [x_g10, y_wvW[1] - h12, Z_WV], '1/2', 'ท่อน้ำดีชักโครกหญิง ห้อง 1 (ฝังผนังกริด 10)')
+n3_wfit(_f1id(f'{CW}-WN', 'EL'), [x_g10, y_wvW[1], Z_WV], '1/2', 'ข้องอ 90°')
+cw_wc_valve(f'{CW}-WN', x_g10, 31.59, -1, y_wvW[1], 'หญิง')
+cw_hang(f'{CW}-W-HG3', [x_wt, 11.90, zW], '1/2', Z_CEIL, 'ท้องพื้นชั้น 2', ax=(0, 1, 0))
+ASSUMPTIONS.append('ระบบท่อห้องน้ำชาย-หญิง ชั้น 1 + ซิงค์หลังร้านค้า (24 พ.ย. 2569): ชักโครก/โถปัสสาวะลงท่อรวมโซน 3 (ถัง Z3-1) — ย้ายช่องล้างต้นสายโซน 3 ไป y 10.95 รับท่อส้วม 4" ชาย/หญิงด้วยวายลด 150x100 ลาด 1:50, '
+                   'ท่อส้วมชายลอดคาน GB1-9 ด้วยท่อปลอก ø150; อ่างล้างหน้า อ่างล้างมือรวม ฟลอร์เดรน (ห้องละ 1 จุด) ลงท่อน้ำทิ้ง 4" ลาด 1:100 ลึกใต้คานคอดิน เข้าท่อรวม ø150 โซน 2 ฝั่งกริด 10 ที่ x 26.40; '
+                   'ซิงค์ DYNA HOME DH-7545-TB 75x45 3 ร้าน ชิดเสาฝั่งหน้าต่าง P-trap 2" ลงท่อน้ำทิ้ง 4" ใต้พื้นร้าน ลาด 1:100 เข้าท่อรวม ø150 โซน 2 ฝั่งกริด 5 ที่ x 23.30 (ผู้ใช้); '
+                   'น้ำดี: สามทางลดบนท่อดิ่ง 2" ผนังกริด 1 ที่ +3.25 → เมน 1¼" +2.70 แนวทางเดิน (ห่างคาน B2-C 0.30) → ห้องน้ำชาย/หญิง 3/4" มีบอลวาล์ว → 1/2" ฝังผนัง: ฟลัชวาล์ว +1.15, ก๊อกอ่างรวม +0.80, วาล์วอ่าง +0.55, สต็อปวาล์วชักโครก +0.20; '
+                   'ก๊อกซิงค์ VEGARR VHY1108F ติดผนังหลังร้าน +1.05 ท่อ 1/2" ต่อจากห้องน้ำชายเดินในร้านชิดผนังหลัง +2.70; ระดับ/ตำแหน่งท่อ ระยะ ความสูงอุปกรณ์ ความสูงซิงค์ 0.80 ท่อออกโถปัสสาวะ +0.35 (ผมกำหนด); '
+                   'ห้องน้ำชั้น 1 ยังไม่มีท่ออากาศ (รอผู้ใช้ตัดสินใจ)')
+
 ASSUMPTIONS.append('พิกัดใน elements.json กลับแกน y แล้ว: กริด A อยู่ที่ y = 15.50, กริด F ที่ y = 0 (มุมมองด้านบนตรงกับแปลน)')
 
 def _merge_rects(parts):
