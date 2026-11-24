@@ -2492,6 +2492,12 @@ for e in elements:
         e['qty']['model'] = 'กะรัต K2760 หรือเทียบเท่า'
     elif e['category'] == 'สุขภัณฑ์' and e['name'].startswith('อ่างล้างหน้า'):
         e['qty']['model'] = 'กะรัต K1225'
+# ห้องน้ำห้องพัก ชั้น 2–5: เปลี่ยนรุ่น (ผู้ใช้แจ้ง 24 พ.ย. 2569) ห้องน้ำรวมชั้น 1 คงเดิม
+for e in elements:
+    if e['category'] == 'สุขภัณฑ์' and re.match(r'^FX-F[2-5]-[NS]\d-WC$', e['id']):
+        e['qty']['model'] = 'COTTO C13970 สุขภัณฑ์ 2 ชิ้น 6 ลิตร สีขาว'
+    elif e['category'] == 'สุขภัณฑ์' and re.match(r'^FX-F[2-5]-[NS]\d-LAV$', e['id']):
+        e['qty']['model'] = 'COTTO C002 อ่างล้างหน้าแขวน 51.5x35x20 ซม. สีขาว'
 
 
 # กระเบื้องห้องน้ำ N3/N5 ชั้น 2–4 ตัดรอบเสา CX (รวมฉาบเสา 1 ซม.)
