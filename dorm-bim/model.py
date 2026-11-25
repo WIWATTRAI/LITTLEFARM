@@ -5279,6 +5279,9 @@ emt_add('EM-F1-FD-MP', 1, [(13.80, 9.70, fl1 + 2.00), (13.80, 9.70, fl1 + 2.25),
 for f in (2, 3, 4, 5):
     fl = FL[f]
     yr = Y_RS[f]
+    # ชั้น 5 ทางเดินไม่มีคาน คสล. → รางชิดใต้ขื่อเหล็กหลังคา (ท้องขื่อ RB, วิวัฒน์เลือก 25 พ.ย. 2569)
+    zc0, zc1 = (ZC0, ZC1) if f < 5 else (RB - fl - 0.10, RB - fl)
+    zw0, zw1 = (ZW0, ZW1) if f < 5 else (zc0, zc1)
     ydb = (DB_Y[0] + DB_Y[1]) / 2
     emt_add(f'EM-RS-F{f}', f, [(X_RS, yr, fl1 + 2.00), (X_RS, yr, fl + 2.25), (X_RS, ydb, fl + 2.25), (X_RS, ydb, fl + 1.80)], '1-1/4',
             f'ท่อ EMT 1¼" สายเมน MDB → ตู้ DB ชั้น {f} (แนวดิ่งโถงบันได)', 'THW 4x16 + G 10 ตร.มม.',
@@ -5293,17 +5296,17 @@ for f in (2, 3, 4, 5):
             f'ท่อ EMT 1¼" ต่อตู้ DB → ตู้มิเตอร์ ชั้น {f}', 'THW 4x16 + G 10 ตร.มม.')
     # รางวายเวย์: ท่อนตั้งเหนือตู้มิเตอร์ → แนวโถงบันได → แนวทางเดิน
     ym = (MP_Y[0] + MP_Y[1]) / 2
-    ww = [ej_box(X_WWH[0], X_WWH[1], ym - 0.05, ym + 0.05, fl + 2.00, fl + ZW0),
-          ej_box(X_WWH[0], X_WWH[1], Y_WW[1], ym + 0.05, fl + ZW0, fl + ZW1)]
+    ww = [ej_box(X_WWH[0], X_WWH[1], ym - 0.05, ym + 0.05, fl + 2.00, fl + zw0),
+          ej_box(X_WWH[0], X_WWH[1], Y_WW[1], ym + 0.05, fl + zw0, fl + zw1)]
     # ปลายรางทางเดิน: ถึงแนวท่อแยกลงตู้ห้องริมสุด
     cus = [e for e in elements if re.match(rf'^EL-F{f}-[NS]\d-CU$', e['id'])]
     xs = [sum(p[0] for p in e['geom']['poly']) / 4 for e in cus]
     xa, xb = min(xs) - 0.06, max(xs) + 0.06
-    ww.append(ej_box(X_WWH[0], X_WWH[1], Y_WW[0], Y_WW[1], fl + ZW0, fl + ZC1))      # ช่วงสามทาง โถง → ทางเดิน (ระดับเดียวกัน)
-    ww.append(ej_box(xa, xb, Y_WW[0], Y_WW[1], fl + ZC0, fl + ZC1))
-    Lww = (ZW0 - 2.00) + (ym + 0.05 - Y_WW[1]) + (xb - xa)
+    ww.append(ej_box(X_WWH[0], X_WWH[1], Y_WW[0], Y_WW[1], fl + zw0, fl + zc1))      # ช่วงสามทาง โถง → ทางเดิน (ระดับเดียวกัน)
+    ww.append(ej_box(xa, xb, Y_WW[0], Y_WW[1], fl + zc0, fl + zc1))
+    Lww = (zw0 - 2.00) + (ym + 0.05 - Y_WW[1]) + (xb - xa)
     em_add(f'EM-F{f}-WW', f, dict(type='multi', parts=ww),
-           f'รางวายเวย์ 100x100 มม. ชั้น {f} จากตู้มิเตอร์ไปตามใต้ท้องคานทางเดิน',
+           f'รางวายเวย์ 100x100 มม. ชั้น {f} จากตู้มิเตอร์ไปตาม' + ('ใต้ท้องคานทางเดิน' if f < 5 else 'ใต้ขื่อเหล็กหลังคา (ชั้น 5 ไม่มีคานทางเดิน)'),
            dict(length=round(Lww, 3), size='วายเวย์ 100x100 มม.', elbow=1, tee=1, end_cap=2, part='เมน'))
     # ท่อแยกลงตู้ห้อง: ออกข้างราง → ผิวผนังทางเดิน → ลงระดับกลางตู้ → ลอดผนังเข้าหลังตู้
     for e in sorted(cus, key=lambda e: e['id']):
@@ -5317,10 +5320,10 @@ for f in (2, 3, 4, 5):
             yw0, yface, yback = Y_WW[0], 7.253 + 0.009 + 0.010, max(yj)       # ลงแนวดิ่งก่อนถึงผิวฉาบคาน B2 แนว D (y 7.253)
         else:
             yw0, yface, yback = Y_WW[1], 8.248 - 0.009 - 0.010, min(yj)       # ลงแนวดิ่งก่อนถึงผิวฉาบคาน B2 แนว C (y 8.248)
-        zr = fl + (ZC0 + ZC1) / 2
+        zr = fl + (zc0 + zc1) / 2
         pts = [(xc, yw0, zr), (xc, yface, zr), (xc, yface, zc), (xc, yback, zc)]      # ลอดใต้ท่อน้ำที่ระดับกลางตู้ เข้าหลังตู้
         # ความยาวสายจากตู้มิเตอร์: ท่อนตั้ง + แนวโถง + แนวทางเดินถึงจุดแยก + ท่อแยก
-        Lc = (ZW0 - 2.00 + 0.05) + (ZC1 - ZW0) + abs(ym - (Y_WW[0] + Y_WW[1]) / 2) + abs(xc - (X_WWH[0] + X_WWH[1]) / 2)
+        Lc = (zw0 - 2.00 + 0.05) + (zc1 - zw0) + abs(ym - (Y_WW[0] + Y_WW[1]) / 2) + abs(xc - (X_WWH[0] + X_WWH[1]) / 2)
         emt_add(f'EM-FD-{tag}', f, pts, '1/2', f'ท่อ EMT ½" สายจากมิเตอร์ → ตู้คอนซูมเมอร์ ชั้น {f} ห้อง {tag.split("-")[1]}',
                 'THW 2x4 + G 2.5 ตร.มม.', dict(cable_in_wireway=round(Lc, 3), load='1P 20A (โหลด 15A)'))
 ASSUMPTIONS.append('งานไฟฟ้าเมน: ตู้ทุกชั้นติดผนังโถงบันไดด้าน B (กริด 5) ช่วง y 9.06–11.02; ขนาดตู้ MDB 0.80x1.20x0.30, ตู้มิเตอร์ 17 ลูก 1.20x1.20x0.25, ตู้มิเตอร์ 4 ลูก 0.60x0.80x0.25, '
