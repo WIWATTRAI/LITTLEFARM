@@ -38,6 +38,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
   display: grid; gap: 8px;
 }
+.lesson { margin: 0; font: 600 clamp(0.9rem, 3vw, 1.1rem) var(--font-display); color: var(--sun); letter-spacing: 0.02em; text-shadow: 0 1px 8px #000; pointer-events: none; }
 .titlebar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; pointer-events: none; }
 h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(1.1rem, 3.6vw, 1.6rem); letter-spacing: 0.01em; text-shadow: 0 2px 12px #000; }
 .clock { font-family: var(--font-display); font-size: 0.95rem; color: var(--sun); font-variant-numeric: tabular-nums; text-shadow: 0 1px 8px #000; }
@@ -65,7 +66,7 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: c
 
 /* info card */
 #card {
-  right: max(16px, env(safe-area-inset-right, 0px)); top: 120px; width: 340px; max-height: calc(100% - 230px);
+  right: max(16px, env(safe-area-inset-right, 0px)); top: 146px; width: 340px; max-height: calc(100% - 256px);
   background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px;
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   display: flex; flex-direction: column; overflow: hidden;
@@ -91,6 +92,14 @@ h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: c
 .say { margin: 0; line-height: 1.65; font-size: 0.95rem; color: #cfd6e6; }
 .say .now { color: #fff; background: rgba(255, 181, 71, 0.16); border-radius: 4px; }
 .credit { font-size: 0.7rem; color: var(--dim); }
+.homebox { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 107, 122, 0.08); border: 1px solid rgba(255, 107, 122, 0.35); }
+.homebox h3 { margin: 0; font: 600 1rem var(--font-display); color: #ff8a95; }
+.homebox .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.homebox .row > * { flex: 1 1 auto; }
+.homebox input { min-width: 0; width: 6.5em; min-height: 44px; border-radius: 10px; border: 1px solid var(--glass-line); background: rgba(0,0,0,0.35); color: var(--ink); font: 500 0.9rem var(--font-body); padding: 0 10px; }
+.homebox .linkbtn { background: none; border: 0; color: var(--dim); font: 500 0.8rem var(--font-body); text-decoration: underline; cursor: pointer; justify-self: start; padding: 6px 0; min-height: 32px; }
+.homebox .msg { font-size: 0.82rem; color: #ffc2c8; min-height: 1em; }
+.lbl.home { color: #ff6b7a; font-weight: 600; }
 
 /* subtitles */
 #sub {
@@ -148,7 +157,7 @@ button:focus-visible, input:focus-visible, .lbl:focus-visible { outline: 2px sol
   .speed { order: -1; flex-basis: 100%; max-width: none; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  #card { top: 100px; bottom: auto; left: auto; right: 12px; width: 300px; max-height: calc(100% - 180px); }
+  #card { top: 124px; bottom: auto; left: auto; right: 12px; width: 300px; max-height: calc(100% - 180px); }
   #sub { bottom: 70px; }
   .speed { order: 0; flex-basis: 240px; }
 }
@@ -161,6 +170,7 @@ button:focus-visible, input:focus-visible, .lbl:focus-visible { outline: 2px sol
   <div id="labels"></div>
 
   <div id="hud" class="ui">
+    <p class="lesson">บทเรียนวิทยาศาสตร์สำหรับลิตเติ้ล</p>
     <div class="titlebar">
       <h1>ระบบสุริยะ</h1>
       <div class="clock" id="clock">—</div>
@@ -178,6 +188,22 @@ button:focus-visible, input:focus-visible, .lbl:focus-visible { outline: 2px sol
       <p class="tag" id="cTag"></p>
       <dl class="facts" id="cFacts"></dl>
       <div class="live" id="cLive"></div>
+      <div class="homebox" id="homeBox" hidden>
+        <h3>บ้านลิตเติ้ล</h3>
+        <div class="live" id="homeState"></div>
+        <div class="row">
+          <button class="iconbtn" id="homeGeo">ใช้ตำแหน่งเครื่องนี้</button>
+          <button class="iconbtn" id="homePick" aria-pressed="false">แตะบนลูกโลก</button>
+        </div>
+        <div class="row">
+          <input id="homeLat" inputmode="decimal" aria-label="ละติจูด" placeholder="ละติจูด">
+          <input id="homeLon" inputmode="decimal" aria-label="ลองจิจูด" placeholder="ลองจิจูด">
+          <button class="iconbtn" id="homeSave">ปักหมุด</button>
+        </div>
+        <div class="msg" id="homeMsg" role="status"></div>
+        <button class="linkbtn" id="homeClear">ลบหมุดบ้าน</button>
+        <div class="credit">ตำแหน่งบ้านเก็บไว้ในเครื่องนี้เท่านั้น ไม่ถูกส่งไปที่ไหน</div>
+      </div>
       <p class="say" id="cSay"></p>
       <div class="credit" id="cCredit"></div>
     </div>
@@ -203,6 +229,7 @@ button:focus-visible, input:focus-visible, .lbl:focus-visible { outline: 2px sol
 
   <div id="start" class="ui">
     <div class="start-card">
+      <p class="lesson">บทเรียนวิทยาศาสตร์สำหรับลิตเติ้ล</p>
       <h2>สำรวจระบบสุริยะ</h2>
       <p>ดวงอาทิตย์และดาวเคราะห์ทั้ง 8 ดวง อยู่ในตำแหน่งจริงของวันนี้ แตะชื่อดาวเพื่อบินไปดูใกล้ๆ และฟังคำบรรยายภาษาไทย ลากเพื่อหมุนกล้อง บีบนิ้วเพื่อซูม และปรับความเร็วเวลาได้ตามต้องการ</p>
       <div class="row">
@@ -802,7 +829,8 @@ for (const b of BODIES) {
   b.r = sizeOf(b.radiusKm);
   b.group = new THREE.Group();          // follows the orbit
   b.tiltGroup = new THREE.Group();      // carries the axial tilt
-  b.tiltGroup.rotation.z = b.tilt * DEG;
+  if (b.id === 'earth') b.tiltGroup.rotation.x = -b.tilt * DEG;   // real axis direction, so seasons are right
+  else b.tiltGroup.rotation.z = b.tilt * DEG;
   b.group.add(b.tiltGroup);
   scene.add(b.group);
   if (b.id === 'earth') {
@@ -875,17 +903,28 @@ let speedIdx = 2, paused = false;
 const thDate = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 const thTime = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' });
 
+const _ts = new THREE.Vector3(), _qi = new THREE.Quaternion();
 function updateBodies(dt, daysStep) {
   for (const b of BODIES) {
     if (b.id === 'sun' || b.parent) continue;
     b.au.copy(helioAU(b, simDays));
     toScene(b.au, b.pos);
     b.group.position.copy(b.pos);
+    if (b.id === 'earth') {
+      // Turn Earth so the longitude under the Sun matches the clock: day and night are real.
+      const d = new Date(J2000 + simDays * 86400000);
+      const utcH = d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600;
+      const lonSun = (12 - utcH) * 15;
+      _ts.copy(b.pos).negate().applyQuaternion(_qi.copy(b.tiltGroup.quaternion).invert());
+      b.spin = Math.PI - (lonSun + 180) * DEG - Math.atan2(_ts.z, _ts.x);
+      b.mesh.rotation.y = b.spin;
+      b.clouds.rotation.y = b.spin + simDays * 0.05;
+      continue;
+    }
     // spin at the real rate, capped so fast-forward doesn't strobe
     const turn = daysStep * 24 / b.rotH * Math.PI * 2;
     b.spin += Math.max(-0.35, Math.min(0.35, turn));
     b.mesh.rotation.y = b.spin;
-    if (b.clouds) b.clouds.rotation.y = b.spin * 1.04 + simDays * 0.002;
   }
   const m = BY.moon, earth = BY.earth;
   const ang = (simDays / MOON_PERIOD) * Math.PI * 2;
@@ -924,6 +963,66 @@ for (const b of BODIES) {
   labelsEl.appendChild(el);
   b.label = el;
 }
+// ===================== Little's home =====================
+// Saved only in this browser (localStorage); never written into the page or sent anywhere.
+const HOME_KEY = 'little-home-v1';
+let home = null;
+try { home = JSON.parse(localStorage.getItem(HOME_KEY) || 'null'); } catch (e) { home = null; }
+const homePin = new THREE.Group();
+{
+  const red = 0xff4d5e;
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.016, 16, 12), new THREE.MeshBasicMaterial({ color: red }));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.13, 8), new THREE.MeshBasicMaterial({ color: 0xff8a95 }));
+  beam.position.y = 0.065;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd1d6 }));
+  tip.position.y = 0.13;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(255,120,130,1)'], [0.35, 'rgba(255,80,95,0.45)'], [1, 'rgba(255,60,80,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  halo.scale.setScalar(0.075);
+  homePin.add(dot, beam, tip, halo);
+  homePin.visible = false;
+  BY.earth.mesh.add(homePin);
+}
+function latLonDir(lat, lon) {
+  const la = lat * DEG, ph = (lon + 180) * DEG;   // matches the equirectangular Earth texture
+  return new THREE.Vector3(-Math.cos(ph) * Math.cos(la), Math.sin(la), Math.sin(ph) * Math.cos(la));
+}
+function placeHome() {
+  if (!home) { homePin.visible = false; return; }
+  const n = latLonDir(home.lat, home.lon);
+  homePin.position.copy(n).multiplyScalar(BY.earth.r * 1.001);
+  homePin.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+  homePin.visible = true;
+}
+function setHome(lat, lon) {
+  lat = +lat; lon = +lon;
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    $('homeMsg').textContent = 'ใส่ละติจูด −90 ถึง 90 และลองจิจูด −180 ถึง 180';
+    return;
+  }
+  home = { lat: +lat.toFixed(4), lon: +lon.toFixed(4) };
+  try { localStorage.setItem(HOME_KEY, JSON.stringify(home)); } catch (e) { /* kept for this visit only */ }
+  placeHome();
+  $('homeLat').value = home.lat; $('homeLon').value = home.lon;
+  $('homeMsg').textContent = 'ปักหมุดบ้านลิตเติ้ลแล้ว';
+  updateLive();
+}
+const _hp = new THREE.Vector3(), _hn = new THREE.Vector3(), _hc = new THREE.Vector3();
+// Sun height above the horizon at home, in degrees (negative = night).
+function homeSunAltitude() {
+  homePin.getWorldPosition(_hp);
+  _hn.copy(_hp).sub(BY.earth.pos).normalize();
+  _hc.copy(_hp).negate().normalize();
+  return Math.asin(Math.max(-1, Math.min(1, _hn.dot(_hc)))) / DEG;
+}
+const homeLabel = document.createElement('div');
+homeLabel.className = 'lbl home';
+homeLabel.textContent = 'บ้านลิตเติ้ล';
+homeLabel.tabIndex = 0;
+homeLabel.hidden = true;
+homeLabel.addEventListener('click', () => goHome());
+labelsEl.appendChild(homeLabel);
+placeHome();
+
 const _p = new THREE.Vector3();
 function updateLabels() {
   const w = cv.clientWidth, h = cv.clientHeight;
@@ -944,6 +1043,19 @@ function updateLabels() {
     }
     el.hidden = !show;
   }
+  let hs = showLabels && home && camera.position.distanceTo(BY.earth.pos) < 30;
+  if (hs) {
+    homePin.getWorldPosition(_hp);
+    _hn.copy(_hp).sub(BY.earth.pos).normalize();
+    _hc.copy(camera.position).sub(_hp);
+    if (_hn.dot(_hc) <= 0) hs = false;   // on the far side of Earth
+    else {
+      _p.copy(_hp).project(camera);
+      if (_p.z > 1) hs = false;
+      else homeLabel.style.transform = `translate(${((_p.x + 1) / 2 * w + 10).toFixed(1)}px, ${((1 - _p.y) / 2 * h - 14).toFixed(1)}px) translateY(-50%)`;
+    }
+  }
+  homeLabel.hidden = !hs;
 }
 
 // ===================== camera flights =====================
@@ -1121,6 +1233,8 @@ function select(b, speak) {
   $('cCredit').textContent = b.id === 'earth' || b.id === 'moon'
     ? 'ภาพพื้นผิว: NASA ผ่านชุดตัวอย่าง three.js'
     : b.id === 'sun' ? 'ผิวดวงอาทิตย์สร้างจากแบบจำลองเคลื่อนไหว' : 'ผิวดาวสร้างด้วยแบบจำลองตามลักษณะจริง';
+  $('homeBox').hidden = b.id !== 'earth';
+  if (home) { $('homeLat').value = home.lat; $('homeLon').value = home.lon; }
   card.hidden = false;
   if (matchMedia('(max-width: 720px)').matches) card.classList.add('min');
   updateLive();
@@ -1138,10 +1252,17 @@ function updateLive() {
   } else if (b.id === 'earth') {
     const dS = b.au.length() * KM_PER_AU / 1e6;
     html = `ตอนนี้ห่างจากดวงอาทิตย์ <b>${fmt(dS)}</b> ล้าน กม. · แสงอาทิตย์ใช้เวลา <b>${lightTime(dS)}</b>`;
+    $('homeState').innerHTML = home ? homeStateText() : 'ยังไม่ได้ปักหมุด ใช้ปุ่มด้านล่างเพื่อบอกว่าบ้านอยู่ตรงไหน';
   } else if (b.id === 'sun') {
     html = `ห่างจากโลกตอนนี้ <b>${fmt(BY.earth.au.length() * KM_PER_AU / 1e6)}</b> ล้าน กม.`;
   }
   $('cLive').innerHTML = html;
+}
+function homeStateText() {
+  const alt = homeSunAltitude();
+  const when = alt > 0 ? 'กลางวัน' : alt > -6 ? 'ช่วงพลบค่ำหรือรุ่งสาง' : 'กลางคืน';
+  const sun = alt > 0 ? `ดวงอาทิตย์อยู่สูง <b>${Math.round(alt)}°</b> จากขอบฟ้า` : `ดวงอาทิตย์อยู่ใต้ขอบฟ้า <b>${Math.round(-alt)}°</b>`;
+  return `ที่บ้านตอนนี้เป็น<b>${when}</b> · ${sun}`;
 }
 const fmt = x => x < 10 ? x.toFixed(2) : x < 1000 ? x.toFixed(1) : Math.round(x).toLocaleString('th-TH');
 function lightTime(mkm) {
@@ -1163,7 +1284,64 @@ for (const b of BODIES) {
   el.innerHTML = `<i style="background:${b.color};color:${b.color}"></i>${b.th}`;
   el.onclick = () => { userAct(); select(b, true); };
   chips.appendChild(el);
+  if (b.id === 'earth') {
+    const h = document.createElement('button');
+    h.className = 'chip'; h.dataset.id = 'home'; h.setAttribute('aria-pressed', 'false');
+    h.innerHTML = '<i style="background:#ff4d5e;color:#ff4d5e"></i>บ้านลิตเติ้ล';
+    h.onclick = () => goHome();
+    chips.appendChild(h);
+  }
 }
+function setSpeed(i) { speedIdx = i; $('speed').value = i; $('speedOut').textContent = SPEEDS[i].label; }
+// Fly to Earth facing Little's home, at the real time right now.
+function goHome() {
+  userAct();
+  if (tourOn) stopTour();
+  simDays = (Date.now() - J2000) / 86400000;
+  setSpeed(0);
+  updateBodies(0, 0);
+  select(BY.earth, false);
+  document.querySelector('.chip[data-id="home"]').setAttribute('aria-pressed', 'true');
+  if (!home) { openHomeBox(); return; }
+  homePin.getWorldPosition(_hp);
+  const n = _hp.clone().sub(BY.earth.pos).normalize();
+  if (flight) { flight.dir = n; flight.dist *= 0.75; }
+  const alt = homeSunAltitude();
+  narrate([
+    'นี่คือบ้านของลิตเติ้ล บนดาวเคราะห์โลก',
+    alt > 0 ? 'ตอนนี้ที่บ้านเป็นเวลากลางวัน เพราะบ้านอยู่ด้านที่หันเข้าหาดวงอาทิตย์'
+      : alt > -6 ? 'ตอนนี้ที่บ้านเป็นช่วงฟ้าสลัว ดวงอาทิตย์เพิ่งอยู่ใต้ขอบฟ้า'
+      : 'ตอนนี้ที่บ้านเป็นเวลากลางคืน เพราะบ้านอยู่ด้านที่หันออกจากดวงอาทิตย์',
+    'โลกหมุนรอบตัวเองวันละหนึ่งรอบ บ้านของเราจึงผ่านทั้งกลางวันและกลางคืนทุกวัน',
+  ]);
+}
+function openHomeBox() {
+  card.classList.remove('min'); $('cMin').textContent = 'ย่อ';
+  $('homeBox').hidden = false;
+  $('homeBox').scrollIntoView({ block: 'nearest' });
+}
+let pickingHome = false;
+function setPicking(on) {
+  pickingHome = on;
+  $('homePick').setAttribute('aria-pressed', on ? 'true' : 'false');
+  $('homeMsg').textContent = on ? 'แตะตรงที่บ้านอยู่บนลูกโลก' : '';
+  if (on) { setSpeed(0); $('sub').textContent = 'แตะตรงที่บ้านลิตเติ้ลอยู่บนลูกโลก'; $('sub').hidden = false; }
+  else if (!narrating) $('sub').hidden = true;
+}
+$('homePick').onclick = () => { userAct(); setPicking(!pickingHome); };
+$('homeSave').onclick = () => setHome($('homeLat').value, $('homeLon').value);
+$('homeClear').onclick = () => {
+  home = null; try { localStorage.removeItem(HOME_KEY); } catch (e) { /* ignore */ }
+  placeHome(); $('homeLat').value = ''; $('homeLon').value = ''; $('homeMsg').textContent = 'ลบหมุดบ้านแล้ว'; updateLive();
+};
+$('homeGeo').onclick = () => {
+  if (!navigator.geolocation) { $('homeMsg').textContent = 'เครื่องนี้หาตำแหน่งไม่ได้ ลองแตะบนลูกโลกแทน'; return; }
+  $('homeMsg').textContent = 'กำลังหาตำแหน่ง…';
+  navigator.geolocation.getCurrentPosition(
+    p => setHome(p.coords.latitude, p.coords.longitude),
+    () => { $('homeMsg').textContent = 'หน้านี้ใช้ตำแหน่งของเครื่องไม่ได้ ลองแตะบนลูกโลก หรือพิมพ์ละติจูดกับลองจิจูดแทน'; },
+    { enableHighAccuracy: false, timeout: 12000, maximumAge: 600000 });
+};
 
 // ===================== guided tour =====================
 let tourOn = false, tourStepping = false, tourIdx = 0, tourTimer = 0;
@@ -1224,6 +1402,17 @@ cv.addEventListener('pointerup', e => {
   const r = cv.getBoundingClientRect();
   ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
   ray.setFromCamera(ndc, camera);
+  if (pickingHome) {
+    const h = ray.intersectObject(BY.earth.mesh, false)[0];
+    if (h) {
+      const v = BY.earth.mesh.worldToLocal(h.point.clone()).normalize();
+      let lon = Math.atan2(v.z, -v.x) / DEG - 180;
+      if (lon < -180) lon += 360;
+      setPicking(false);
+      setHome(Math.asin(v.y) / DEG, lon);
+    }
+    return;
+  }
   const hit = ray.intersectObjects(pickables, false)[0];
   if (hit) { userAct(); select(hit.object.userData.body, true); }
 });
