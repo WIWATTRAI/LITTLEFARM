@@ -1,0 +1,1311 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ระบบสุริยะ 3 มิติ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;600&display=swap">
+<style>
+/* Layout: full-bleed WebGL space scene; thin HUD on top (title, date, planet chips),
+   info card at the right on desktop / bottom sheet on phones, subtitles above the bottom control bar.
+   One deliberate dark observatory look in every theme. */
+:root {
+  --space: #05060a;
+  --glass: rgba(14, 18, 28, 0.72);
+  --glass-line: rgba(160, 190, 255, 0.16);
+  --ink: #e8ecf6;
+  --dim: #94a0b8;
+  --sun: #ffb547;      /* accent: sunlight */
+  --sky: #7cc4ff;      /* secondary: earthshine */
+  --font-display: "Kanit", "Noto Sans Thai", system-ui, sans-serif;
+  --font-body: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--space); color: var(--ink); font-family: var(--font-body); overflow: hidden; }
+body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#app { position: fixed; inset: 0; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.ui { position: absolute; pointer-events: none; }
+.ui > * { pointer-events: auto; }
+
+/* top HUD */
+#hud {
+  top: 0; left: 0; right: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+  display: grid; gap: 8px;
+}
+.titlebar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; pointer-events: none; }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: clamp(1.1rem, 3.6vw, 1.6rem); letter-spacing: 0.01em; text-shadow: 0 2px 12px #000; }
+.clock { font-family: var(--font-display); font-size: 0.95rem; color: var(--sun); font-variant-numeric: tabular-nums; text-shadow: 0 1px 8px #000; }
+.clock small { color: var(--dim); font-size: 0.8rem; margin-left: 6px; }
+#chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; margin-right: -16px; padding-right: 16px; }
+#chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; font: 500 0.9rem var(--font-display); color: var(--ink);
+  background: var(--glass); border: 1px solid var(--glass-line); border-radius: 999px;
+  padding: 7px 14px 7px 10px; min-height: 40px; display: inline-flex; align-items: center; gap: 8px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); cursor: pointer;
+}
+.chip i { width: 12px; height: 12px; border-radius: 50%; display: block; box-shadow: 0 0 8px currentColor; }
+.chip[aria-pressed="true"] { border-color: var(--sun); color: var(--sun); }
+
+/* labels that float beside each body */
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl {
+  position: absolute; left: 0; top: 0; transform: translate(10px, -50%);
+  font: 500 0.82rem var(--font-display); color: var(--ink); white-space: nowrap;
+  padding: 2px 8px; border-radius: 6px; background: rgba(5, 6, 10, 0.45);
+  border-left: 2px solid currentColor; pointer-events: auto; cursor: pointer; user-select: none;
+}
+.lbl span { color: var(--ink); }
+
+/* info card */
+#card {
+  right: max(16px, env(safe-area-inset-right, 0px)); top: 120px; width: 340px; max-height: calc(100% - 230px);
+  background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.card-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px 16px; }
+.card-head h2 { margin: 0; font: 600 1.35rem var(--font-display); line-height: 1.1; }
+.card-head .en { display: block; font: 400 0.78rem var(--font-body); color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
+.card-head .grow { flex: 1; min-width: 0; }
+.iconbtn {
+  min-width: 44px; min-height: 44px; border-radius: 12px; border: 1px solid var(--glass-line);
+  background: rgba(255,255,255,0.04); color: var(--ink); font: 600 0.85rem var(--font-display); cursor: pointer; padding: 0 10px;
+}
+.iconbtn.listen { background: var(--sun); color: #1a1205; border-color: transparent; }
+.iconbtn.listen[aria-pressed="true"] { background: #ffe1a8; }
+.card-body { overflow-y: auto; padding: 0 16px 16px; display: grid; gap: 12px; }
+.tag { margin: 0; color: var(--sky); font-size: 0.95rem; line-height: 1.5; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.facts div { background: rgba(255,255,255,0.035); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.facts dt { font-size: 0.72rem; color: var(--dim); letter-spacing: 0.02em; }
+.facts dd { margin: 2px 0 0; font: 500 0.92rem var(--font-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.live { font-size: 0.82rem; color: var(--dim); }
+.live b { color: var(--sun); font-weight: 600; font-variant-numeric: tabular-nums; }
+.say { margin: 0; line-height: 1.65; font-size: 0.95rem; color: #cfd6e6; }
+.say .now { color: #fff; background: rgba(255, 181, 71, 0.16); border-radius: 4px; }
+.credit { font-size: 0.7rem; color: var(--dim); }
+
+/* subtitles */
+#sub {
+  left: 50%; transform: translateX(-50%); bottom: 132px; width: min(760px, calc(100% - 32px));
+  text-align: center; font: 500 clamp(1rem, 2.6vw, 1.25rem) var(--font-display); line-height: 1.5;
+  padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,0.6); pointer-events: none;
+  text-wrap: balance;
+}
+
+/* bottom bar */
+#bar {
+  left: 0; right: 0; bottom: 0;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 10px) max(16px, env(safe-area-inset-left, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
+  background: linear-gradient(to top, rgba(5,6,10,0.92), rgba(5,6,10,0));
+}
+.btn {
+  font: 500 0.88rem var(--font-display); color: var(--ink); min-height: 44px; padding: 6px 14px;
+  border-radius: 12px; border: 1px solid var(--glass-line); background: var(--glass); cursor: pointer; white-space: nowrap;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.btn[aria-pressed="true"] { border-color: var(--sky); color: var(--sky); }
+.btn.primary { background: var(--sun); color: #1a1205; border-color: transparent; }
+.btn.primary[aria-pressed="true"] { background: #ffe1a8; color: #1a1205; }
+.speed {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 14px; border-radius: 12px;
+  background: var(--glass); border: 1px solid var(--glass-line); flex: 1 1 280px; max-width: 460px;
+}
+.speed label { font: 500 0.8rem var(--font-display); color: var(--dim); white-space: nowrap; }
+.speed output { font: 600 0.85rem var(--font-display); color: var(--sun); min-width: 7.5em; text-align: right; white-space: nowrap; }
+.speed input { flex: 1; min-width: 0; accent-color: var(--sun); height: 28px; }
+button:focus-visible, input:focus-visible, .lbl:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+/* start screen */
+#start {
+  position: absolute; inset: 0; z-index: 5; display: grid; place-items: safe center; padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(5,6,10,0.35), rgba(5,6,10,0.85));
+  overflow-y: auto;
+}
+.start-card { width: min(520px, 100%); text-align: center; display: grid; gap: 14px; }
+.start-card h2 { margin: 0; font: 600 clamp(2rem, 8vw, 3.2rem) var(--font-display); line-height: 1.05; text-shadow: 0 4px 30px rgba(255,181,71,0.35); }
+.start-card p { margin: 0; color: #cfd6e6; line-height: 1.6; }
+.start-card .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.start-card .btn { font-size: 1rem; padding: 10px 20px; min-height: 52px; }
+#loading { font-size: 0.85rem; color: var(--dim); }
+
+/* phones */
+@media (max-width: 720px) {
+  #card { left: 12px; right: 12px; width: auto; top: auto; bottom: 168px; max-height: 42%; }
+  #card.min .card-body { display: none; }
+  #sub { bottom: 168px; }
+  #card:not([hidden]) ~ #sub { bottom: calc(168px + 76px); }
+  #card:not(.min):not([hidden]) ~ #sub { display: none; }
+  .btn { padding: 6px 10px; font-size: 0.82rem; }
+  .speed { order: -1; flex-basis: 100%; max-width: none; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #card { top: 100px; bottom: auto; left: auto; right: 12px; width: 300px; max-height: calc(100% - 180px); }
+  #sub { bottom: 70px; }
+  .speed { order: 0; flex-basis: 240px; }
+}
+@media (prefers-reduced-motion: reduce) { .chip, .btn { transition: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" aria-label="ภาพจำลองระบบสุริยะสามมิติ ลากเพื่อหมุนกล้อง บีบหรือเลื่อนล้อเมาส์เพื่อซูม"></canvas>
+  <div id="labels"></div>
+
+  <div id="hud" class="ui">
+    <div class="titlebar">
+      <h1>ระบบสุริยะ</h1>
+      <div class="clock" id="clock">—</div>
+    </div>
+    <nav id="chips" aria-label="เลือกดาว"></nav>
+  </div>
+
+  <aside id="card" class="ui" hidden aria-live="polite">
+    <div class="card-head">
+      <div class="grow"><h2 id="cName">—</h2><span class="en" id="cEn"></span></div>
+      <button class="iconbtn listen" id="cListen" aria-pressed="false">ฟัง</button>
+      <button class="iconbtn" id="cMin" aria-label="ย่อหรือขยายข้อมูล">ย่อ</button>
+    </div>
+    <div class="card-body">
+      <p class="tag" id="cTag"></p>
+      <dl class="facts" id="cFacts"></dl>
+      <div class="live" id="cLive"></div>
+      <p class="say" id="cSay"></p>
+      <div class="credit" id="cCredit"></div>
+    </div>
+  </aside>
+
+  <div id="sub" class="ui" hidden></div>
+
+  <div id="bar" class="ui">
+    <button class="btn primary" id="tour" aria-pressed="false">ทัวร์พร้อมเสียง</button>
+    <button class="btn" id="play" aria-pressed="false">หยุดเวลา</button>
+    <div class="speed">
+      <label for="speed">ความเร็วเวลา</label>
+      <input id="speed" type="range" min="0" max="6" step="1" value="2">
+      <output id="speedOut" for="speed">1 วัน/วินาที</output>
+    </div>
+    <button class="btn" id="today">วันนี้</button>
+    <button class="btn" id="overview">ภาพรวม</button>
+    <button class="btn" id="orbits" aria-pressed="true">วงโคจร</button>
+    <button class="btn" id="names" aria-pressed="true">ชื่อดาว</button>
+    <button class="btn" id="ambient" aria-pressed="false">เสียงอวกาศ</button>
+    <button class="btn" id="quality" aria-pressed="true">ภาพคมชัดสูง</button>
+  </div>
+
+  <div id="start" class="ui">
+    <div class="start-card">
+      <h2>สำรวจระบบสุริยะ</h2>
+      <p>ดวงอาทิตย์และดาวเคราะห์ทั้ง 8 ดวง อยู่ในตำแหน่งจริงของวันนี้ แตะชื่อดาวเพื่อบินไปดูใกล้ๆ และฟังคำบรรยายภาษาไทย ลากเพื่อหมุนกล้อง บีบนิ้วเพื่อซูม และปรับความเร็วเวลาได้ตามต้องการ</p>
+      <div class="row">
+        <button class="btn primary" id="goSound">เริ่มพร้อมเสียงบรรยาย</button>
+        <button class="btn" id="goQuiet">เริ่มแบบไม่มีเสียง</button>
+      </div>
+      <div id="loading">กำลังสร้างพื้นผิวดาว…</div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const $ = id => document.getElementById(id);
+const DEG = Math.PI / 180;
+const J2000 = Date.UTC(2000, 0, 1, 12);
+const KM_PER_AU = 149597870.7;
+
+// ===================== data =====================
+// Orbital elements (J2000, JPL "Keplerian Elements for Approximate Positions"):
+// [a AU, e, I°, L°, ϖ°, Ω°] and their rates per Julian century.
+const BODIES = [
+  { id: 'sun', th: 'ดวงอาทิตย์', en: 'The Sun', color: '#ffb547', radiusKm: 696340, rotH: 609.1, tilt: 7.25,
+    tag: 'ดาวฤกษ์ใจกลางระบบสุริยะ แหล่งแสงและพลังงานของทุกชีวิตบนโลก',
+    facts: [['เส้นผ่านศูนย์กลาง', '1.39 ล้าน กม.'], ['ใหญ่กว่าโลก', 'ประมาณ 109 เท่า'], ['อุณหภูมิผิว', 'ราว 5,500 °C'], ['แกนกลาง', 'ราว 15 ล้าน °C'], ['หมุนรอบตัวเอง', 'ราว 25 วัน'], ['อายุ', 'ราว 4,600 ล้านปี']],
+    say: [
+      'นี่คือดวงอาทิตย์ ดาวฤกษ์ที่อยู่ใจกลางระบบสุริยะของเรา',
+      'ดวงอาทิตย์มีขนาดใหญ่กว่าโลกประมาณหนึ่งร้อยเก้าเท่า และมีมวลมากถึงร้อยละเก้าสิบเก้าจุดแปด ของมวลทั้งหมดในระบบสุริยะ',
+      'พลังงานของดวงอาทิตย์มาจากปฏิกิริยานิวเคลียร์ฟิวชันที่แกนกลาง ซึ่งร้อนประมาณสิบห้าล้านองศาเซลเซียส',
+      'แสงจากดวงอาทิตย์ใช้เวลาเดินทางประมาณแปดนาที กว่าจะมาถึงโลก',
+    ] },
+  { id: 'mercury', th: 'ดาวพุธ', en: 'Mercury', color: '#b9b1a6', radiusKm: 2439.7, rotH: 1407.6, tilt: 0.03,
+    el: [0.38709927, 0.20563593, 7.00497902, 252.25032350, 77.45779628, 48.33076593],
+    rt: [0.00000037, 0.00001906, -0.00594749, 149472.67411175, 0.16047689, -0.12534081],
+    tag: 'ดาวเคราะห์ที่เล็กที่สุด และอยู่ใกล้ดวงอาทิตย์มากที่สุด',
+    facts: [['ระยะจากดวงอาทิตย์', '57.9 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '4,879 กม.'], ['1 ปี', '88 วัน'], ['1 วัน (เช้าถึงเช้า)', '176 วัน'], ['ดวงจันทร์', 'ไม่มี'], ['อุณหภูมิ', '−180 ถึง 430 °C']],
+    say: [
+      'ดาวพุธเป็นดาวเคราะห์ที่เล็กที่สุด และอยู่ใกล้ดวงอาทิตย์มากที่สุด',
+      'ดาวพุธโคจรรอบดวงอาทิตย์เร็วมาก หนึ่งปีบนดาวพุธยาวเพียงแปดสิบแปดวัน',
+      'แต่ดาวพุธหมุนรอบตัวเองช้า จากเช้าถึงเช้าวันถัดไป กินเวลาประมาณหนึ่งร้อยเจ็ดสิบหกวันของโลก',
+      'ดาวพุธแทบไม่มีบรรยากาศ กลางวันจึงร้อนถึงราวสี่ร้อยสามสิบองศาเซลเซียส แต่กลางคืนเย็นจัดถึงลบหนึ่งร้อยแปดสิบองศา',
+      'พื้นผิวเต็มไปด้วยหลุมอุกกาบาต คล้ายกับดวงจันทร์ของเรา',
+    ] },
+  { id: 'venus', th: 'ดาวศุกร์', en: 'Venus', color: '#e8c98a', radiusKm: 6051.8, rotH: 5832.5, tilt: 177.4,
+    el: [0.72333566, 0.00677672, 3.39467605, 181.97909950, 131.60246718, 76.67984255],
+    rt: [0.00000390, -0.00004107, -0.00078890, 58517.81538729, 0.00268329, -0.27769418],
+    atmo: ['#ffd9a0', 2.6, 0.9],
+    tag: 'ดาวแฝดของโลกที่ร้อนที่สุดในระบบสุริยะ',
+    facts: [['ระยะจากดวงอาทิตย์', '108.2 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '12,104 กม.'], ['1 ปี', '225 วัน'], ['หมุนรอบตัวเอง', '243 วัน (กลับทิศ)'], ['ดวงจันทร์', 'ไม่มี'], ['อุณหภูมิผิว', 'ราว 465 °C']],
+    say: [
+      'ดาวศุกร์มีขนาดใกล้เคียงกับโลก จึงมักถูกเรียกว่าดาวแฝดของโลก',
+      'แต่ดาวศุกร์ถูกปกคลุมด้วยเมฆกรดกำมะถันหนาทึบ และมีบรรยากาศที่เป็นคาร์บอนไดออกไซด์เกือบทั้งหมด',
+      'ปรากฏการณ์เรือนกระจกทำให้พื้นผิวร้อนราวสี่ร้อยหกสิบห้าองศาเซลเซียส ร้อนที่สุดในบรรดาดาวเคราะห์ทั้งหมด',
+      'ดาวศุกร์หมุนรอบตัวเองในทิศทางตรงข้ามกับดาวเคราะห์ส่วนใหญ่ และหมุนช้ามาก หนึ่งรอบใช้เวลาสองร้อยสี่สิบสามวัน นานกว่าหนึ่งปีของมันเอง',
+      'คนไทยเรียกดาวศุกร์ที่เห็นตอนเช้ามืดว่า ดาวประกายพรึก และที่เห็นตอนหัวค่ำว่า ดาวประจำเมือง',
+    ] },
+  { id: 'earth', th: 'โลก', en: 'Earth', color: '#5fa8ff', radiusKm: 6371, rotH: 23.934, tilt: 23.44,
+    el: [1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0],
+    rt: [0.00000562, -0.00004392, -0.01294668, 35999.37244981, 0.32327364, 0.0],
+    atmo: ['#6fb6ff', 3.0, 1.1],
+    tag: 'บ้านของเรา ดาวเคราะห์ดวงเดียวที่รู้ว่ามีสิ่งมีชีวิต',
+    facts: [['ระยะจากดวงอาทิตย์', '149.6 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '12,742 กม.'], ['1 ปี', '365.25 วัน'], ['1 วัน', '24 ชั่วโมง'], ['ดวงจันทร์', '1 ดวง'], ['แกนเอียง', '23.4°']],
+    say: [
+      'นี่คือโลก บ้านของเรา และเป็นดาวเคราะห์ดวงเดียวที่เรารู้ว่ามีสิ่งมีชีวิต',
+      'พื้นผิวโลกประมาณร้อยละเจ็ดสิบเอ็ด ปกคลุมด้วยน้ำ',
+      'โลกหมุนรอบตัวเองหนึ่งรอบในเวลาประมาณยี่สิบสี่ชั่วโมง ทำให้เกิดกลางวันและกลางคืน',
+      'และโคจรรอบดวงอาทิตย์หนึ่งรอบ ในเวลาสามร้อยหกสิบห้าวันกับอีกประมาณหกชั่วโมง',
+      'แกนของโลกเอียงประมาณยี่สิบสามจุดสี่องศา ซึ่งเป็นสาเหตุของฤดูกาล',
+      'ด้านกลางคืนของโลก คุณจะเห็นแสงไฟจากเมืองต่างๆ ส่องสว่างอยู่',
+    ] },
+  { id: 'moon', th: 'ดวงจันทร์', en: 'The Moon', color: '#d6d6d6', radiusKm: 1737.4, parent: 'earth',
+    tag: 'บริวารดวงเดียวของโลก',
+    facts: [['ห่างจากโลก', '384,400 กม.'], ['เส้นผ่านศูนย์กลาง', '3,475 กม.'], ['โคจรรอบโลก', '27.3 วัน'], ['หมุนรอบตัวเอง', '27.3 วัน'], ['แรงโน้มถ่วง', '1/6 ของโลก'], ['อุณหภูมิ', '−173 ถึง 127 °C']],
+    say: [
+      'ดวงจันทร์เป็นบริวารดวงเดียวของโลก อยู่ห่างจากโลกโดยเฉลี่ยประมาณสามแสนแปดหมื่นสี่พันกิโลเมตร',
+      'ดวงจันทร์โคจรรอบโลกหนึ่งรอบในประมาณยี่สิบเจ็ดวัน และหมุนรอบตัวเองในเวลาเท่ากัน เราจึงเห็นดวงจันทร์ด้านเดียวเสมอ',
+      'แรงโน้มถ่วงของดวงจันทร์เป็นสาเหตุหลักของน้ำขึ้นน้ำลงบนโลก',
+      'มนุษย์เดินบนดวงจันทร์เป็นครั้งแรกในปี คริสต์ศักราชหนึ่งพันเก้าร้อยหกสิบเก้า กับภารกิจอะพอลโลสิบเอ็ด',
+    ] },
+  { id: 'mars', th: 'ดาวอังคาร', en: 'Mars', color: '#e0653a', radiusKm: 3389.5, rotH: 24.623, tilt: 25.19,
+    el: [1.52371034, 0.09339410, 1.84969142, -4.55343205, -23.94362959, 49.55953891],
+    rt: [0.00001847, 0.00007882, -0.00813131, 19140.30268499, 0.44441088, -0.29257343],
+    atmo: ['#ffb38a', 4.0, 0.45],
+    tag: 'ดาวเคราะห์สีแดง ที่มีภูเขาไฟสูงที่สุดในระบบสุริยะ',
+    facts: [['ระยะจากดวงอาทิตย์', '227.9 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '6,779 กม.'], ['1 ปี', '687 วัน'], ['1 วัน', '24 ชม. 37 นาที'], ['ดวงจันทร์', '2 ดวง'], ['อุณหภูมิเฉลี่ย', '−63 °C']],
+    say: [
+      'ดาวอังคารถูกเรียกว่าดาวเคราะห์สีแดง เพราะดินและหินบนพื้นผิวมีสนิมเหล็กอยู่มาก',
+      'บนดาวอังคารมีภูเขาไฟโอลิมปัสมอนส์ สูงราวยี่สิบสองกิโลเมตร เป็นภูเขาที่สูงที่สุดเท่าที่รู้จักในระบบสุริยะ',
+      'หนึ่งวันบนดาวอังคารยาวใกล้เคียงกับโลก คือยี่สิบสี่ชั่วโมงสามสิบเจ็ดนาที แต่หนึ่งปียาวถึงหกร้อยแปดสิบเจ็ดวัน',
+      'ที่ขั้วทั้งสองมีน้ำแข็งปกคลุม และดาวอังคารมีดวงจันทร์ขนาดเล็กสองดวง ชื่อโฟบอสและดีมอส',
+    ] },
+  { id: 'jupiter', th: 'ดาวพฤหัสบดี', en: 'Jupiter', color: '#d9a877', radiusKm: 69911, rotH: 9.925, tilt: 3.13,
+    el: [5.20288700, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909],
+    rt: [-0.00011607, -0.00013253, -0.00183714, 3034.74612775, 0.21252668, 0.20469106],
+    tag: 'ดาวเคราะห์ที่ใหญ่ที่สุด แก๊สยักษ์ที่มีพายุใหญ่กว่าโลก',
+    facts: [['ระยะจากดวงอาทิตย์', '778.5 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '139,820 กม.'], ['1 ปี', '11.86 ปี'], ['1 วัน', '9 ชม. 56 นาที'], ['ดวงจันทร์', 'เกือบ 100 ดวง'], ['อุณหภูมิยอดเมฆ', '−110 °C']],
+    say: [
+      'ดาวพฤหัสบดีเป็นดาวเคราะห์ที่ใหญ่ที่สุดในระบบสุริยะ มีมวลมากกว่าดาวเคราะห์ดวงอื่นทั้งหมดรวมกันกว่าสองเท่า',
+      'ดาวพฤหัสบดีเป็นดาวเคราะห์แก๊สยักษ์ ประกอบด้วยไฮโดรเจนและฮีเลียมเป็นหลัก ไม่มีพื้นผิวแข็งให้ยืน',
+      'แถบสีที่เห็นคือเมฆที่ถูกลมพัดเป็นริ้ว ส่วนจุดแดงใหญ่คือพายุยักษ์ที่กว้างกว่าโลกทั้งใบ และพัดต่อเนื่องมานานหลายร้อยปี',
+      'ดาวพฤหัสบดีหมุนรอบตัวเองเร็วที่สุด หนึ่งวันยาวไม่ถึงสิบชั่วโมง แต่หนึ่งปียาวเกือบสิบสองปีของโลก',
+      'มีดวงจันทร์เกือบหนึ่งร้อยดวง รวมถึงแกนีมีด ดวงจันทร์ที่ใหญ่ที่สุดในระบบสุริยะ',
+    ] },
+  { id: 'saturn', th: 'ดาวเสาร์', en: 'Saturn', color: '#e6cf98', radiusKm: 58232, rotH: 10.656, tilt: 26.73,
+    el: [9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448],
+    rt: [-0.00125060, -0.00050991, 0.00193609, 1222.49362201, -0.41897216, -0.28867794],
+    tag: 'ดาวเคราะห์วงแหวน ที่เบาจนลอยน้ำได้',
+    facts: [['ระยะจากดวงอาทิตย์', '1,432 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '116,460 กม.'], ['1 ปี', '29.4 ปี'], ['1 วัน', '10 ชม. 33 นาที'], ['ดวงจันทร์', 'กว่า 270 ดวง'], ['อุณหภูมิยอดเมฆ', '−140 °C']],
+    say: [
+      'ดาวเสาร์มีชื่อเสียงจากวงแหวนอันสวยงาม ซึ่งประกอบด้วยก้อนน้ำแข็งและหินจำนวนมหาศาล',
+      'วงแหวนกว้างหลายแสนกิโลเมตร แต่ส่วนใหญ่หนาเพียงประมาณสิบเมตรถึงหนึ่งกิโลเมตรเท่านั้น',
+      'ดาวเสาร์มีความหนาแน่นต่ำกว่าน้ำ ถ้ามีอ่างน้ำที่ใหญ่พอ ดาวเสาร์ก็จะลอยน้ำได้',
+      'ดาวเสาร์มีดวงจันทร์มากที่สุดในระบบสุริยะ กว่าสองร้อยเจ็ดสิบดวง ดวงที่ใหญ่ที่สุดคือไททัน ซึ่งมีบรรยากาศหนาและมีทะเลสาบมีเทน',
+      'หนึ่งปีบนดาวเสาร์ยาวประมาณยี่สิบเก้าปีของโลก',
+    ] },
+  { id: 'uranus', th: 'ดาวยูเรนัส', en: 'Uranus', color: '#9fe3ea', radiusKm: 25362, rotH: 17.24, tilt: 97.77,
+    el: [19.18916464, 0.04725744, 0.77263783, 313.23810451, 170.95427630, 74.01692503],
+    rt: [-0.00196176, -0.00004397, -0.00242939, 428.48202785, 0.40805281, 0.04240589],
+    atmo: ['#b8f4ff', 3.0, 0.6],
+    tag: 'ยักษ์น้ำแข็งที่หมุนตะแคงไปรอบดวงอาทิตย์',
+    facts: [['ระยะจากดวงอาทิตย์', '2,867 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '50,724 กม.'], ['1 ปี', '84 ปี'], ['1 วัน', '17 ชม. 14 นาที'], ['ดวงจันทร์', 'ราว 29 ดวง'], ['แกนเอียง', '98°']],
+    say: [
+      'ดาวยูเรนัสเป็นดาวเคราะห์ยักษ์น้ำแข็ง มีสีฟ้าอมเขียวจากแก๊สมีเทนในบรรยากาศ',
+      'สิ่งที่แปลกที่สุดคือแกนหมุนของมันเอียงถึงประมาณเก้าสิบแปดองศา ดาวยูเรนัสจึงเหมือนกลิ้งตะแคงไปรอบดวงอาทิตย์',
+      'ขั้วแต่ละข้างจึงได้รับแสงอาทิตย์ต่อเนื่องราวสี่สิบสองปี แล้วตามด้วยความมืดอีกสี่สิบสองปี',
+      'ดาวยูเรนัสถูกค้นพบในปี คริสต์ศักราชหนึ่งพันเจ็ดร้อยแปดสิบเอ็ด โดยวิลเลียม เฮอร์เชล เป็นดาวเคราะห์ดวงแรกที่ค้นพบด้วยกล้องโทรทรรศน์',
+      'หนึ่งปีบนดาวยูเรนัสยาวประมาณแปดสิบสี่ปีของโลก',
+    ] },
+  { id: 'neptune', th: 'ดาวเนปจูน', en: 'Neptune', color: '#4d7cff', radiusKm: 24622, rotH: 16.11, tilt: 28.32,
+    el: [30.06992276, 0.00859048, 1.77004347, -55.12002969, 44.96476227, 131.78422574],
+    rt: [0.00026291, 0.00005105, 0.00035372, 218.45945325, -0.32241464, -0.00508664],
+    atmo: ['#7aa8ff', 3.0, 0.7],
+    tag: 'ดาวเคราะห์ที่ไกลที่สุด และมีลมแรงที่สุด',
+    facts: [['ระยะจากดวงอาทิตย์', '4,515 ล้าน กม.'], ['เส้นผ่านศูนย์กลาง', '49,244 กม.'], ['1 ปี', '165 ปี'], ['1 วัน', '16 ชม. 6 นาที'], ['ดวงจันทร์', '16 ดวง'], ['อุณหภูมิ', 'ราว −200 °C']],
+    say: [
+      'ดาวเนปจูนเป็นดาวเคราะห์ที่อยู่ไกลดวงอาทิตย์มากที่สุด ห่างออกไปประมาณสามสิบเท่าของระยะจากโลกถึงดวงอาทิตย์',
+      'ดาวเนปจูนมีสีน้ำเงินเข้ม และมีลมแรงที่สุดในระบบสุริยะ เร็วกว่าสองพันกิโลเมตรต่อชั่วโมง',
+      'ดาวเนปจูนถูกค้นพบในปี คริสต์ศักราชหนึ่งพันแปดร้อยสี่สิบหก จากการคำนวณทางคณิตศาสตร์ ก่อนจะมีคนมองเห็นผ่านกล้องโทรทรรศน์',
+      'ดวงจันทร์ที่ใหญ่ที่สุดคือไทรทัน ซึ่งโคจรสวนทางกับการหมุนของดาวเนปจูน',
+      'หนึ่งปีบนดาวเนปจูนยาวประมาณหนึ่งร้อยหกสิบห้าปีของโลก ตั้งแต่ถูกค้นพบ มันเพิ่งโคจรครบหนึ่งรอบเมื่อปี คริสต์ศักราชสองพันสิบเอ็ด',
+    ] },
+];
+const BY = Object.fromEntries(BODIES.map(b => [b.id, b]));
+const INTRO = [
+  'ยินดีต้อนรับสู่ระบบสุริยะ',
+  'ตำแหน่งของดาวเคราะห์ที่เห็นนี้ คำนวณจากวันที่ของวันนี้จริง',
+  'ขนาดและระยะทางถูกย่อส่วน เพื่อให้มองเห็นดาวทุกดวงได้พร้อมกัน',
+  'แตะที่ชื่อดาวเพื่อบินไปดูใกล้ๆ และฟังคำบรรยาย หรือกดทัวร์พร้อมเสียง เพื่อเดินทางไปทีละดวง',
+];
+
+// Scene scale: distances and sizes are compressed so everything fits on one screen.
+const SUN_R = 4.5;
+const distScale = au => 16 * Math.sqrt(au);
+const sizeOf = km => 0.6 * Math.pow(km / 6371, 0.45);
+const MOON_ORBIT = 1.55, MOON_R = 0.17, MOON_PERIOD = 27.321661;
+
+// ===================== orbital mechanics =====================
+function elementsAt(b, T) { return b.el.map((v, i) => v + b.rt[i] * T); }
+function keplerXYZ(el, Mdeg) {
+  const [a, e, I, , w, O] = el;
+  let M = ((Mdeg % 360) + 540) % 360 - 180;
+  M *= DEG;
+  let E = M + e * Math.sin(M);
+  for (let i = 0; i < 8; i++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+  const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  const om = (w - O) * DEG, Om = O * DEG, In = I * DEG;
+  const co = Math.cos(om), so = Math.sin(om), cO = Math.cos(Om), sO = Math.sin(Om), cI = Math.cos(In), sI = Math.sin(In);
+  const x = (co * cO - so * sO * cI) * xp + (-so * cO - co * sO * cI) * yp;
+  const y = (co * sO + so * cO * cI) * xp + (-so * sO + co * cO * cI) * yp;
+  const z = (so * sI) * xp + (co * sI) * yp;
+  return new THREE.Vector3(x, z, -y);   // ecliptic → scene (y up)
+}
+function helioAU(b, days) {
+  const T = days / 36525;
+  const el = elementsAt(b, T);
+  return keplerXYZ(el, el[3] - el[4]);
+}
+function toScene(au, out = new THREE.Vector3()) {
+  const r = au.length();
+  return out.copy(au).multiplyScalar(r > 0 ? distScale(r) / r : 0);
+}
+
+// ===================== renderer =====================
+const cv = $('cv');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  $('loading').textContent = 'อุปกรณ์นี้เปิด WebGL ไม่ได้ จึงแสดงภาพสามมิติไม่ได้';
+  throw e;
+}
+const isPhone = matchMedia('(pointer: coarse)').matches;
+let highQuality = true;
+function pixelRatio() { return Math.min(window.devicePixelRatio || 1, highQuality ? (isPhone ? 2 : 2) : 1); }
+renderer.setPixelRatio(pixelRatio());
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.02, 4000);
+camera.position.set(0, 70, 115);
+const controls = new OrbitControls(camera, cv);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.enablePan = false;
+controls.rotateSpeed = 0.6;
+controls.zoomSpeed = 0.9;
+controls.maxDistance = 600;
+controls.minDistance = 6;
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.5, 0.92);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.035));
+const sunLight = new THREE.PointLight(0xfff4e8, 3.2, 0, 0);
+scene.add(sunLight);
+
+// ===================== GLSL helpers =====================
+const NOISE = /* glsl */`
+vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec4 mod289(vec4 x){return x-floor(x*(1./289.))*289.;}
+vec4 permute(vec4 x){return mod289(((x*34.)+1.)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1./6.,1./3.); const vec4 D=vec4(0.,.5,1.,2.);
+  vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+  i=mod289(i);
+  vec4 p=permute(permute(permute(i.z+vec4(0.,i1.z,i2.z,1.))+i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
+  float n_=.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.*x_);
+  vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.+1.; vec4 s1=floor(b1)*2.+1.; vec4 sh=-step(h,vec4(0.));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.); m=m*m;
+  return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}
+float fbm(vec3 p){ float a=.5, s=0.; for(int i=0;i<6;i++){ s+=a*snoise(p); p=p*2.03+vec3(1.7,9.2,3.1); a*=.5; } return s; }
+float fbm3(vec3 p){ float a=.5, s=0.; for(int i=0;i<3;i++){ s+=a*snoise(p); p=p*2.03+vec3(1.7,9.2,3.1); a*=.5; } return s; }
+vec3 hash3(vec3 p){ p=vec3(dot(p,vec3(127.1,311.7,74.7)),dot(p,vec3(269.5,183.3,246.1)),dot(p,vec3(113.5,271.9,124.6))); return fract(sin(p)*43758.5453); }
+// Impact craters: dark bowls with bright raised rims, scattered on a 3D cell grid.
+float craters(vec3 p, float scale, float density){
+  vec3 q=p*scale; vec3 i=floor(q); vec3 f=fract(q); float h=0.;
+  for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++) for(int z=-1;z<=1;z++){
+    vec3 g=vec3(float(x),float(y),float(z)); vec3 o=hash3(i+g);
+    if(o.z>density) continue;
+    float r=.18+.3*o.x; float d=length(g+o-f)/r;
+    if(d<1.35){ h += d<1. ? (d*d-1.)*.55 : 0.; h += smoothstep(.7,1.,d)*(1.-smoothstep(1.,1.35,d))*.35; }
+  }
+  return h;
+}
+`;
+
+// Bake an equirectangular planet surface on the GPU, then keep it as a mip-mapped texture.
+const bakeScene = new THREE.Scene(), bakeCam = new THREE.Camera();
+const bakeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+bakeScene.add(bakeQuad);
+function bake(body, w, h) {
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
+    fragmentShader: NOISE + `
+      varying vec2 vUv;
+      vec3 surface(vec3 p);
+      ${body}
+      void main(){
+        float lon = vUv.x*6.2831853 - 3.14159265, lat = (vUv.y-.5)*3.14159265;
+        vec3 p = vec3(cos(lat)*cos(lon), sin(lat), -cos(lat)*sin(lon));
+        gl_FragColor = vec4(clamp(surface(p),0.,1.),1.);
+      }`,
+  });
+  bakeQuad.material = mat;
+  const rt = new THREE.WebGLRenderTarget(w, h);
+  renderer.setRenderTarget(rt);
+  renderer.render(bakeScene, bakeCam);
+  renderer.setRenderTarget(null);
+  const buf = new Uint8Array(w * h * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, w, h, buf);
+  rt.dispose(); mat.dispose();
+  const tex = new THREE.DataTexture(buf, w, h, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.needsUpdate = true;
+  return tex;
+}
+const SURFACES = {
+  mercury: `vec3 surface(vec3 p){
+    float b=fbm(p*3.);
+    float h=craters(p,5.,.55)+.7*craters(p,13.,.6)+.45*craters(p,31.,.7)+.25*craters(p,70.,.8);
+    float t=.5+.28*b+.55*h+.08*fbm(p*40.);
+    return mix(vec3(.30,.285,.27), vec3(.74,.71,.67), clamp(t,0.,1.));
+  }`,
+  venus: `vec3 surface(vec3 p){
+    vec3 q=p*1.6;
+    q+=.7*vec3(fbm3(q+1.), fbm3(q+5.2), fbm3(q+9.7));
+    float n=fbm(vec3(q.x*1.2, q.y*3.6, q.z*1.2));
+    float s=fbm(p*vec3(3.,12.,3.)+n*2.);
+    vec3 c=mix(vec3(.70,.52,.30), vec3(.96,.86,.64), .5+.55*n);
+    c*= .92+.12*s;
+    return c;
+  }`,
+  mars: `vec3 surface(vec3 p){
+    float n=fbm(p*2.2); float m=fbm(p*7.+3.);
+    float dark=smoothstep(.02,.32,n);
+    vec3 c=mix(vec3(.78,.42,.24), vec3(.42,.21,.13), dark);
+    c=mix(c, vec3(.86,.58,.38), smoothstep(.15,.5,-n)*.6);
+    c*= .86+.26*m;
+    float h=craters(p,7.,.45)+.5*craters(p,19.,.5);
+    c*= 1.+h*.35;
+    // the great canyon near the equator
+    float can=exp(-pow((p.y+.12+.03*fbm3(p*6.))/.012,2.))*smoothstep(.2,.7,p.x)*smoothstep(-.9,-.2,p.z);
+    c*= 1.-.45*can;
+    float cap=smoothstep(.9,.95,abs(p.y)+.035*fbm(p*9.));
+    return mix(c, vec3(.96,.95,.93), cap);
+  }`,
+  jupiter: `vec3 surface(vec3 p){
+    float y=p.y + .05*fbm(p*vec3(2.,7.,2.)) + .018*fbm(p*vec3(9.,30.,9.));
+    float b=.5+.5*sin(y*19.+1.2*sin(y*7.));
+    vec3 c=mix(vec3(.72,.58,.44), vec3(.96,.92,.84), b);
+    c=mix(c, vec3(.55,.36,.24), .45*smoothstep(.55,1.,.5+.5*sin(y*11.+.6)));
+    float st=fbm(vec3(p.x*5., y*48., p.z*5.));
+    c*= .9+.16*st;
+    // polar haze
+    c=mix(c, vec3(.55,.52,.50), smoothstep(.75,.97,abs(p.y))*.7);
+    // Great Red Spot
+    float la=-22.*.0174533, lo=.9;
+    vec3 ctr=vec3(cos(la)*cos(lo), sin(la), -cos(la)*sin(lo));
+    vec3 east=normalize(vec3(-sin(lo),0.,-cos(lo))), north=normalize(cross(ctr,east));
+    vec3 d=p-ctr; float ex=dot(d,east)/.17, ny=dot(d,north)/.085;
+    float e=ex*ex+ny*ny;
+    float sw=fbm(vec3(ex*1.5+ny, ny*2.-ex*.6, 3.)*1.2);
+    float spot=smoothstep(1.1,.15,e+.25*sw);
+    c=mix(c, vec3(.93,.86,.76), smoothstep(1.6,1.1,e+.2*sw)*(1.-spot)*.22);
+    c=mix(c, mix(vec3(.70,.38,.26), vec3(.80,.48,.34), .5+.5*sw), spot*.8);
+    return c;
+  }`,
+  saturn: `vec3 surface(vec3 p){
+    float y=p.y + .025*fbm(p*vec3(2.,8.,2.));
+    float b=.5+.5*sin(y*15.+1.1*sin(y*5.));
+    vec3 c=mix(vec3(.80,.68,.46), vec3(.93,.85,.66), b);
+    c*= .94+.08*fbm(vec3(p.x*4., y*40., p.z*4.));
+    c=mix(c, vec3(.62,.66,.70), smoothstep(.82,.98,abs(p.y))*.6);
+    return c;
+  }`,
+  uranus: `vec3 surface(vec3 p){
+    vec3 c=vec3(.62,.86,.89);
+    c*= .97+.035*sin(p.y*18.+fbm3(p*3.)*.8);
+    c=mix(c, vec3(.78,.93,.95), smoothstep(.6,.95,p.y)*.5);
+    return c;
+  }`,
+  neptune: `vec3 surface(vec3 p){
+    float y=p.y + .04*fbm(p*vec3(2.,6.,2.));
+    vec3 c=vec3(.22,.38,.86);
+    c*= .88+.14*sin(y*14.);
+    float cl=smoothstep(.45,.8, fbm(vec3(p.x*3., y*22., p.z*3.)))*smoothstep(.15,.0,abs(abs(y)-.35));
+    c=mix(c, vec3(.9,.95,1.), cl*.75);
+    float la=-.35, lo=2.2;
+    vec3 ctr=vec3(cos(la)*cos(lo), sin(la), -cos(la)*sin(lo));
+    float spot=smoothstep(.16,.06,length((p-ctr)*vec3(1.,1.8,1.)));
+    c=mix(c, vec3(.10,.18,.50), spot*.8);
+    return c;
+  }`,
+};
+
+// ===================== scene objects =====================
+const loader = new THREE.TextureLoader();
+function loadTex(url, srgb = true) {
+  const t = loader.load(url);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+// stars and Milky Way glow follow the camera, so they read as infinitely far
+const sky = new THREE.Group();
+scene.add(sky);
+(function makeSky() {
+  const N = 9000;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N);
+  const galN = new THREE.Vector3(0.32, 0.82, 0.47).normalize();
+  const u = new THREE.Vector3(1, 0, 0).cross(galN).normalize(), w = galN.clone().cross(u);
+  const tints = [[0.7, 0.8, 1], [0.85, 0.9, 1], [1, 1, 1], [1, 0.95, 0.85], [1, 0.82, 0.62], [1, 0.7, 0.5]];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    if (Math.random() < 0.45) {
+      const a = Math.random() * Math.PI * 2, off = (Math.random() + Math.random() + Math.random() - 1.5) * 0.18;
+      v.copy(u).multiplyScalar(Math.cos(a)).addScaledVector(w, Math.sin(a)).addScaledVector(galN, off).normalize();
+    } else {
+      const z = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, s = Math.sqrt(1 - z * z);
+      v.set(s * Math.cos(a), z, s * Math.sin(a));
+    }
+    pos.set([v.x * 1800, v.y * 1800, v.z * 1800], i * 3);
+    const mag = Math.pow(Math.random(), 3.2);
+    const t = tints[Math.floor(Math.random() * tints.length)];
+    const k = 0.25 + 1.6 * mag;
+    col.set([t[0] * k, t[1] * k, t[2] * k], i * 3);
+    size[i] = 1.2 + 3.2 * mag;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('size', new THREE.BufferAttribute(size, 1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { pr: { value: 1 } },
+    vertexShader: `attribute float size; attribute vec3 color; varying vec3 vC; uniform float pr;
+      void main(){ vC=color; vec4 mv=modelViewMatrix*vec4(position,1.); gl_PointSize=size*pr; gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying vec3 vC; void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,.0,d); a*=a; gl_FragColor=vec4(vC*a,1.); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const stars = new THREE.Points(g, m);
+  stars.frustumCulled = false;
+  sky.add(stars);
+  sky.userData.starMat = m;
+
+  const haze = new THREE.Mesh(new THREE.SphereGeometry(1900, 64, 32), new THREE.ShaderMaterial({
+    uniforms: { galN: { value: galN } },
+    vertexShader: 'varying vec3 vD; void main(){ vD=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+    fragmentShader: NOISE + `varying vec3 vD; uniform vec3 galN;
+      void main(){
+        float off=dot(vD,galN);
+        float band=exp(-pow(off/.2,2.));
+        float n=.5+.5*fbm(vD*3.); float dust=fbm(vD*8.+5.);
+        vec3 c=mix(vec3(.45,.5,.7), vec3(.75,.65,.55), n)*band*(.25+.6*n);
+        c*= 1.-.65*smoothstep(.0,.45,dust)*exp(-pow(off/.06,2.));
+        gl_FragColor=vec4(c*.10,1.);
+      }`,
+    side: THREE.BackSide, depthWrite: false,
+  }));
+  haze.frustumCulled = false;
+  sky.add(haze);
+})();
+
+// the Sun: animated boiling surface, limb darkening, and a soft corona
+const sunMat = new THREE.ShaderMaterial({
+  uniforms: { time: { value: 0 } },
+  vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV;
+    void main(){ vP=position; vec4 wp=modelMatrix*vec4(position,1.); vN=normalize(mat3(modelMatrix)*normal); vV=normalize(cameraPosition-wp.xyz); gl_Position=projectionMatrix*viewMatrix*wp; }`,
+  fragmentShader: NOISE + `uniform float time; varying vec3 vP; varying vec3 vN; varying vec3 vV;
+    void main(){
+      vec3 p=normalize(vP);
+      float n=fbm(p*3.5+vec3(0.,time*.02,time*.01));
+      float g=fbm3(p*26.+vec3(time*.05));
+      float t=.55+.35*n+.22*g;
+      vec3 c=mix(vec3(1.,.32,.04), vec3(1.,.78,.36), clamp(t,0.,1.));
+      c=mix(c, vec3(1.,.96,.82), smoothstep(.78,1.05,t));
+      float mu=max(dot(vN,vV),0.);
+      c*= .38+.75*pow(mu,.45);
+      gl_FragColor=vec4(c*2.6,1.);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+function glowTexture(stops) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (const [o, col] of stops) grd.addColorStop(o, col);
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+const sunGroup = new THREE.Group();
+scene.add(sunGroup);
+const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 96, 64), sunMat);
+sunMesh.userData.body = BY.sun;
+sunGroup.add(sunMesh);
+const corona = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTexture([[0, 'rgba(255,210,140,0.9)'], [0.18, 'rgba(255,170,70,0.55)'], [0.4, 'rgba(255,120,40,0.18)'], [1, 'rgba(255,90,20,0)']]),
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+}));
+corona.scale.setScalar(SUN_R * 5);
+sunGroup.add(corona);
+BY.sun.mesh = sunMesh; BY.sun.group = sunGroup; BY.sun.r = SUN_R; BY.sun.pos = new THREE.Vector3();
+
+// soft fresnel glow for planets with air
+function atmosphere(r, color, power, strength) {
+  return new THREE.Mesh(new THREE.SphereGeometry(r * 1.045, 64, 48), new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(color) }, power: { value: power }, strength: { value: strength } },
+    vertexShader: `varying vec3 vN; varying vec3 vP; void main(){ vN=normalize(mat3(modelMatrix)*normal); vec4 wp=modelMatrix*vec4(position,1.); vP=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }`,
+    fragmentShader: `uniform vec3 color; uniform float power; uniform float strength; varying vec3 vN; varying vec3 vP;
+      void main(){
+        vec3 V=normalize(cameraPosition-vP); vec3 L=normalize(-vP);
+        float rim=pow(1.-max(dot(vN,V),0.), power);
+        float lit=smoothstep(-.35,.45,dot(vN,L));
+        float a=rim*lit*strength;
+        gl_FragColor=vec4(color*a, a);
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+}
+
+// Earth: day map, night city lights, ocean glint and moving clouds
+function makeEarth(r) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      dayMap: { value: loadTex('textures/earth_atmos_2048.jpg') },
+      nightMap: { value: loadTex('textures/earth_lights_2048.jpg') },
+      specMap: { value: loadTex('textures/earth_specular_2048.jpg', false) },
+      normalMap: { value: loadTex('textures/earth_normal_2048.jpg', false) },
+    },
+    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vT;
+      void main(){ vUv=uv; vN=normalize(mat3(modelMatrix)*normal); vT=normalize(mat3(modelMatrix)*vec3(-normal.z,0.,normal.x)+1e-5);
+        vec4 wp=modelMatrix*vec4(position,1.); vP=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }`,
+    fragmentShader: `uniform sampler2D dayMap, nightMap, specMap, normalMap; varying vec2 vUv; varying vec3 vN; varying vec3 vP; varying vec3 vT;
+      void main(){
+        vec3 N=normalize(vN); vec3 T=normalize(vT - N*dot(vT,N)); vec3 B=cross(N,T);
+        vec3 nm=texture2D(normalMap,vUv).xyz*2.-1.;
+        vec3 Nb=normalize(N + (T*nm.x + B*nm.y)*0.35);
+        vec3 L=normalize(-vP); vec3 V=normalize(cameraPosition-vP);
+        float ndl=dot(Nb,L), ndl0=dot(N,L);
+        vec3 day=texture2D(dayMap,vUv).rgb;
+        vec3 night=texture2D(nightMap,vUv).rgb;
+        float spec=texture2D(specMap,vUv).r;
+        vec3 c=day*max(ndl,0.)*1.25 + day*.012;
+        vec3 H=normalize(L+V);
+        c+= vec3(1.,.95,.85)*spec*pow(max(dot(N,H),0.),45.)*.55*step(0.,ndl0);
+        float dark=1.-smoothstep(-.18,.12,ndl0);
+        c+= night*vec3(1.,.82,.55)*dark*1.6;
+        gl_FragColor=vec4(c,1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 128, 96), mat);
+  const clouds = new THREE.Mesh(new THREE.SphereGeometry(r * 1.012, 128, 96), new THREE.MeshStandardMaterial({
+    color: 0xffffff, alphaMap: loadTex('textures/earth_clouds_2048.jpg', false), transparent: true, depthWrite: false, roughness: 1, metalness: 0,
+  }));
+  return { mesh, clouds };
+}
+
+function ringTexture() {
+  // Saturn's rings across the radius: faint C ring, bright B ring, the Cassini Division, the A ring with the Encke Gap.
+  const W = 2048, c = document.createElement('canvas'); c.width = W; c.height = 4;
+  const g = c.getContext('2d');
+  const img = g.createImageData(W, 4);
+  for (let x = 0; x < W; x++) {
+    const r = 1.24 + (2.27 - 1.24) * x / (W - 1);
+    let a, br;
+    if (r < 1.53) { a = 0.18 + 0.1 * Math.sin(r * 90); br = 0.55; }
+    else if (r < 1.95) { a = 0.78 + 0.15 * Math.sin(r * 140) + 0.07 * Math.sin(r * 410); br = 0.95; }
+    else if (r < 2.03) { a = 0.06; br = 0.5; }
+    else if (r < 2.27) { a = 0.55 + 0.12 * Math.sin(r * 160); br = 0.82; if (Math.abs(r - 2.214) < 0.006) a = 0.04; }
+    a *= 0.9 + 0.2 * Math.random();
+    const col = [226 * br, 205 * br, 166 * br];
+    for (let y = 0; y < 4; y++) { const i = (y * W + x) * 4; img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2]; img.data[i + 3] = Math.max(0, Math.min(255, a * 255)); }
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+function makeRings(r) {
+  const inner = r * 1.24, outer = r * 2.27;
+  const geo = new THREE.RingGeometry(inner, outer, 256, 1);
+  const pos = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const d = Math.hypot(pos.getX(i), pos.getY(i));
+    uv.setXY(i, (d - inner) / (outer - inner), 0.5);
+  }
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    map: ringTexture(), transparent: true, side: THREE.DoubleSide, depthWrite: false, roughness: 0.9, metalness: 0,
+  }));
+  mesh.rotation.x = -Math.PI / 2;
+  return mesh;
+}
+
+// planets
+const orbitLines = new THREE.Group();
+scene.add(orbitLines);
+const pickables = [sunMesh];
+for (const b of BODIES) {
+  if (b.id === 'sun' || b.parent) continue;
+  b.r = sizeOf(b.radiusKm);
+  b.group = new THREE.Group();          // follows the orbit
+  b.tiltGroup = new THREE.Group();      // carries the axial tilt
+  b.tiltGroup.rotation.z = b.tilt * DEG;
+  b.group.add(b.tiltGroup);
+  scene.add(b.group);
+  if (b.id === 'earth') {
+    const e = makeEarth(b.r);
+    b.mesh = e.mesh; b.clouds = e.clouds;
+    b.tiltGroup.add(e.mesh, e.clouds);
+  } else {
+    b.mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 });
+    b.mesh = new THREE.Mesh(new THREE.SphereGeometry(b.r, 128, 96), b.mat);
+    b.tiltGroup.add(b.mesh);
+  }
+  if (b.atmo) b.tiltGroup.add(atmosphere(b.r, ...b.atmo));
+  if (b.id === 'saturn') b.tiltGroup.add(makeRings(b.r));
+  b.mesh.userData.body = b;
+  pickables.push(b.mesh);
+  b.pos = new THREE.Vector3(); b.au = new THREE.Vector3(); b.spin = 0;
+
+  // orbit path from today's elements
+  const el = elementsAt(b, (Date.now() - J2000) / 86400000 / 36525);
+  const pts = [];
+  for (let i = 0; i <= 360; i++) pts.push(toScene(keplerXYZ(el, i)));
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: b.color, transparent: true, opacity: 0.28, depthWrite: false }));
+  line.userData.body = b;
+  orbitLines.add(line);
+  b.orbit = line;
+}
+// the Moon circles Earth and always shows it the same face
+{
+  const m = BY.moon, earth = BY.earth;
+  m.r = MOON_R;
+  m.group = new THREE.Group();
+  m.mesh = new THREE.Mesh(new THREE.SphereGeometry(m.r, 64, 48), new THREE.MeshStandardMaterial({ map: loadTex('textures/moon_1024.jpg'), roughness: 1, metalness: 0 }));
+  m.mesh.userData.body = m;
+  m.group.add(m.mesh);
+  scene.add(m.group);
+  pickables.push(m.mesh);
+  m.pos = new THREE.Vector3();
+  const pts = [];
+  for (let i = 0; i <= 128; i++) { const a = i / 128 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * MOON_ORBIT, 0, Math.sin(a) * MOON_ORBIT)); }
+  m.orbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: m.color, transparent: true, opacity: 0.22, depthWrite: false }));
+  m.orbit.rotation.x = 5.1 * DEG;
+  earth.group.add(m.orbit);
+}
+
+// asteroid belt between Mars and Jupiter
+const BELT_N = isPhone ? 1400 : 2600;
+const belt = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0x8d8379, roughness: 1, metalness: 0, flatShading: true }), BELT_N);
+const beltData = [];
+for (let i = 0; i < BELT_N; i++) {
+  const a = 2.15 + Math.pow(Math.random(), 0.8) * 1.2;
+  beltData.push({ a, th: Math.random() * Math.PI * 2, y: (Math.random() - 0.5) * 1.1 * Math.random(), s: 0.025 + Math.pow(Math.random(), 3) * 0.09, rx: Math.random() * 6, ry: Math.random() * 6, rs: Math.random() * 2 - 1 });
+}
+belt.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(belt);
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3();
+
+// ===================== time =====================
+const SPEEDS = [
+  { d: 1 / 86400, label: 'เวลาจริง' },
+  { d: 1 / 24, label: '1 ชั่วโมง/วินาที' },
+  { d: 1, label: '1 วัน/วินาที' },
+  { d: 7, label: '1 สัปดาห์/วินาที' },
+  { d: 30.44, label: '1 เดือน/วินาที' },
+  { d: 365.25, label: '1 ปี/วินาที' },
+  { d: 3652.5, label: '10 ปี/วินาที' },
+];
+let simDays = (Date.now() - J2000) / 86400000;
+let speedIdx = 2, paused = false;
+const thDate = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+const thTime = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+function updateBodies(dt, daysStep) {
+  for (const b of BODIES) {
+    if (b.id === 'sun' || b.parent) continue;
+    b.au.copy(helioAU(b, simDays));
+    toScene(b.au, b.pos);
+    b.group.position.copy(b.pos);
+    // spin at the real rate, capped so fast-forward doesn't strobe
+    const turn = daysStep * 24 / b.rotH * Math.PI * 2;
+    b.spin += Math.max(-0.35, Math.min(0.35, turn));
+    b.mesh.rotation.y = b.spin;
+    if (b.clouds) b.clouds.rotation.y = b.spin * 1.04 + simDays * 0.002;
+  }
+  const m = BY.moon, earth = BY.earth;
+  const ang = (simDays / MOON_PERIOD) * Math.PI * 2;
+  _v.set(Math.cos(ang) * MOON_ORBIT, 0, -Math.sin(ang) * MOON_ORBIT).applyAxisAngle(new THREE.Vector3(1, 0, 0), 5.1 * DEG);
+  m.pos.copy(earth.pos).add(_v);
+  m.group.position.copy(m.pos);
+  m.mesh.rotation.y = ang + Math.PI / 2;   // tidally locked
+  BY.sun.mesh.rotation.y += Math.max(-0.2, Math.min(0.2, daysStep * 24 / BY.sun.rotH * Math.PI * 2));
+
+  for (let i = 0; i < BELT_N; i++) {
+    const r = beltData[i];
+    const th = r.th + simDays * (2 * Math.PI / (365.25 * Math.pow(r.a, 1.5)));
+    const rr = distScale(r.a);
+    _v.set(Math.cos(th) * rr, r.y, -Math.sin(th) * rr);
+    _e.set(r.rx + simDays * 0.02 * r.rs, r.ry, 0);
+    _q.setFromEuler(_e);
+    _s.set(r.s, r.s * 0.75, r.s * 0.9);
+    _m.compose(_v, _q, _s);
+    belt.setMatrixAt(i, _m);
+  }
+  belt.instanceMatrix.needsUpdate = true;
+}
+
+// ===================== labels =====================
+const labelsEl = $('labels');
+labelsEl.hidden = true;   // shown once the start screen closes
+let showLabels = true;
+for (const b of BODIES) {
+  const el = document.createElement('div');
+  el.className = 'lbl';
+  el.style.color = b.color;
+  el.innerHTML = `<span>${b.th}</span>`;
+  el.tabIndex = 0;
+  el.addEventListener('click', () => { userAct(); select(b, true); });
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') { userAct(); select(b, true); } });
+  labelsEl.appendChild(el);
+  b.label = el;
+}
+const _p = new THREE.Vector3();
+function updateLabels() {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  for (const b of BODIES) {
+    const el = b.label;
+    let show = showLabels;
+    if (b.id === 'moon') show = show && camera.position.distanceTo(BY.earth.pos) < 18;
+    if (show) {
+      _p.copy(b.pos);
+      const d = camera.position.distanceTo(b.pos);
+      if (d < b.r * 2.2) show = false;
+      _p.project(camera);
+      if (_p.z > 1 || Math.abs(_p.x) > 1.1 || Math.abs(_p.y) > 1.1) show = false;
+      if (show) {
+        const pxR = b.r / (d * Math.tan(camera.fov * DEG / 2)) * h / 2;
+        el.style.transform = `translate(${((_p.x + 1) / 2 * w + Math.min(pxR, 200) + 4).toFixed(1)}px, ${((1 - _p.y) / 2 * h).toFixed(1)}px) translateY(-50%)`;
+      }
+    }
+    el.hidden = !show;
+  }
+}
+
+// ===================== camera flights =====================
+let follow = BY.sun, flight = null;
+const lastFollow = new THREE.Vector3();
+function flyTo(b, distMul) {
+  // a narrow portrait screen needs the camera further back to fit the same width
+  const fit = camera.aspect < 1 ? Math.min(2.2, 0.85 / camera.aspect) : 1;
+  const dist = (b.id === 'sun' && distMul === 'overview' ? 125 : b.r * (b.id === 'sun' ? 4.2 : 5.2)) * fit;
+  let dir = camera.position.clone().sub(controls.target).normalize();
+  if (distMul === 'overview') dir = new THREE.Vector3(0, 0.55, 1).normalize();
+  else if (dir.y < 0.05) dir.y = 0.18, dir.normalize();
+  // look at the sunlit side
+  if (b.id !== 'sun' && distMul !== 'overview') {
+    const toSun = b.pos.clone().negate().normalize();
+    dir.lerp(toSun, 0.55).normalize();
+    dir.y = Math.max(dir.y, 0.15); dir.normalize();
+  }
+  flight = { t: 0, dur: 2.2, fromT: controls.target.clone(), fromP: camera.position.clone(), b, dir, dist };
+  follow = b;
+  controls.minDistance = b.r * 1.35;
+  whoosh();
+}
+function updateCamera(dt) {
+  if (flight) {
+    flight.t += dt;
+    const k = Math.min(1, flight.t / flight.dur);
+    const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    const tp = flight.b.pos;
+    const endP = tp.clone().addScaledVector(flight.dir, flight.dist);
+    controls.target.lerpVectors(flight.fromT, tp, e);
+    // arc out a little so long hops don't skim through planets
+    const mid = flight.fromP.clone().lerp(endP, e);
+    mid.y += Math.sin(e * Math.PI) * flight.fromP.distanceTo(endP) * 0.12;
+    camera.position.copy(mid);
+    if (k >= 1) flight = null;
+    lastFollow.copy(tp);
+  } else if (follow) {
+    _v.copy(follow.pos).sub(lastFollow);
+    camera.position.add(_v);
+    controls.target.add(_v);
+    lastFollow.copy(follow.pos);
+  }
+}
+
+// ===================== audio: narration + ambience =====================
+let thVoice = null, speechOK = 'speechSynthesis' in window;
+function pickVoice() {
+  if (!speechOK) return;
+  const vs = speechSynthesis.getVoices();
+  thVoice = vs.find(v => /^th(-|_|$)/i.test(v.lang) && /premium|enhanced|natural|neural/i.test(v.name))
+    || vs.find(v => /^th(-|_|$)/i.test(v.lang)) || null;
+}
+if (speechOK) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
+
+let narrating = null;   // { lines, i, onDone, token }
+let narrToken = 0;
+function stopNarration() {
+  narrToken++;
+  narrating = null;
+  if (speechOK) speechSynthesis.cancel();
+  $('sub').hidden = true;
+  $('cListen').setAttribute('aria-pressed', 'false');
+  $('cListen').textContent = 'ฟัง';
+  highlightLine(-1);
+  duck(false);
+}
+function narrate(lines, onDone) {
+  stopNarration();
+  const token = ++narrToken;
+  narrating = { lines, i: 0, onDone };
+  $('cListen').setAttribute('aria-pressed', 'true');
+  $('cListen').textContent = 'หยุด';
+  duck(true);
+  const next = () => {
+    if (token !== narrToken) return;
+    const n = narrating;
+    if (n.i >= n.lines.length) {
+      $('sub').hidden = true; highlightLine(-1); duck(false);
+      $('cListen').setAttribute('aria-pressed', 'false'); $('cListen').textContent = 'ฟัง';
+      narrating = null;
+      onDone && onDone();
+      return;
+    }
+    const text = n.lines[n.i];
+    $('sub').textContent = text; $('sub').hidden = false;
+    if (lines === currentSay) highlightLine(n.i);
+    n.i++;
+    let finished = false;
+    const done = () => { if (finished) return; finished = true; setTimeout(next, 250); };
+    // timed fallback keeps subtitles moving when the device has no Thai voice
+    const fallback = setTimeout(done, 900 + text.length * (voiceOn && thVoice ? 160 : 75));
+    if (voiceOn && speechOK && thVoice) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'th-TH'; u.voice = thVoice; u.rate = 0.96; u.pitch = 1;
+      u.onend = () => { clearTimeout(fallback); done(); };
+      u.onerror = () => { clearTimeout(fallback); done(); };
+      speechSynthesis.speak(u);
+    }
+  };
+  next();
+}
+
+let actx = null, master = null, ambGain = null, ambientOn = false, voiceOn = false;
+function audio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return actx; }
+  try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+  master = actx.createGain(); master.gain.value = 0.9; master.connect(actx.destination);
+  return actx;
+}
+function noiseBuffer(sec, brown) {
+  const n = actx.sampleRate * sec, buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w; }
+  return buf;
+}
+// a slow, deep drone with drifting filtered noise: the "sound" of open space
+function startAmbient() {
+  if (!audio() || ambGain) return;
+  ambGain = actx.createGain(); ambGain.gain.value = 0; ambGain.connect(master);
+  const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.7; lp.connect(ambGain);
+  for (const [f, v] of [[55, 0.16], [82.4, 0.10], [110.3, 0.06], [164.8, 0.03]]) {
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = actx.createGain(); g.gain.value = v;
+    const lfo = actx.createOscillator(); lfo.frequency.value = 0.03 + Math.random() * 0.05;
+    const lg = actx.createGain(); lg.gain.value = v * 0.6;
+    lfo.connect(lg).connect(g.gain);
+    o.connect(g).connect(lp); o.start(); lfo.start();
+  }
+  const ns = actx.createBufferSource(); ns.buffer = noiseBuffer(6, true); ns.loop = true;
+  const nf = actx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 300; nf.Q.value = 0.6;
+  const ng = actx.createGain(); ng.gain.value = 0.22;
+  const sweep = actx.createOscillator(); sweep.frequency.value = 0.02;
+  const sg = actx.createGain(); sg.gain.value = 180; sweep.connect(sg).connect(nf.frequency);
+  ns.connect(nf).connect(ng).connect(ambGain); ns.start(); sweep.start();
+}
+function setAmbient(on) {
+  ambientOn = on;
+  if (on) startAmbient();
+  if (ambGain) ambGain.gain.setTargetAtTime(on ? (narrating ? 0.35 : 0.9) : 0, actx.currentTime, 0.8);
+  $('ambient').setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+function duck(on) {
+  if (ambGain && ambientOn) ambGain.gain.setTargetAtTime(on ? 0.35 : 0.9, actx.currentTime, 0.4);
+}
+function whoosh() {
+  if (!actx || !ambientOn) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource(); src.buffer = noiseBuffer(2.4, false);
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(180, t); bp.frequency.exponentialRampToValueAtTime(1400, t + 1.1); bp.frequency.exponentialRampToValueAtTime(160, t + 2.3);
+  const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.9); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.3);
+  src.connect(bp).connect(g).connect(master); src.start(t); src.stop(t + 2.4);
+}
+
+// ===================== selection & card =====================
+let selected = null, currentSay = null;
+const card = $('card');
+const sayEl = $('cSay');
+function highlightLine(i) {
+  [...sayEl.children].forEach((s, k) => s.classList.toggle('now', k === i));
+}
+function select(b, speak) {
+  selected = b;
+  if (tourOn && !tourStepping) stopTour();
+  flyTo(b);
+  for (const c of document.querySelectorAll('.chip')) c.setAttribute('aria-pressed', c.dataset.id === b.id ? 'true' : 'false');
+  for (const x of BODIES) if (x.orbit) x.orbit.material.opacity = x === b ? 0.75 : 0.22;
+  $('cName').textContent = b.th;
+  $('cEn').textContent = b.en;
+  $('cTag').textContent = b.tag;
+  $('cFacts').innerHTML = b.facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  sayEl.innerHTML = b.say.map(s => `<span>${s} </span>`).join('');
+  currentSay = b.say;
+  $('cCredit').textContent = b.id === 'earth' || b.id === 'moon'
+    ? 'ภาพพื้นผิว: NASA ผ่านชุดตัวอย่าง three.js'
+    : b.id === 'sun' ? 'ผิวดวงอาทิตย์สร้างจากแบบจำลองเคลื่อนไหว' : 'ผิวดาวสร้างด้วยแบบจำลองตามลักษณะจริง';
+  card.hidden = false;
+  if (matchMedia('(max-width: 720px)').matches) card.classList.add('min');
+  updateLive();
+  if (speak) narrate(b.say);
+  else stopNarration();
+}
+function updateLive() {
+  if (!selected) return;
+  const b = selected;
+  let html = '';
+  if (b.au && b.id !== 'earth') {
+    const dE = b.au.distanceTo(BY.earth.au) * KM_PER_AU / 1e6;
+    const dS = b.au.length() * KM_PER_AU / 1e6;
+    html = `ตอนนี้ห่างจากดวงอาทิตย์ <b>${fmt(dS)}</b> ล้าน กม. · ห่างจากโลก <b>${fmt(dE)}</b> ล้าน กม. · แสงเดินทางถึงโลก <b>${lightTime(dE)}</b>`;
+  } else if (b.id === 'earth') {
+    const dS = b.au.length() * KM_PER_AU / 1e6;
+    html = `ตอนนี้ห่างจากดวงอาทิตย์ <b>${fmt(dS)}</b> ล้าน กม. · แสงอาทิตย์ใช้เวลา <b>${lightTime(dS)}</b>`;
+  } else if (b.id === 'sun') {
+    html = `ห่างจากโลกตอนนี้ <b>${fmt(BY.earth.au.length() * KM_PER_AU / 1e6)}</b> ล้าน กม.`;
+  }
+  $('cLive').innerHTML = html;
+}
+const fmt = x => x < 10 ? x.toFixed(2) : x < 1000 ? x.toFixed(1) : Math.round(x).toLocaleString('th-TH');
+function lightTime(mkm) {
+  const s = mkm * 1e6 / 299792.458;
+  if (s < 3600) return `${Math.floor(s / 60)} นาที ${Math.round(s % 60)} วินาที`;
+  return `${Math.floor(s / 3600)} ชม. ${Math.round((s % 3600) / 60)} นาที`;
+}
+$('cListen').onclick = () => {
+  userAct();
+  if (narrating) stopNarration(); else if (selected) narrate(selected.say);
+};
+$('cMin').onclick = () => { card.classList.toggle('min'); $('cMin').textContent = card.classList.contains('min') ? 'ขยาย' : 'ย่อ'; };
+
+// chips
+const chips = $('chips');
+for (const b of BODIES) {
+  const el = document.createElement('button');
+  el.className = 'chip'; el.dataset.id = b.id; el.setAttribute('aria-pressed', 'false');
+  el.innerHTML = `<i style="background:${b.color};color:${b.color}"></i>${b.th}`;
+  el.onclick = () => { userAct(); select(b, true); };
+  chips.appendChild(el);
+}
+
+// ===================== guided tour =====================
+let tourOn = false, tourStepping = false, tourIdx = 0, tourTimer = 0;
+const TOUR = ['sun', 'mercury', 'venus', 'earth', 'moon', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
+function tourStep() {
+  if (!tourOn) return;
+  if (tourIdx >= TOUR.length) { stopTour(); overview(); return; }
+  const b = BY[TOUR[tourIdx++]];
+  tourStepping = true; select(b, false); tourStepping = false;
+  clearTimeout(tourTimer);
+  tourTimer = setTimeout(() => { if (tourOn) narrate(b.say, () => { tourTimer = setTimeout(tourStep, 1400); }); }, 2400);
+}
+function startTour() {
+  tourOn = true; tourIdx = 0;
+  $('tour').setAttribute('aria-pressed', 'true'); $('tour').textContent = 'หยุดทัวร์';
+  tourStep();
+}
+function stopTour() {
+  tourOn = false; clearTimeout(tourTimer);
+  $('tour').setAttribute('aria-pressed', 'false'); $('tour').textContent = 'ทัวร์พร้อมเสียง';
+}
+$('tour').onclick = () => { userAct(); if (tourOn) { stopTour(); stopNarration(); } else startTour(); };
+
+// ===================== controls bar =====================
+function userAct() { audio(); }
+function overview() {
+  selected = null; card.hidden = true;
+  for (const c of document.querySelectorAll('.chip')) c.setAttribute('aria-pressed', 'false');
+  for (const x of BODIES) if (x.orbit) x.orbit.material.opacity = x.id === 'moon' ? 0.22 : 0.28;
+  flyTo(BY.sun, 'overview');
+  controls.minDistance = 6;
+}
+$('overview').onclick = () => { userAct(); stopTour(); stopNarration(); overview(); };
+$('play').onclick = () => {
+  paused = !paused;
+  $('play').setAttribute('aria-pressed', paused ? 'true' : 'false');
+  $('play').textContent = paused ? 'เดินเวลาต่อ' : 'หยุดเวลา';
+};
+$('speed').oninput = e => { speedIdx = +e.target.value; $('speedOut').textContent = SPEEDS[speedIdx].label; };
+$('today').onclick = () => { simDays = (Date.now() - J2000) / 86400000; };
+$('orbits').onclick = () => { orbitLines.visible = !orbitLines.visible; BY.moon.orbit.visible = orbitLines.visible; $('orbits').setAttribute('aria-pressed', orbitLines.visible ? 'true' : 'false'); };
+$('names').onclick = () => { showLabels = !showLabels; $('names').setAttribute('aria-pressed', showLabels ? 'true' : 'false'); };
+$('ambient').onclick = () => { userAct(); setAmbient(!ambientOn); };
+$('quality').onclick = () => {
+  highQuality = !highQuality;
+  $('quality').setAttribute('aria-pressed', highQuality ? 'true' : 'false');
+  $('quality').textContent = highQuality ? 'ภาพคมชัดสูง' : 'โหมดประหยัด';
+  resize();
+};
+
+// tap a planet in the scene to visit it
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let down = null;
+cv.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+cv.addEventListener('pointerup', e => {
+  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 || performance.now() - down.t > 450) { down = null; return; }
+  down = null;
+  const r = cv.getBoundingClientRect();
+  ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(pickables, false)[0];
+  if (hit) { userAct(); select(hit.object.userData.body, true); }
+});
+cv.addEventListener('pointerdown', () => { if (flight) flight = null; }, { capture: true });
+
+// ===================== start =====================
+function begin(withVoice) {
+  audio();
+  voiceOn = withVoice;
+  if (withVoice) {
+    pickVoice();
+    setAmbient(true);
+    // iOS only allows speech that starts inside a tap
+    if (speechOK) { const u = new SpeechSynthesisUtterance(' '); u.lang = 'th-TH'; u.volume = 0; speechSynthesis.speak(u); }
+  }
+  $('start').hidden = true;
+  labelsEl.hidden = false;
+  if (withVoice) {
+    setTimeout(() => {
+      if (speechOK && !thVoice) INTRO.push('อุปกรณ์นี้ยังไม่มีเสียงภาษาไทย จึงแสดงคำบรรยายเป็นตัวอักษรแทน');
+      narrate(INTRO);
+    }, 600);
+  }
+}
+$('goSound').onclick = () => begin(true);
+$('goQuiet').onclick = () => begin(false);
+
+// ===================== loop =====================
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setPixelRatio(pixelRatio());
+  renderer.setSize(w, h, false);
+  composer.setPixelRatio(pixelRatio());
+  composer.setSize(w, h);
+  bloom.setSize(w * pixelRatio() / 2, h * pixelRatio() / 2);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  sky.userData.starMat.uniforms.pr.value = renderer.getPixelRatio();
+}
+addEventListener('resize', resize);
+resize();
+
+let last = performance.now(), liveClock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  const step = paused ? 0 : SPEEDS[speedIdx].d * dt;
+  simDays += step;
+  updateBodies(dt, step);
+  sunMat.uniforms.time.value = now / 1000;
+  updateCamera(dt);
+  controls.update();
+  sky.position.copy(camera.position);
+  updateLabels();
+  liveClock += dt;
+  if (liveClock > 0.25) {
+    liveClock = 0;
+    const d = new Date(J2000 + simDays * 86400000);
+    $('clock').innerHTML = `${thDate.format(d)}${speedIdx <= 1 ? ' ' + thTime.format(d) : ''}<small>${paused ? 'หยุดเวลา' : SPEEDS[speedIdx].label}</small>`;
+    updateLive();
+  }
+  if (highQuality) composer.render(); else renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+// bake the planet surfaces a few at a time so the page stays responsive
+(async function init() {
+  const size = isPhone ? [1536, 768] : [2048, 1024];
+  updateBodies(0, 0);
+  lastFollow.copy(BY.sun.pos);
+  if (camera.aspect < 1) camera.position.multiplyScalar(Math.min(2.2, 0.85 / camera.aspect));
+  controls.target.set(0, 0, 0);
+  requestAnimationFrame(frame);
+  for (const id of Object.keys(SURFACES)) {
+    await new Promise(r => requestAnimationFrame(r));
+    const b = BY[id];
+    b.mat.map = bake(SURFACES[id], ...size);
+    b.mat.needsUpdate = true;
+  }
+  $('loading').textContent = speechOK ? '' : 'เบราว์เซอร์นี้ไม่รองรับเสียงพูด จะแสดงคำบรรยายเป็นตัวอักษร';
+})();
+window.__solar = { BY, get simDays() { return simDays; }, select, overview, camera, controls };
+</script>
+</body>
+</html>
