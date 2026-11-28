@@ -57,6 +57,15 @@ h2 button{font:inherit;font-size:12px;font-weight:500;color:var(--accent);backgr
 #bar{width:220px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}#bar i{display:block;height:100%;width:0;background:var(--accent)}
 #hint{position:absolute;left:16px;bottom:max(12px,env(safe-area-inset-bottom));color:var(--muted);font-size:12px;background:var(--panel);border:1px solid var(--line);padding:4px 10px;border-radius:14px;opacity:.92}
 #tog{display:none}
+.axis{margin:6px 0 2px}
+.axis .lbl{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);padding:0 2px}
+.axis .lbl b{color:var(--ink);font-weight:500}
+.axis input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
+.secbtns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.secbtns button,.secbtns select{flex:1;min-width:0;padding:7px 6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.secbtns button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#secPanel.off{opacity:.45;pointer-events:none}
+#cutTip{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:var(--accent);color:#fff;padding:6px 14px;border-radius:16px;font-size:13px;display:none;box-shadow:var(--shadow)}
 @media (max-width:720px){
   #side{position:absolute;left:0;top:0;bottom:0;width:86%;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow)}
   #side.open{transform:none}
@@ -79,6 +88,16 @@ h2 button{font:inherit;font-size:12px;font-weight:500;color:var(--accent);backgr
       </div>
       <h2>ชั้น <button id="flAll">ทุกชั้น</button></h2>
       <div class="floors" id="floors"></div>
+      <h2>รูปตัด (กล่องตัด)</h2>
+      <label class="row"><input type="checkbox" id="secOn"><span class="n">เปิดกล่องตัดเพื่อดูภายใน</span></label>
+      <div id="secPanel" class="off">
+        <div id="axes"></div>
+        <div class="secbtns">
+          <select id="cutAx" title="แนวระนาบตัดเมื่อคลิก"><option value="x">ตัดแนวขวาง (X)</option><option value="y">ตัดแนวยาว (Y)</option><option value="z">ตัดแนวราบ (Z)</option></select>
+          <button id="cutPick">ตัดตรงจุดที่คลิก</button>
+        </div>
+        <div class="secbtns"><button id="cutFlip">กลับด้านที่เห็น</button><button id="secReset">คืนค่ากล่อง</button></div>
+      </div>
       <div id="layers"></div>
       <h2>อาคารอ้างอิง</h2>
       <div id="ctx"></div>
@@ -87,8 +106,9 @@ h2 button{font:inherit;font-size:12px;font-weight:500;color:var(--accent);backgr
   <main id="view">
     <button id="tog">เมนู</button>
     <div id="load"><div id="lt">กำลังโหลดโมเดล…</div><div id="bar"><i></i></div></div>
+    <div id="cutTip">คลิกที่จุดในโมเดลเพื่อวางระนาบตัด</div>
     <div id="info"><button class="x" aria-label="ปิด">×</button><div class="t"></div><dl></dl></div>
-    <div id="hint">ลากเพื่อหมุน · คลิกขวาลากเพื่อเลื่อน · ล้อเมาส์ซูม · คลิกชิ้นงานเพื่อดูข้อมูล</div>
+    <div id="hint">ลากเพื่อหมุน · คลิกขวาลากเพื่อเลื่อน · ล้อเมาส์ซูม · คลิกชิ้นงานเพื่อดูข้อมูล · เมนูรูปตัดเพื่อดูภายใน</div>
   </main>
 </div>
 
@@ -143,7 +163,7 @@ const hiMat=new THREE.MeshStandardMaterial({color:0xff2d55,emissive:0x550010,rou
 const groups=[]; // {layer,floor,obj}
 const pickables=[];
 function addObj(layer,floor,obj){scene.add(obj);groups.push({layer,floor,obj});pickables.push(obj);}
-const tmpM=new THREE.Matrix4();
+const tmpM=new THREE.Matrix4(); const mepB=new THREE.Box3(); const _v=new THREE.Vector3();
 function instanced(geo,layer,M,E){
   const byF={};
   for(let k=0;k<E.length;k++){const f=floorOf(E[k]);(byF[f]=byF[f]||[]).push(k);}
@@ -152,7 +172,7 @@ function instanced(geo,layer,M,E){
     const eids=new Uint32Array(ks.length);
     ks.forEach((k,j)=>{const o=k*12;
       tmpM.set(M[o],M[o+1],M[o+2],M[o+3],M[o+4],M[o+5],M[o+6],M[o+7],M[o+8],M[o+9],M[o+10],M[o+11],0,0,0,1);
-      im.setMatrixAt(j,tmpM); eids[j]=E[k];});
+      im.setMatrixAt(j,tmpM); eids[j]=E[k]; mepB.expandByPoint(_v.set(M[o+3],M[o+7],M[o+11]));});
     im.instanceMatrix.needsUpdate=true; im.frustumCulled=false; im.userData.eids=eids;
     addObj(layer,+f,im);
   }
@@ -186,6 +206,50 @@ for(const c of D.ctx){
 }
 const center=box.getCenter(new THREE.Vector3()); const size=box.getSize(new THREE.Vector3());
 const R=Math.max(size.x,size.y,size.z);
+
+// ---------- กล่องตัด (section box) ----------
+const SB=box.clone().union(mepB).expandByScalar(1.5);   // ขอบเขตสูงสุดของกล่องตัด: อาคาร + งานระบบทั้งหมด เผื่อ 1.5 ม.
+const secB=SB.clone();
+const AX=['x','y','z'];
+const AXN={x:'ซ้าย ↔ ขวา (X)',y:'หน้า ↔ หลัง (Y)',z:'ล่าง ↔ บน (Z)'};
+const secPlanes=AX.flatMap(a=>{const n=new THREE.Vector3();n[a]=1;return [new THREE.Plane(n.clone(),0),new THREE.Plane(n.clone().negate(),0)];});
+const hb=new THREE.Box3(); const secHelper=new THREE.Box3Helper(hb,0x1f6fd1); secHelper.visible=false; scene.add(secHelper);
+let secOn=false, lastCut=null;
+const sl={};
+function updSec(){
+  AX.forEach((a,i)=>{secPlanes[2*i].constant=-secB.min[a];secPlanes[2*i+1].constant=secB.max[a];});
+  renderer.clippingPlanes=secOn?secPlanes:[];
+  hb.copy(secB).expandByScalar(0.02); secHelper.visible=secOn;
+  for(const a of AX){ if(!sl[a])continue;
+    sl[a].lo.value=Math.round((secB.min[a]-SB.min[a])/(SB.max[a]-SB.min[a])*1000);
+    sl[a].hi.value=Math.round((secB.max[a]-SB.min[a])/(SB.max[a]-SB.min[a])*1000);
+    sl[a].t.textContent=secB.min[a].toFixed(2)+' ถึง '+secB.max[a].toFixed(2)+' ม.';}
+  redraw();
+}
+const axesEl=$('#axes');
+for(const a of AX){
+  const d=document.createElement('div'); d.className='axis';
+  d.innerHTML='<div class="lbl"><span>'+AXN[a]+'</span><b></b></div><input type="range" min="0" max="1000" aria-label="'+AXN[a]+' จาก"><input type="range" min="0" max="1000" aria-label="'+AXN[a]+' ถึง">';
+  const [lo,hi]=d.querySelectorAll('input'); sl[a]={lo,hi,t:d.querySelector('b')};
+  const v=x=>SB.min[a]+x/1000*(SB.max[a]-SB.min[a]);
+  lo.oninput=()=>{secB.min[a]=Math.min(v(+lo.value),secB.max[a]-0.05);updSec();};
+  hi.oninput=()=>{secB.max[a]=Math.max(v(+hi.value),secB.min[a]+0.05);updSec();};
+  axesEl.appendChild(d);
+}
+$('#secOn').onchange=e=>{secOn=e.target.checked;$('#secPanel').classList.toggle('off',!secOn);if(!secOn)setCutMode(false);updSec();};
+$('#secReset').onclick=()=>{secB.copy(SB);lastCut=null;updSec();};
+let cutMode=false;
+function setCutMode(on){cutMode=on;$('#cutPick').classList.toggle('on',on);$('#cutTip').style.display=on?'block':'none';}
+$('#cutPick').onclick=()=>setCutMode(!cutMode);
+$('#cutFlip').onclick=()=>{ if(!lastCut)return; const {a,v}=lastCut;
+  if(lastCut.keep==='lo'){secB.min[a]=v;secB.max[a]=SB.max[a];lastCut.keep='hi';} else {secB.max[a]=v;secB.min[a]=SB.min[a];lastCut.keep='lo';}
+  updSec(); };
+function cutAt(p){ const a=$('#cutAx').value; const v=p[a];
+  // เก็บด้านที่กล้องอยู่ฝั่งตรงข้าม เพื่อให้มองเห็นหน้าตัดทันที
+  const keepLo=camera.position[a]>v;
+  if(keepLo){secB.max[a]=v;secB.min[a]=Math.min(secB.min[a],v-0.05);} else {secB.min[a]=v;secB.max[a]=Math.max(secB.max[a],v+0.05);}
+  lastCut={a,v,keep:keepLo?'lo':'hi'}; setCutMode(false); updSec(); }
+const inSec=p=>!secOn||secB.containsPoint(p);
 
 // ---------- แผงควบคุม ----------
 const state={layer:{},floor:{1:true,2:true,3:true,4:true,5:true}};
@@ -261,7 +325,12 @@ renderer.domElement.addEventListener('pointerup',ev=>{
   const rc=renderer.domElement.getBoundingClientRect();
   ndc.set((ev.clientX-rc.left)/rc.width*2-1,-(ev.clientY-rc.top)/rc.height*2+1);
   ray.setFromCamera(ndc,camera);
-  const hit=ray.intersectObjects(pickables.filter(o=>o.visible),false)[0];
+  if(cutMode){
+    const objs=pickables.filter(o=>o.visible).concat(Object.values(ctxObjs).filter(o=>o.visible));
+    const h=ray.intersectObjects(objs,false).find(h=>inSec(h.point));
+    if(h) cutAt(h.point); return;
+  }
+  const hit=ray.intersectObjects(pickables.filter(o=>o.visible),false).find(h=>inSec(h.point));
   if(!hit){hideInfo();return;}
   const o=hit.object;
   if(o.isInstancedMesh){const m=new THREE.Matrix4(); o.getMatrixAt(hit.instanceId,m); showInfo(o.userData.eids[hit.instanceId],o,m,o.geometry);}
@@ -272,7 +341,7 @@ renderer.domElement.addEventListener('pointerup',ev=>{
 function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();redraw();}
 new ResizeObserver(resize).observe(view); resize();
 $('#tog').onclick=()=>$('#side').classList.toggle('open');
-setView('iso'); apply();
+setView('iso'); apply(); updSec();
 $('#load').style.display='none';
 (function loop(){requestAnimationFrame(loop);if(controls.update()||need){need=false;renderer.render(scene,camera);}})();
 })();
