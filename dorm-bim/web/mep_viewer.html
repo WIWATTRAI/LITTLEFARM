@@ -1,0 +1,279 @@
+<title>หอพัก A งานระบบ 3D</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --ink:#1d232b; --muted:#5d6670; --line:#dde1e6;
+  --accent:#1f6fd1; --view:#eef1f4; --chip:#f0f2f5; --shadow:0 2px 10px rgba(20,30,40,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15191e; --panel:#1e242b; --ink:#e6e9ed; --muted:#9aa4ae; --line:#2f3740;
+    --accent:#6aa8ff; --view:#1a1f25; --chip:#262d35; --shadow:0 2px 12px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15191e; --panel:#1e242b; --ink:#e6e9ed; --muted:#9aa4ae; --line:#2f3740;
+  --accent:#6aa8ff; --view:#1a1f25; --chip:#262d35; --shadow:0 2px 12px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans Thai",system-ui,sans-serif;font-size:14px}
+#app{position:fixed;inset:0;display:flex}
+#side{width:320px;max-width:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:3;
+  padding-left:max(0px,env(safe-area-inset-left))}
+#side header{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+#side h1{font-size:17px;margin:0 0 2px;font-weight:600}
+#side .sub{color:var(--muted);font-size:12.5px}
+#scroll{overflow:auto;flex:1;padding:6px 16px 16px}
+h2{font-size:13px;font-weight:600;margin:16px 0 6px;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
+h2 button{font:inherit;font-size:12px;font-weight:500;color:var(--accent);background:none;border:0;cursor:pointer;padding:2px 4px}
+.row{display:flex;align-items:center;gap:8px;padding:4px 2px;border-radius:6px;cursor:pointer;user-select:none}
+.row:hover{background:var(--chip)}
+.row input{margin:0;accent-color:var(--accent);width:16px;height:16px;flex:none}
+.sw{width:14px;height:14px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.18)}
+.row .n{flex:1;min-width:0}
+.row .c{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.sys{font-weight:600}
+.floors{display:flex;gap:6px;flex-wrap:wrap}
+.fl{flex:1;min-width:44px;text-align:center;padding:7px 0;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--panel);color:var(--ink);font:inherit}
+.fl.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.views{display:flex;gap:6px}
+.views button{flex:1;padding:7px 0;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit;cursor:pointer}
+.views button:hover{border-color:var(--accent)}
+.slider{display:flex;align-items:center;gap:8px;padding:4px 2px 0 26px;color:var(--muted);font-size:12px}
+.slider input{flex:1;accent-color:var(--accent)}
+#view{flex:1;position:relative;background:var(--view)}
+#view canvas{display:block;width:100%;height:100%;touch-action:none}
+#info{position:absolute;right:max(16px,env(safe-area-inset-right));top:16px;width:300px;max-width:calc(100% - 32px);background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);padding:12px 14px;display:none}
+#info .t{font-weight:600;margin-bottom:6px;padding-right:20px}
+#info dl{margin:0;display:grid;grid-template-columns:72px 1fr;gap:3px 8px;font-size:13px}
+#info dt{color:var(--muted)}#info dd{margin:0;word-break:break-all}
+#info .x{position:absolute;right:8px;top:6px;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--muted)}
+#bar{width:220px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}#bar i{display:block;height:100%;width:0;background:var(--accent)}
+#hint{position:absolute;left:16px;bottom:max(12px,env(safe-area-inset-bottom));color:var(--muted);font-size:12px;background:var(--panel);border:1px solid var(--line);padding:4px 10px;border-radius:14px;opacity:.92}
+#tog{display:none}
+@media (max-width:720px){
+  #side{position:absolute;left:0;top:0;bottom:0;width:86%;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow)}
+  #side.open{transform:none}
+  #tog{display:block;position:absolute;left:16px;top:16px;z-index:4;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;box-shadow:var(--shadow)}
+  #side.open ~ #view #tog{left:calc(86% + 12px)}
+  #info{top:auto;bottom:48px;right:16px}
+}
+</style>
+
+<div id="app">
+  <aside id="side">
+    <header>
+      <h1>หอพัก A งานระบบ</h1>
+      <div class="sub">ระบบสุขาภิบาลและระบบไฟฟ้า ชั้น 1 ถึง 5 (โมเดล BIM)</div>
+    </header>
+    <div id="scroll">
+      <h2>มุมมอง</h2>
+      <div class="views">
+        <button data-v="iso">3 มิติ</button><button data-v="top">แปลน</button><button data-v="front">ด้านหน้า</button><button data-v="side">ด้านข้าง</button>
+      </div>
+      <h2>ชั้น <button id="flAll">ทุกชั้น</button></h2>
+      <div class="floors" id="floors"></div>
+      <div id="layers"></div>
+      <h2>อาคารอ้างอิง</h2>
+      <div id="ctx"></div>
+    </div>
+  </aside>
+  <main id="view">
+    <button id="tog">เมนู</button>
+    <div id="load"><div id="lt">กำลังโหลดโมเดล…</div><div id="bar"><i></i></div></div>
+    <div id="info"><button class="x" aria-label="ปิด">×</button><div class="t"></div><dl></dl></div>
+    <div id="hint">ลากเพื่อหมุน · คลิกขวาลากเพื่อเลื่อน · ล้อเมาส์ซูม · คลิกชิ้นงานเพื่อดูข้อมูล</div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(async function(){
+const $=s=>document.querySelector(s);
+let need=true; const redraw=()=>{need=true;};
+const FLOOR_NAMES={1:'ชั้น 1',2:'ชั้น 2',3:'ชั้น 3',4:'ชั้น 4',5:'ชั้น 5'};
+
+// ---------- โหลดข้อมูล ----------
+let D;
+try{
+  const r=await fetch('mep.json');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const total=+r.headers.get('content-length')||8.3e6;
+  const rd=r.body.getReader(); const parts=[]; let got=0;
+  for(;;){const {done,value}=await rd.read(); if(done)break; parts.push(value); got+=value.length;
+    $('#bar i').style.width=Math.min(100,got/total*100)+'%'; $('#lt').textContent='กำลังโหลดโมเดล… '+(got/1e6).toFixed(1)+' MB';}
+  D=JSON.parse(await new Blob(parts).text());
+}catch(err){ $('#lt').textContent='โหลดข้อมูลไม่สำเร็จ ('+err.message+')'; return; }
+
+const b64=(s,T)=>{const bin=atob(s);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new T(u.buffer);};
+const items=D.items; // [id,name,layer,floor,size]
+const floorOf=i=>items[i][3];
+
+// ---------- ฉาก ----------
+const view=$('#view');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.localClippingEnabled=true;
+view.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(40,1,0.05,600);
+camera.up.set(0,0,1);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.12;
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a8f96,0.75));
+const sun=new THREE.DirectionalLight(0xffffff,0.75); sun.position.set(-30,-40,60); scene.add(sun);
+const sun2=new THREE.DirectionalLight(0xffffff,0.25); sun2.position.set(40,30,20); scene.add(sun2);
+function bgColor(){redraw();scene.background=new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--view').trim()||'#eef1f4');}
+bgColor(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',bgColor);
+
+const unitCyl=new THREE.CylinderGeometry(1,1,1,12,1,false);
+const unitBox=new THREE.BoxGeometry(1,1,1);
+const mats={};
+for(const L of D.layers) mats[L.key]=new THREE.MeshStandardMaterial({color:L.color,roughness:0.6,metalness:0.05});
+const hiMat=new THREE.MeshStandardMaterial({color:0xff2d55,emissive:0x550010,roughness:0.5});
+
+// กลุ่มตาม (layer, floor)
+const groups=[]; // {layer,floor,obj}
+const pickables=[];
+function addObj(layer,floor,obj){scene.add(obj);groups.push({layer,floor,obj});pickables.push(obj);}
+const tmpM=new THREE.Matrix4();
+function instanced(geo,layer,M,E){
+  const byF={};
+  for(let k=0;k<E.length;k++){const f=floorOf(E[k]);(byF[f]=byF[f]||[]).push(k);}
+  for(const f in byF){
+    const ks=byF[f]; const im=new THREE.InstancedMesh(geo,mats[layer],ks.length);
+    const eids=new Uint32Array(ks.length);
+    ks.forEach((k,j)=>{const o=k*12;
+      tmpM.set(M[o],M[o+1],M[o+2],M[o+3],M[o+4],M[o+5],M[o+6],M[o+7],M[o+8],M[o+9],M[o+10],M[o+11],0,0,0,1);
+      im.setMatrixAt(j,tmpM); eids[j]=E[k];});
+    im.instanceMatrix.needsUpdate=true; im.frustumCulled=false; im.userData.eids=eids;
+    addObj(layer,+f,im);
+  }
+}
+for(const p of D.prim) instanced(p.kind==='cyl'?unitCyl:unitBox,p.layer,b64(p.m,Float32Array),b64(p.e,Uint32Array));
+const defGeo={};
+for(const dn in D.defs){const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(b64(D.defs[dn].pos,Float32Array),3));
+  g.setIndex(new THREE.BufferAttribute(b64(D.defs[dn].idx,Uint32Array),1));
+  defGeo[dn]=g.toNonIndexed(); defGeo[dn].computeVertexNormals();}
+for(const p of D.inst) instanced(defGeo[p.def_],p.layer,b64(p.m,Float32Array),b64(p.e,Uint32Array));
+for(const m of D.mesh){
+  const P=b64(m.pos,Float32Array),I=b64(m.idx,Uint32Array),TE=b64(m.te,Uint32Array); const byF={};
+  for(let t=0;t<TE.length;t++){const f=floorOf(TE[t]);(byF[f]=byF[f]||[]).push(t);}
+  for(const f in byF){const ts=byF[f]; const pos=new Float32Array(ts.length*9);
+    ts.forEach((t,j)=>{for(let c=0;c<3;c++){const v=I[t*3+c];pos.set(P.subarray(v*3,v*3+3),j*9+c*3);}});
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3)); g.computeVertexNormals();
+    const mesh=new THREE.Mesh(g,mats[m.layer]); mesh.userData.tri=Uint32Array.from(ts.map(t=>TE[t])); addObj(m.layer,+f,mesh);}
+}
+
+// อาคารอ้างอิง + ระนาบตัด
+const clip=new THREE.Plane(new THREE.Vector3(0,0,-1),1e4);
+const ctxObjs={}; const box=new THREE.Box3();
+for(const c of D.ctx){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(b64(c.pos,Float32Array),3));
+  g.setIndex(new THREE.BufferAttribute(b64(c.idx,Uint32Array),1));
+  const ng=g.toNonIndexed(); ng.computeVertexNormals(); ng.computeBoundingBox(); box.union(ng.boundingBox);
+  const mat=new THREE.MeshStandardMaterial({color:c.color,roughness:0.9,transparent:true,opacity:c.key==='CTX-WL'?0.18:0.35,depthWrite:false,clippingPlanes:[clip],side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(ng,mat); mesh.renderOrder=2; scene.add(mesh); ctxObjs[c.key]=mesh;
+}
+const center=box.getCenter(new THREE.Vector3()); const size=box.getSize(new THREE.Vector3());
+const R=Math.max(size.x,size.y,size.z);
+
+// ---------- แผงควบคุม ----------
+const state={layer:{},floor:{1:true,2:true,3:true,4:true,5:true}};
+const cnt={}; for(const it of items){cnt[it[2]]=(cnt[it[2]]||0)+1;}
+const sysList=[...new Set(D.layers.map(l=>l.sys))];
+const lay=$('#layers');
+for(const s of sysList){
+  const ls=D.layers.filter(l=>l.sys===s);
+  const h=document.createElement('h2'); h.innerHTML='<span>ระบบ'+s+'</span>';
+  const btn=document.createElement('button'); btn.textContent='เปิด/ปิดทั้งระบบ'; h.appendChild(btn); lay.appendChild(h);
+  const boxes=[];
+  for(const L of ls){ state.layer[L.key]=true;
+    const r=document.createElement('label'); r.className='row';
+    r.innerHTML='<input type="checkbox" checked><span class="sw" style="background:'+L.color+'"></span><span class="n">'+L.name+'</span><span class="c">'+(cnt[L.key]||0).toLocaleString()+'</span>';
+    const cb=r.querySelector('input'); cb.onchange=()=>{state.layer[L.key]=cb.checked;apply();}; boxes.push([cb,L.key]); lay.appendChild(r);}
+  btn.onclick=()=>{const on=!boxes.every(([cb])=>cb.checked); boxes.forEach(([cb,k])=>{cb.checked=on;state.layer[k]=on;}); apply();};
+}
+const fw=$('#floors');
+for(let f=1;f<=5;f++){const b=document.createElement('button');b.className='fl on';b.textContent=f;b.title=FLOOR_NAMES[f];
+  b.onclick=()=>{state.floor[f]=!state.floor[f];b.classList.toggle('on',state.floor[f]);apply();};fw.appendChild(b);}
+$('#flAll').onclick=()=>{for(let f=1;f<=5;f++)state.floor[f]=true;fw.querySelectorAll('.fl').forEach(b=>b.classList.add('on'));apply();};
+const cw=$('#ctx');
+for(const c of D.ctx){
+  const r=document.createElement('label'); r.className='row';
+  r.innerHTML='<input type="checkbox" checked><span class="sw" style="background:'+c.color+'"></span><span class="n">'+c.name+'</span>';
+  const cb=r.querySelector('input'); cb.onchange=()=>{ctxObjs[c.key].visible=cb.checked;redraw();};
+  cw.appendChild(r);
+  const s=document.createElement('div'); s.className='slider';
+  s.innerHTML='<span>ความทึบ</span><input type="range" min="0" max="100" value="'+Math.round(ctxObjs[c.key].material.opacity*100)+'">';
+  s.querySelector('input').oninput=e=>{const o=e.target.value/100;const m=ctxObjs[c.key].material;m.opacity=o;m.depthWrite=o>0.95;redraw();};
+  cw.appendChild(s);
+}
+function apply(){
+  for(const g of groups) g.obj.visible=!!state.layer[g.layer]&&!!state.floor[g.floor];
+  // ตัดอาคารอ้างอิงเหนือชั้นสูงสุดที่เลือก
+  let top=0; for(let f=1;f<=5;f++) if(state.floor[f]) top=f;
+  clip.constant = (top===0||top===5)?1e4 : D.floors[top+1]-0.02;
+  if(sel && !sel.obj.visible) hideInfo();
+  redraw();
+}
+
+// ---------- มุมมอง ----------
+function setView(v){
+  const d=R*1.7; let dir;
+  if(v==='top') dir=new THREE.Vector3(0,-0.001,1);
+  else if(v==='front') dir=new THREE.Vector3(0,-1,0.08);
+  else if(v==='side') dir=new THREE.Vector3(1,0,0.08);
+  else dir=new THREE.Vector3(-0.9,-1.1,0.8);
+  dir.normalize(); camera.position.copy(center).addScaledVector(dir,d); controls.target.copy(center); controls.update();
+}
+document.querySelectorAll('.views button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+
+// ---------- เลือกชิ้นงาน ----------
+const ray=new THREE.Raycaster(); const ndc=new THREE.Vector2();
+let sel=null; let hl=null;
+function hideInfo(){ $('#info').style.display='none'; if(hl){scene.remove(hl);hl=null;} sel=null; redraw(); }
+$('#info .x').onclick=hideInfo;
+const layerName={}; for(const L of D.layers) layerName[L.key]=L.sys+' : '+L.name;
+function showInfo(e,obj,matrix,geo){
+  const it=items[e];
+  $('#info .t').textContent=it[1];
+  const rows=[['รหัส',it[0]],['ชั้น',FLOOR_NAMES[it[3]]||it[3]],['หมวด',layerName[it[2]]]]; if(it[4]) rows.push(['ขนาด',it[4]]);
+  $('#info dl').innerHTML=rows.map(([a,b])=>'<dt>'+a+'</dt><dd></dd>').join('');
+  $('#info dl').querySelectorAll('dd').forEach((dd,i)=>dd.textContent=rows[i][1]);
+  $('#info').style.display='block';
+  if(hl) scene.remove(hl);
+  hl=new THREE.Mesh(geo,hiMat); hl.matrixAutoUpdate=false; hl.matrix.copy(matrix); scene.add(hl); sel={obj}; redraw();
+}
+let down=null;
+renderer.domElement.addEventListener('pointerdown',ev=>{down=[ev.clientX,ev.clientY];});
+renderer.domElement.addEventListener('pointerup',ev=>{
+  if(!down||Math.hypot(ev.clientX-down[0],ev.clientY-down[1])>5) return;
+  const rc=renderer.domElement.getBoundingClientRect();
+  ndc.set((ev.clientX-rc.left)/rc.width*2-1,-(ev.clientY-rc.top)/rc.height*2+1);
+  ray.setFromCamera(ndc,camera);
+  const hit=ray.intersectObjects(pickables.filter(o=>o.visible),false)[0];
+  if(!hit){hideInfo();return;}
+  const o=hit.object;
+  if(o.isInstancedMesh){const m=new THREE.Matrix4(); o.getMatrixAt(hit.instanceId,m); showInfo(o.userData.eids[hit.instanceId],o,m,o.geometry);}
+  else{ showInfo(o.userData.tri[hit.faceIndex],o,new THREE.Matrix4(),o.geometry); }
+});
+
+// ---------- ขนาดหน้าจอ / วาด ----------
+function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();redraw();}
+new ResizeObserver(resize).observe(view); resize();
+$('#tog').onclick=()=>$('#side').classList.toggle('open');
+setView('iso'); apply();
+$('#load').style.display='none';
+(function loop(){requestAnimationFrame(loop);if(controls.update()||need){need=false;renderer.render(scene,camera);}})();
+})();
+</script>
